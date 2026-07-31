@@ -13,7 +13,22 @@ import redis
 
 # 配置数据库连接（从环境变量读取，默认 cenkormes）
 import os
-DB_URL = os.getenv("MONITOR_DB_URL", "mysql+pymysql://cenkermes:123456abc@127.0.0.1:3306/cenkermes?charset=utf8mb4")
+def _load_db_url() -> str:
+    """从 MONITOR_DB_URL 环境变量或 backend/.env 读取,避免硬编码真实密码"""
+    url = os.getenv("MONITOR_DB_URL")
+    if url:
+        return url
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("DB_URL="):
+                    return line.split("=", 1)[1].strip().strip(chr(34)).strip(chr(39))
+    return "mysql+pymysql://user:password@127.0.0.1:3306/cenkormes?charset=utf8mb4"
+
+
+DB_URL = _load_db_url()
 
 
 def get_redis_stats():
