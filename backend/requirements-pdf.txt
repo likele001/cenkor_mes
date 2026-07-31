@@ -1,0 +1,4 @@
+# 可选：需打印模板 / HTML 转 PDF 时再装。
+# Debian/Ubuntu 先执行: apt install -y libcairo2-dev pkg-config
+# 然后: pip install -r requirements-pdf.txt
+xhtml2pdf>=0.2.17

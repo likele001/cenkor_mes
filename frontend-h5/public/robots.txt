@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /site
+Allow: /site/features
+Allow: /site/workflow
+Allow: /site/about
+Allow: /guide
+Disallow: /t/
+Disallow: /login
+Disallow: /trace
+Disallow: /report-unit
+
+Sitemap: https://lightmes.user.023ent.net/sitemap.xml

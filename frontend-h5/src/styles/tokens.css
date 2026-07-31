@@ -1,0 +1,51 @@
+/* LightMes · Light Modern Professional */
+:root {
+  --lm-bg: #f0f4f8;
+  --lm-bg-elevated: #ffffff;
+  --lm-surface: #ffffff;
+  --lm-surface-hover: #f8fafc;
+  --lm-surface-muted: #f1f5f9;
+  --lm-border: #e2e8f0;
+  --lm-border-strong: #cbd5e1;
+
+  --lm-text: #334155;
+  --lm-text-muted: #64748b;
+  --lm-text-strong: #0f172a;
+
+  --lm-primary: #0891b2;
+  --lm-cta: #f97316;
+  --lm-cta-hover: #ea580c;
+  --lm-cta-glow: rgb(249 115 22 / 0.2);
+  --lm-cta-soft: rgb(249 115 22 / 0.08);
+  --lm-accent-cyan: #0891b2;
+  --lm-accent-cyan-soft: rgb(8 145 178 / 0.08);
+  --lm-focus: #0891b2;
+
+  --lm-font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --lm-font-display: "Plus Jakarta Sans", sans-serif;
+  --lm-font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --lm-radius-sm: 10px;
+  --lm-radius-md: 14px;
+  --lm-radius-lg: 20px;
+  --lm-radius-xl: 28px;
+
+  --lm-space-1: 0.25rem;
+  --lm-space-2: 0.5rem;
+  --lm-space-3: 0.75rem;
+  --lm-space-4: 1rem;
+  --lm-space-5: 1.25rem;
+  --lm-space-6: 1.5rem;
+  --lm-space-8: 2rem;
+  --lm-space-10: 2.5rem;
+  --lm-space-12: 3rem;
+  --lm-space-16: 4rem;
+  --lm-space-20: 5rem;
+
+  --lm-header-h: 4rem;
+  --lm-tabbar-h: 3.75rem;
+  --lm-container: 72rem;
+
+  --lm-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --lm-dur: 180ms;
+}

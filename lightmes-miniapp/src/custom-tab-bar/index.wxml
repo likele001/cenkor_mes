@@ -1,0 +1,16 @@
+<view class="tab-bar">
+  <view
+    wx:for="{{list}}"
+    wx:key="pagePath"
+    class="tab-item {{selected === index ? 'active' : ''}} {{item.center ? 'center' : ''}}"
+    data-index="{{index}}"
+    data-path="{{item.pagePath}}"
+    bindtap="onSwitchTab"
+  >
+    <view class="icon-wrap">
+      <text class="icon">{{item.icon}}</text>
+      <text wx:if="{{badges[index] > 0}}" class="badge">{{badges[index] > 99 ? '99+' : badges[index]}}</text>
+    </view>
+    <text class="text">{{item.text}}</text>
+  </view>
+</view>

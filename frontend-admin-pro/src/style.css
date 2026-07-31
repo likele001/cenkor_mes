@@ -1,0 +1,672 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── vue-element-admin-ui-polish：清爽明亮 · Vue Admin Pro 风 ── */
+:root {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    'Helvetica Neue',
+    Helvetica,
+    Arial,
+    sans-serif;
+
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --admin-page-bg: #fafafa;
+  --admin-sider-bg: #ffffff;
+  --admin-sider-border: #ebeef5;
+  --admin-header-bg: #ffffff;
+  --admin-header-border: rgba(0, 0, 0, 0.06);
+  --admin-brand-mark-bg: #ecf5ff;
+  --admin-brand-mark-border: #d9ecff;
+  --admin-brand-mark-text: var(--el-color-primary);
+  --admin-brand-title: #303133;
+  --admin-brand-subtitle: #909399;
+  --admin-sider-width: 240px;
+  --admin-sider-collapsed-width: 64px;
+
+  --el-color-primary: #409eff;
+  --el-color-primary-light-3: #79bbff;
+  --el-color-primary-light-5: #a0cfff;
+  --el-color-primary-light-7: #c6e2ff;
+  --el-color-primary-light-9: #ecf5ff;
+  --el-color-primary-dark-2: #337ecc;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 16px;
+
+  --el-fill-color-light: #f5f7fa;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #fafafa;
+  --el-border-color: #e4e7ed;
+  --el-border-color-light: #ebeef5;
+  --el-text-color-primary: #303133;
+  --el-text-color-regular: #606266;
+  --el-text-color-secondary: #909399;
+
+  --el-transition-duration: 0.2s;
+  --el-transition-function-ease-in-out-bezier: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --el-box-shadow-light: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --el-box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+@layer utilities {
+  .admin-interactive {
+    transition:
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+}
+
+/* 表格（清爽行 hover） */
+.el-table {
+  --el-table-bg-color: #ffffff;
+  --el-table-header-bg-color: #f5f7fa;
+  --el-table-tr-bg-color: #ffffff;
+  --el-table-row-hover-bg-color: #ecf5ff;
+  --el-table-border-color: var(--el-border-color-light);
+  border-radius: var(--el-border-radius-base);
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  background-color: #f5f7fa !important;
+  font-weight: 600;
+  color: #606266;
+}
+
+/* 卡片：白底 + 极淡阴影 */
+.el-card {
+  border-radius: var(--el-border-radius-base) !important;
+  border: 1px solid var(--el-border-color-light) !important;
+  box-shadow: var(--el-box-shadow-light) !important;
+  transition:
+    box-shadow var(--el-transition-duration) var(--el-transition-function-ease-in-out-bezier),
+    border-color var(--el-transition-duration) ease;
+}
+
+.el-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 按钮轻量 hover */
+.el-button {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.el-button--primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.22);
+}
+
+.el-input__wrapper {
+  border-radius: var(--el-border-radius-small) !important;
+  transition: box-shadow 0.2s ease;
+}
+
+.el-pagination {
+  --el-pagination-button-border-radius: var(--el-border-radius-small);
+}
+
+.el-tag {
+  border-radius: var(--el-border-radius-small);
+}
+
+/* ── 表格紧凑行高 ── */
+.el-table td {
+  padding: 8px 0;
+}
+
+/* ── 菜单分组标签 ── */
+.menu-group-label {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 16px 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── 颜色别名（替代 Tailwind 任意值硬编码） ── */
+.text-el-primary { color: var(--el-text-color-primary); }
+.text-el-regular { color: var(--el-text-color-regular); }
+.text-el-placeholder { color: var(--el-text-color-placeholder); }
+.bg-el-fill { background-color: var(--el-fill-color-light); }
+.border-el-primary { border-color: var(--el-color-primary); }
+
+/* ── TV 大屏独立主题变量 ── */
+:root {
+  --tv-bg: #0f0f1a;
+  --tv-card: #1a1a2e;
+  --tv-border: #2a2a3e;
+  --tv-text: #e2e8f0;
+  --tv-muted: #64748b;
+  --tv-green: #22c55e;
+  --tv-red: #ef4444;
+  --tv-amber: #f59e0b;
+  --tv-sky: #38bdf8;
+  --tv-emerald: #34d399;
+}
+
+/* TV 大屏不受 admin 暗色模式影响 */
+.tv-screen,
+.tv-screen .el-card,
+.tv-screen .el-table { background: transparent; }
+
+.el-dialog,
+.el-message-box {
+  border-radius: var(--el-border-radius-base) !important;
+}
+
+/* ── 侧栏菜单：白底、深灰字、选中浅蓝底（禁止深色侧栏） ── */
+.admin-sider-menu.el-menu {
+  --el-menu-bg-color: #ffffff;
+  --el-menu-hover-bg-color: #f5f7fa;
+  --el-menu-text-color: #606266;
+  --el-menu-active-color: #409eff;
+  border-right: none !important;
+  background: #ffffff !important;
+}
+
+.admin-sider-menu .el-sub-menu__title {
+  border-radius: var(--el-border-radius-base);
+  margin: 2px 10px;
+  transition:
+    background-color var(--el-transition-duration) ease,
+    color var(--el-transition-duration) ease;
+}
+
+.admin-sider-menu .el-sub-menu__title:hover {
+  background-color: #f5f7fa !important;
+  color: #303133 !important;
+}
+
+.admin-sider-menu .el-menu-item {
+  border-radius: var(--el-border-radius-base);
+  margin: 2px 10px;
+  transition:
+    background-color var(--el-transition-duration) ease,
+    color var(--el-transition-duration) ease;
+}
+
+.admin-sider-menu .el-menu-item:hover {
+  background-color: #f5f7fa !important;
+  color: #409eff !important;
+}
+
+.admin-sider-menu .el-menu-item.is-active {
+  background-color: rgba(64, 158, 255, 0.08) !important;
+  color: #409eff !important;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.admin-sider-menu .el-icon {
+  font-size: 18px;
+}
+
+/* 抽屉内菜单与侧栏一致（明亮） */
+.admin-nav-drawer .admin-sider-menu.el-menu {
+  --el-menu-bg-color: #ffffff;
+  background: #ffffff !important;
+}
+
+.admin-nav-drawer .el-drawer__body {
+  padding: 0;
+  background: #ffffff;
+}
+
+/* 面包屑 */
+.admin-breadcrumb.el-breadcrumb {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-breadcrumb .el-breadcrumb__inner a,
+.admin-breadcrumb .el-breadcrumb__inner.is-link {
+  font-weight: 500;
+  color: #909399;
+  transition: color 0.2s ease;
+}
+
+.admin-breadcrumb .el-breadcrumb__inner a:hover,
+.admin-breadcrumb .el-breadcrumb__inner.is-link:hover {
+  color: #409eff;
+}
+
+.admin-breadcrumb .breadcrumb-current {
+  color: #409eff;
+  font-weight: 600;
+}
+
+/* 仪表盘统计卡（技能文档 .stat-card） */
+.stat-card {
+  border-radius: 8px;
+  background: #fff;
+  padding: 20px 22px;
+  border: 1px solid var(--el-border-color-light);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.stat-card.tone-blue {
+  background: linear-gradient(135deg, #ecf5ff 0%, #ffffff 55%);
+}
+
+.stat-card.tone-green {
+  background: linear-gradient(135deg, #e8f8f0 0%, #ffffff 55%);
+}
+
+.stat-card.tone-orange {
+  background: linear-gradient(135deg, #fff4e6 0%, #ffffff 55%);
+}
+
+.stat-card.tone-rose {
+  background: linear-gradient(135deg, #fef0f0 0%, #ffffff 55%);
+}
+
+.stat-card.tone-violet {
+  background: linear-gradient(135deg, #f3e8ff 0%, #ffffff 55%);
+}
+
+.stat-card.tone-mint {
+  background: linear-gradient(135deg, #e6fffa 0%, #ffffff 55%);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.08);
+  border-color: rgba(64, 158, 255, 0.2);
+}
+
+.stat-card .stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #303133;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.stat-card .stat-label {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.stat-card .stat-icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover .stat-icon-wrap {
+  transform: scale(1.05);
+}
+
+/* 首页外层卡片 */
+.admin-dashboard-hero {
+  background: #ffffff;
+  border: 1px solid var(--el-border-color-light) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+.admin-chart-card {
+  border: 1px solid var(--el-border-color-light) !important;
+}
+
+.admin-shortcut-btn.el-button--default {
+  background: #ffffff;
+  border-color: #dcdfe6;
+  color: #606266;
+  font-weight: 500;
+  border-radius: 8px;
+}
+
+.admin-shortcut-btn.el-button--default:hover {
+  color: #409eff;
+  border-color: #c6e2ff;
+  background: #ecf5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.12);
+}
+
+/* ═══ 移动端 / 窄屏列表增强（与 AppLayout 1023px 抽屉断点一致）═══ */
+@media (max-width: 1023px) {
+  /* 内容区安全区（刘海屏） */
+  .admin-main {
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 列表页常见外层 p-4 略紧凑 */
+  .admin-main .p-4 {
+    padding: 0.75rem !important;
+  }
+
+  /* 卡片内含表格：横向滑屏浏览宽表（已做「窄屏卡片 + lg 表格」的列表不再强制横向滚动） */
+  .el-card__body:has(.el-table):not(:has(.el-table.hidden.lg\:block)) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .el-table {
+    font-size: 12px;
+    --el-table-border-color: var(--el-border-color-light);
+  }
+
+  .el-table .el-table__cell {
+    padding: 8px 6px;
+  }
+
+  .el-table .cell {
+    line-height: 1.35;
+  }
+
+  /* 筛选区：去掉内联 width，竖屏下占满一行 */
+  .el-card .el-card__body .el-input[style*='width'],
+  .el-card .el-card__body .el-input-number[style*='width'],
+  .el-card .el-card__body .el-select[style*='width'],
+  .el-card .el-card__body .el-date-editor[style*='width'],
+  .el-dialog__body .el-input[style*='width'],
+  .el-dialog__body .el-input-number[style*='width'],
+  .el-dialog__body .el-select[style*='width'],
+  .el-dialog__body .el-date-editor[style*='width'] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 典型工具栏：标题 + 筛选分行铺满 */
+  .el-card .el-card__body > .flex.items-center.justify-between {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .el-card .el-card__body > .flex.items-center.justify-between > .flex {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
+
+  /* 卡片标题区（#header slot）：标题与按钮竖排 */
+  .el-card__header .flex.items-center.justify-between {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.5rem;
+  }
+
+  /* 行内查询表单 → 小屏改纵向，输入区全宽 */
+  .el-card .el-card__body .el-form--inline {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .el-card .el-card__body .el-form--inline .el-form-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-right: 0 !important;
+  }
+
+  .el-card .el-card__body .el-form--inline .el-form-item__label {
+    justify-content: flex-start;
+  }
+
+  .el-card .el-card__body .el-form--inline .el-form-item__content {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* 表格内操作按钮更紧凑 */
+  .el-table .el-button.is-link {
+    padding: 2px 4px;
+  }
+
+  /* 分页：居中换行，隐藏条数选择/跳转减轻拥挤 */
+  .el-pagination {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 0.5rem;
+    column-gap: 0.25rem;
+  }
+
+  .el-pagination .el-pagination__sizes,
+  .el-pagination .el-pagination__jump {
+    display: none !important;
+  }
+
+  /* 弹窗：接近全宽 + 限制高度可滚 */
+  .el-dialog {
+    width: min(calc(100vw - 1.25rem), 32rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: min(88vh, 720px) !important;
+    margin: 6vh auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .el-dialog .el-dialog__body {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Drawer 表单常用宽度 */
+  .el-drawer {
+    max-width: min(100vw, 320px);
+  }
+}
+
+/* 更窄手机：统计卡内边距收敛 */
+@media (max-width: 480px) {
+  .stat-card {
+    padding: 14px 16px;
+  }
+
+  .stat-card .stat-value {
+    font-size: 22px;
+  }
+}
+
+/* ═══ 窄屏卡片列表（与 Tailwind lg: 1024px 对齐）═══ */
+.admin-mobile-row {
+  background: #fff;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: var(--el-border-radius-base);
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.admin-mobile-row__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.admin-mobile-kv {
+  display: grid;
+  grid-template-columns: 4.75rem 1fr;
+  gap: 6px 10px;
+  align-items: start;
+  font-size: 13px;
+}
+
+.admin-mobile-kv dt {
+  margin: 0;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.admin-mobile-kv dd {
+  margin: 0;
+  color: #606266;
+  line-height: 1.4;
+  word-break: break-word;
+  text-align: right;
+}
+
+.admin-mobile-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── 暗色模式 ── */
+html.dark {
+  color-scheme: dark;
+
+  --admin-page-bg: #0f1117;
+  --admin-sider-bg: #141821;
+  --admin-sider-border: #2a3142;
+  --admin-header-bg: #141821;
+  --admin-header-border: rgba(255, 255, 255, 0.06);
+  --admin-brand-mark-bg: rgba(64, 158, 255, 0.15);
+  --admin-brand-mark-border: rgba(64, 158, 255, 0.35);
+  --admin-brand-title: #e5eaf3;
+  --admin-brand-subtitle: #a3a6ad;
+
+  --el-bg-color-page: #0f1117;
+  --el-fill-color-light: #1d2330;
+  --el-border-color: #3a4155;
+  --el-border-color-light: #2a3142;
+  --el-text-color-primary: #e5eaf3;
+  --el-text-color-regular: #cfd3dc;
+  --el-text-color-secondary: #a3a6ad;
+  --el-box-shadow-light: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --el-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+html.dark .admin-sider-menu.el-menu {
+  --el-menu-bg-color: var(--admin-sider-bg);
+  --el-menu-hover-bg-color: #1d2330;
+  --el-menu-text-color: #cfd3dc;
+  background: var(--admin-sider-bg) !important;
+}
+
+html.dark .admin-sider-menu .el-sub-menu__title:hover,
+html.dark .admin-sider-menu .el-menu-item:hover {
+  background-color: #1d2330 !important;
+}
+
+html.dark .admin-sider-menu .el-menu-item.is-active {
+  background-color: rgba(64, 158, 255, 0.18) !important;
+}
+
+html.dark .el-table {
+  --el-table-bg-color: var(--el-bg-color);
+  --el-table-header-bg-color: #1d2330;
+  --el-table-tr-bg-color: var(--el-bg-color);
+  --el-table-row-hover-bg-color: rgba(64, 158, 255, 0.12);
+}
+
+html.dark .el-table th.el-table__cell {
+  background-color: #1d2330 !important;
+  color: var(--el-text-color-regular);
+}
+
+html.dark .stat-card {
+  background: var(--el-bg-color);
+}
+
+html.dark .stat-card .stat-value {
+  color: var(--el-text-color-primary);
+}
+
+html.dark .admin-mobile-row {
+  background: var(--el-bg-color);
+}
+
+html.dark .admin-mobile-kv dd {
+  color: var(--el-text-color-regular);
+}
+
+html.dark .admin-nav-drawer .el-drawer__body {
+  background: var(--admin-sider-bg);
+}
+
+/* 侧栏折叠 */
+.admin-sider--collapsed .admin-sider__brand-text,
+.admin-sider--collapsed .admin-sider-menu .el-menu-item span,
+.admin-sider--collapsed .admin-sider-menu .el-sub-menu__title span {
+  display: none;
+}
+
+.admin-sider--collapsed .admin-sider-menu .el-sub-menu__icon-arrow {
+  display: none;
+}
+
+.admin-sider--collapsed .admin-sider__brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.admin-sider--collapsed .admin-sider-menu .el-menu-item,
+.admin-sider--collapsed .admin-sider-menu .el-sub-menu__title {
+  margin-left: 6px;
+  margin-right: 6px;
+  justify-content: center;
+  padding-inline: 0 !important;
+}
+
+.admin-sider--collapsed .admin-sider-menu .el-menu-item .el-icon,
+.admin-sider--collapsed .admin-sider-menu .el-sub-menu__title .el-icon {
+  margin-right: 0 !important;
+}
+
+.admin-login-page {
+  background: var(--admin-page-bg);
+}
+
+.admin-login-card {
+  background: var(--el-bg-color);
+  border-color: var(--el-border-color-light);
+}
+
+.admin-login-blob-primary {
+  background: var(--el-color-primary-light-9);
+}
+
+.admin-login-blob-secondary {
+  background: rgba(103, 194, 58, 0.12);
+}
+
+html.dark .admin-login-blob-secondary {
+  background: rgba(103, 194, 58, 0.08);
+}

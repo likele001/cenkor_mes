@@ -1,0 +1,16 @@
+{
+  "description": "CenkorMES uni-app。请先 npm run build:mp-weixin，再在微信开发者工具打开本目录（不要只打开 src）。",
+  "miniprogramRoot": "dist/build/mp-weixin/",
+  "compileType": "miniprogram",
+  "appid": "wxccf32ba082446a3d",
+  "projectname": "CenkorMES",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "minified": true,
+    "bigPackageSizeSupport": true
+  },
+  "packOptions": {
+    "ignore": ["node_modules/**/*", "src/**/*"]
+  }
+}

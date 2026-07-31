@@ -1,0 +1,181 @@
+.emp-page {
+  min-height: 100vh;
+  padding: 24rpx;
+  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: #f3f4f6;
+}
+
+.emp-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  box-shadow: 0 2rpx 16rpx rgba(15, 23, 42, 0.04);
+  border: 1rpx solid #eef2f7;
+}
+
+.emp-section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 20rpx;
+}
+
+.emp-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.emp-num {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1.2;
+}
+
+.emp-sub {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.emp-btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 16rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  border: none;
+}
+
+.emp-btn-primary::after {
+  border: none;
+}
+
+.emp-btn-outline {
+  background: #fff;
+  color: #2563eb;
+  border: 1rpx solid #bfdbfe;
+  border-radius: 16rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: 28rpx;
+}
+
+.emp-btn-outline::after {
+  border: none;
+}
+
+.emp-stat-grid {
+  display: flex;
+  gap: 16rpx;
+}
+
+.emp-stat-grid .stat-item {
+  flex: 1;
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx 16rpx;
+  text-align: center;
+  border: 1rpx solid #eef2f7;
+}
+
+.emp-stat-grid .stat-val {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.emp-stat-grid .stat-lbl {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.emp-tag {
+  display: inline-block;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+}
+
+.emp-tag.warn {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.emp-tag.info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.emp-tag.ok {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.emp-tag.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.emp-tag.muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.emp-kv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20rpx 24rpx;
+}
+
+.emp-kv .k {
+  display: block;
+  font-size: 22rpx;
+  color: #94a3b8;
+  margin-bottom: 6rpx;
+}
+
+.emp-kv .v {
+  font-size: 26rpx;
+  color: #1e293b;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.emp-progress {
+  margin-top: 16rpx;
+}
+
+.emp-progress-bar {
+  height: 12rpx;
+  background: #e2e8f0;
+  border-radius: 999rpx;
+  overflow: hidden;
+}
+
+.emp-progress-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 999rpx;
+}
+
+.emp-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #64748b;
+}
+
+.emp-empty {
+  text-align: center;
+  padding: 80rpx 24rpx;
+  color: #94a3b8;
+  font-size: 28rpx;
+}

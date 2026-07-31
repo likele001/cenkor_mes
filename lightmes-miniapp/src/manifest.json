@@ -1,0 +1,31 @@
+{
+  "name": "CenkorMES",
+  "appid": "__UNI__CENKORMES",
+  "description": "CenkorMES 轻量化生产管理",
+  "versionName": "2.0.0",
+  "versionCode": "200",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wxccf32ba082446a3d",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "lazyCodeLoading": "requiredComponents",
+    "__usePrivacyCheck__": true,
+    "permission": {
+      "scope.camera": {
+        "desc": "需要使用摄像头拍摄照片/视频用于报工留证"
+      },
+      "scope.writePhotosAlbum": {
+        "desc": "需要保存报工照片到相册"
+      },
+      "scope.record": {
+        "desc": "需要使用麦克风录制视频用于报工留证"
+      }
+    }
+  },
+  "vueVersion": "3"
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>辰科MES</title>
+    <script type="module">
+      if (import.meta.hot?.on) {
+        import.meta.hot.on('vite:error', (error) => {
+          if (error.err) {
+            console.error(
+              [error.err.message, error.err.frame].filter(Boolean).join('\n'),
+            )
+          }
+        })
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      (function () {
+        var search = window.location.search || ''
+        var hash = window.location.hash || ''
+        var pm = location.pathname.match(/^\/t\/([^/]+)\/report-unit\/?$/i)
+        if (pm) {
+          location.replace(location.origin + '/#/t/' + pm[1] + '/report-unit' + search)
+          return
+        }
+        if (search.indexOf('task_code=') >= 0 && (!hash || hash === '#' || hash === '#/')) {
+          var p = new URLSearchParams(search)
+          var tenant = (p.get('tenant') || p.get('tenant_code') || '').trim()
+          var path = tenant ? '/t/' + encodeURIComponent(tenant) + '/report-unit' : '/report-unit'
+          location.replace(location.origin + location.pathname + '#' + path + search)
+        }
+        if ((location.pathname.indexOf('trace.html') >= 0 || search.indexOf('id=') >= 0) && search.indexOf('task_code=') < 0) {
+          if (!hash || hash === '#' || hash === '#/' || hash.indexOf('#/trace') < 0) {
+            location.replace(location.origin + '/#/trace' + search)
+          }
+        }
+      })()
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

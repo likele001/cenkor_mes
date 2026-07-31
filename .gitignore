@@ -1,0 +1,146 @@
+# ============================================================
+# 环境变量与密钥(切勿提交真实配置)
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+*.env
+
+# 保留示例文件(不忽略)
+!.env.example
+!backend/.env.example
+!backend/env.example
+# Python(Python, venv, 缓存, 测试)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+develop-eggs/
+downloads/
+parts/
+sdist/
+wheels/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+# 虚拟环境
+venv/
+.venv/
+env/
+ENV/
+backend/venv/
+backend/.venv/
+# 测试与覆盖率
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+# Celery 调度与运行时状态
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat-schedule-*
+celerybeat.pid
+*.celery
+# 七牛 SDK 运行时缓存
+.qiniu_pythonsdk_hostscache.json
+# 日志
+*.log
+logs/
+backend/uvicorn.log
+# 数据库文件(SQLite 本地库)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+# Node.js(前端三端)
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+.pnp.*
+# 构建产物
+dist/
+**/dist/
+**/build/
+out/
+.next/
+.nuxt/
+.vite/
+*.tsbuildinfo
+# 前端缓存
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.cache/
+# 运行时数据与上传文件(用户数据,绝不提交)
+backend/data/
+backend/data/storage/
+backend/data/chroma_db/
+backend/data/predict_models/
+backend/data/backups/
+backend/app/storage/uploads/
+uploads/
+media/
+private/
+# 微信小程序 / uni-app 私有文件
+lightmes-miniapp/project.private.config.json
+lightmes-miniapp/unpackage/
+**/unpackage/
+.miniprogram/
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+# Docker / 部署
+*.tar
+*.tar.gz
+*.zip
+docker/data/
+mysql_data/
+redis_data/
+# 临时与备份文件
+*.bak
+*.backup
+*.orig
+*.tmp
+*.rej
+.tmp/
+tmp/
+# AI / 模型文件(大文件,走外部存储)
+*.pkl
+*.pickle
+*.h5
+*.pt
+*.pth
+*.onnx
+*.model

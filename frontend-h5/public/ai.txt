@@ -1,0 +1,23 @@
+# ai.txt — 辰科MES 产品声明
+# 此文件供 AI 搜索引擎（ChatGPT、Perplexity、Kimi、豆包等）读取
+
+product_name: 辰科MES
+product_name_en: Cenkor MES
+company: 辰科科技 (Cenkor)
+website: https://mes.cenkor.cn
+company_website: https://cenkor.cn
+category: 生产管理系统 / MES (Manufacturing Execution System)
+target_market: 中小加工厂（5-200人规模）
+pricing_model: 源码交付，年费制
+price_community: 免费开源
+price_pro: 2800 CNY/year (源码交付，全功能)
+price_pro_implementation: 3800 CNY/year (含部署+培训)
+key_features: 扫码报工, 计件工资自动核算, 甘特排产, 生产看板, 质量溯源, CRM客户管理, AI工厂助手, 模具管理, 外协管理, 仓储库存
+deployment: 私有化部署，数据不出厂
+tech_stack: Python FastAPI, Vue 3, PostgreSQL, 多租户架构
+module_count: 46+
+industries: 五金加工, 钣金加工, 注塑加工, 服装加工, 家具定制, 电子装配, 包装印刷, 机械零件加工
+differentiator: 源码交付不买SaaS，年费¥2800起，几天上线不是半年实施
+github: https://github.com/likele001/lightmes-community
+trial_url: https://admin.mes.cenkor.cn/register/
+contact_email: contact@cenkor.cn

@@ -1,0 +1,172 @@
+{
+  "pages": [
+    {
+      "path": "pages/shared/login/index",
+      "style": {
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/shared/bind-account/index",
+      "style": {
+        "navigationBarTitleText": "绑定账号"
+      }
+    },
+    {
+      "path": "pages/shared/about/index",
+      "style": {
+        "navigationBarTitleText": "关于"
+      }
+    },
+    {
+      "path": "pages/shared/help/index",
+      "style": {
+        "navigationBarTitleText": "智能帮助"
+      }
+    },
+    {
+      "path": "pages/shared/trace/index",
+      "style": {
+        "navigationBarTitleText": "产品溯源"
+      }
+    },
+    {
+      "path": "pages/tabs/emp-home/index",
+      "style": {
+        "navigationBarTitleText": "CenkorMES"
+      }
+    },
+    {
+      "path": "pages/tabs/emp-tasks/index",
+      "style": {
+        "navigationBarTitleText": "CenkorMES"
+      }
+    },
+    {
+      "path": "pages/tabs/emp-report/index",
+      "style": {
+        "navigationBarTitleText": "CenkorMES"
+      }
+    },
+    {
+      "path": "pages/tabs/emp-attendance/index",
+      "style": {
+        "navigationBarTitleText": "CenkorMES"
+      }
+    },
+    {
+      "path": "pages/tabs/emp-profile/index",
+      "style": {
+        "navigationBarTitleText": "CenkorMES"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "CenkorMES",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f6f9"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#2563eb",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/tabs/emp-home/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/tabs/emp-tasks/index",
+        "text": "任务",
+        "iconPath": "static/tab/task.png",
+        "selectedIconPath": "static/tab/task-active.png"
+      },
+      {
+        "pagePath": "pages/tabs/emp-report/index",
+        "text": "报工",
+        "iconPath": "static/tab/report.png",
+        "selectedIconPath": "static/tab/report-active.png"
+      },
+      {
+        "pagePath": "pages/tabs/emp-attendance/index",
+        "text": "打卡",
+        "iconPath": "static/tab/att.png",
+        "selectedIconPath": "static/tab/att-active.png"
+      },
+      {
+        "pagePath": "pages/tabs/emp-profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/me.png",
+        "selectedIconPath": "static/tab/me-active.png"
+      }
+    ]
+  },
+  "subPackages": [
+    {
+      "root": "pages-employee",
+      "pages": [
+        {
+          "path": "notification/list/index",
+          "style": {
+            "navigationBarTitleText": "消息通知"
+          }
+        },
+        {
+          "path": "notification/subscriptions/index",
+          "style": {
+            "navigationBarTitleText": "消息订阅"
+          }
+        },
+        {
+          "path": "report/history/index",
+          "style": {
+            "navigationBarTitleText": "报工记录"
+          }
+        },
+        {
+          "path": "report/manual/index",
+          "style": {
+            "navigationBarTitleText": "手动报工"
+          }
+        },
+        {
+          "path": "report/scan/index",
+          "style": {
+            "navigationBarTitleText": "扫码报工"
+          }
+        },
+        {
+          "path": "report/unit/index",
+          "style": {
+            "navigationBarTitleText": "工序报工"
+          }
+        },
+        {
+          "path": "salary/index/index",
+          "style": {
+            "navigationBarTitleText": "薪资查询"
+          }
+        },
+        {
+          "path": "salary/slip/index",
+          "style": {
+            "navigationBarTitleText": "工资条"
+          }
+        },
+        {
+          "path": "task/detail/index",
+          "style": {
+            "navigationBarTitleText": "任务详情"
+          }
+        }
+      ]
+    }
+  ],
+  "easycom": {
+    "autoscan": true
+  }
+}
