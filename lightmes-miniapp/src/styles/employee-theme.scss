@@ -1,181 +1,437 @@
+@use '../uni.scss' as *;
+
+// ============================================================
+// CenkorMES 员工端主题 v2.0
+// 设计原则：明亮蓝色工厂风、精致克制、车间友好（大字号高对比）
+// ============================================================
+
+// ---- 页面容器 ----
 .emp-page {
   min-height: 100vh;
-  padding: 24rpx;
-  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  padding: $space-5;
+  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f3f4f6;
+  background: linear-gradient(180deg, $slate-100 0%, $slate-50 240rpx);
 }
 
+// ---- 卡片：精致版 ----
 .emp-card {
   background: #fff;
-  border-radius: 20rpx;
-  padding: 28rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 16rpx rgba(15, 23, 42, 0.04);
-  border: 1rpx solid #eef2f7;
+  border-radius: $radius-lg;
+  padding: $space-6;
+  margin-bottom: $space-5;
+  box-shadow: $shadow-sm;
+  border: 1rpx solid rgba($slate-200, 0.6);
+  position: relative;
+
+  // 按压反馈
+  &.tappable {
+    transition: transform $dur-fast $ease-smooth, box-shadow $dur-fast $ease-smooth;
+    &:active {
+      transform: scale(0.985);
+      box-shadow: $shadow-xs;
+    }
+  }
+}
+
+// 渐变品牌卡（hero 区用）
+.emp-card--brand {
+  background: linear-gradient(135deg, $brand-600 0%, $brand-500 100%);
+  border: none;
+  box-shadow: $shadow-brand;
+  color: #fff;
+}
+
+// 无阴影卡（列表内嵌用）
+.emp-card--flat {
+  box-shadow: none;
+  border: 1rpx solid $slate-200;
+}
+
+// ---- 标题体系 ----
+.emp-title {
+  font-size: $text-xl;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  letter-spacing: -0.5rpx;
 }
 
 .emp-section-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 20rpx;
-}
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  margin-bottom: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
 
-.emp-title {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.emp-num {
-  font-size: 48rpx;
-  font-weight: 700;
-  color: #2563eb;
-  line-height: 1.2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $brand-600;
+    border-radius: $radius-pill;
+  }
 }
 
 .emp-sub {
-  font-size: 24rpx;
-  color: #64748b;
+  font-size: $text-sm;
+  color: $slate-500;
+  line-height: 1.5;
 }
 
+// ---- 数字强调 ----
+.emp-num {
+  font-size: $text-3xl;
+  font-weight: $fw-bold;
+  color: $brand-600;
+  line-height: 1.1;
+  letter-spacing: -1rpx;
+  font-variant-numeric: tabular-nums;
+
+  &.money {
+    color: $brand-700;
+  }
+}
+
+// ---- 统计网格 ----
+.emp-stat-grid {
+  display: flex;
+  gap: $space-3;
+
+  .stat-item {
+    flex: 1;
+    background: $slate-50;
+    border-radius: $radius-md;
+    padding: $space-5 $space-3;
+    text-align: center;
+    border: 1rpx solid rgba($slate-200, 0.5);
+    transition: transform $dur-fast $ease-smooth;
+    &:active { transform: scale(0.97); }
+  }
+
+  .stat-val {
+    font-size: $text-2xl;
+    font-weight: $fw-bold;
+    color: $slate-800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5rpx;
+  }
+
+  .stat-val.money {
+    color: $brand-600;
+    font-size: $text-xl;
+  }
+
+  .stat-lbl {
+    margin-top: $space-1;
+    font-size: $text-xs;
+    color: $slate-500;
+    font-weight: $fw-medium;
+  }
+}
+
+// 渐变卡内的统计网格（文字反白）
+.emp-card--brand .emp-stat-grid {
+  .stat-item {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8rpx);
+  }
+  .stat-val { color: #fff; }
+  .stat-val.money { color: #fff; }
+  .stat-lbl { color: rgba(255, 255, 255, 0.78); }
+}
+
+// ---- 按钮 ----
 .emp-btn-primary {
-  background: #2563eb;
+  background: $brand-600;
   color: #fff;
-  border-radius: 16rpx;
+  border-radius: $radius-md;
   height: 88rpx;
   line-height: 88rpx;
-  font-size: 30rpx;
-  font-weight: 600;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
   border: none;
-}
+  letter-spacing: 1rpx;
+  transition: transform $dur-fast $ease-smooth, background $dur-fast $ease-smooth;
+  box-shadow: 0 4rpx 12rpx rgba($brand-600, 0.22);
 
-.emp-btn-primary::after {
-  border: none;
+  &::after { border: none; }
+  &:active {
+    transform: scale(0.98);
+    background: $brand-700;
+  }
+  &[disabled] {
+    background: $slate-200;
+    color: $slate-400;
+    box-shadow: none;
+  }
 }
 
 .emp-btn-outline {
   background: #fff;
-  color: #2563eb;
-  border: 1rpx solid #bfdbfe;
-  border-radius: 16rpx;
+  color: $brand-600;
+  border: 1rpx solid $brand-200;
+  border-radius: $radius-md;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: $text-base;
+  font-weight: $fw-medium;
+  transition: all $dur-fast $ease-smooth;
+
+  &::after { border: none; }
+  &:active {
+    background: $brand-50;
+    transform: scale(0.98);
+  }
+}
+
+.emp-btn-ghost {
+  background: transparent;
+  color: $slate-600;
+  border: none;
+  border-radius: $radius-md;
   height: 72rpx;
   line-height: 72rpx;
-  font-size: 28rpx;
+  font-size: $text-base;
+
+  &::after { border: none; }
+  &:active { background: $slate-100; }
 }
 
-.emp-btn-outline::after {
-  border: none;
-}
-
-.emp-stat-grid {
-  display: flex;
-  gap: 16rpx;
-}
-
-.emp-stat-grid .stat-item {
-  flex: 1;
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx 16rpx;
-  text-align: center;
-  border: 1rpx solid #eef2f7;
-}
-
-.emp-stat-grid .stat-val {
-  font-size: 40rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.emp-stat-grid .stat-lbl {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #64748b;
-}
-
+// ---- 状态标签 ----
 .emp-tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 4rpx 16rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-  font-weight: 500;
+  border-radius: $radius-pill;
+  font-size: $text-xs;
+  font-weight: $fw-semibold;
+  letter-spacing: 0.5rpx;
+
+  &::before {
+    content: '';
+    width: 8rpx;
+    height: 8rpx;
+    border-radius: 50%;
+    margin-right: 8rpx;
+  }
+
+  &.ok      { background: $success-bg; color: $success-deep; &::before { background: $success; } }
+  &.warn    { background: $warn-bg;    color: $warn-deep;    &::before { background: $warn; } }
+  &.danger  { background: $danger-bg;  color: $danger-deep;  &::before { background: $danger; } }
+  &.info    { background: $info-bg;    color: $info-deep;    &::before { background: $info; } }
+  &.muted   { background: $slate-100;  color: $slate-600;    &::before { background: $slate-400; } }
 }
 
-.emp-tag.warn {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.emp-tag.info {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
-.emp-tag.ok {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.emp-tag.danger {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.emp-tag.muted {
-  background: #f1f5f9;
-  color: #64748b;
-}
-
+// ---- 键值对网格 ----
 .emp-kv-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20rpx 24rpx;
+  gap: $space-4 $space-5;
 }
 
-.emp-kv .k {
-  display: block;
-  font-size: 22rpx;
-  color: #94a3b8;
-  margin-bottom: 6rpx;
+.emp-kv {
+  .k {
+    display: block;
+    font-size: $text-xs;
+    color: $slate-400;
+    margin-bottom: 6rpx;
+    font-weight: $fw-medium;
+  }
+  .v {
+    font-size: $text-base;
+    color: $slate-800;
+    font-weight: $fw-semibold;
+    word-break: break-all;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-.emp-kv .v {
-  font-size: 26rpx;
-  color: #1e293b;
-  font-weight: 500;
-  word-break: break-all;
-}
-
+// ---- 进度条 ----
 .emp-progress {
-  margin-top: 16rpx;
+  margin-top: $space-4;
+
+  .emp-progress-bar {
+    height: 12rpx;
+    background: $slate-100;
+    border-radius: $radius-pill;
+    overflow: hidden;
+  }
+
+  .emp-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, $brand-500, $brand-600);
+    border-radius: $radius-pill;
+    transition: width 600ms $ease-smooth;
+  }
+
+  .emp-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: $space-1;
+    font-size: $text-xs;
+    color: $slate-500;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-.emp-progress-bar {
-  height: 12rpx;
-  background: #e2e8f0;
-  border-radius: 999rpx;
-  overflow: hidden;
-}
-
-.emp-progress-fill {
-  height: 100%;
-  background: #2563eb;
-  border-radius: 999rpx;
-}
-
-.emp-progress-meta {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #64748b;
-}
-
+// ---- 空状态 ----
 .emp-empty {
   text-align: center;
-  padding: 80rpx 24rpx;
-  color: #94a3b8;
-  font-size: 28rpx;
+  padding: $space-8 $space-5;
+  color: $slate-400;
+  font-size: $text-md;
+
+  .emp-empty-icon {
+    display: block;
+    font-size: 80rpx;
+    margin-bottom: $space-3;
+    opacity: 0.5;
+  }
 }
+
+// ---- 页头 ----
+.emp-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $space-5;
+  padding: 0 4rpx;
+
+  .emp-page-title {
+    font-size: $text-xl;
+    font-weight: $fw-bold;
+    color: $slate-800;
+    letter-spacing: -0.5rpx;
+  }
+
+  .emp-page-action {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: #fff;
+    border: 1rpx solid $slate-200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $brand-600;
+    font-size: 36rpx;
+    transition: all $dur-fast $ease-smooth;
+    &:active {
+      transform: rotate(180deg);
+      background: $brand-50;
+    }
+  }
+}
+
+// ---- 横向 tab 筛选 ----
+.emp-tabs {
+  white-space: nowrap;
+  margin-bottom: $space-5;
+
+  .emp-tab {
+    display: inline-block;
+    padding: 14rpx 32rpx;
+    margin-right: $space-2;
+    border-radius: $radius-pill;
+    font-size: $text-base;
+    color: $slate-600;
+    background: #fff;
+    border: 1rpx solid $slate-200;
+    font-weight: $fw-medium;
+    transition: all $dur-fast $ease-smooth;
+
+    &.active {
+      background: $brand-600;
+      color: #fff;
+      border-color: $brand-600;
+      box-shadow: 0 4rpx 12rpx rgba($brand-600, 0.22);
+    }
+  }
+}
+
+// ---- 列表行 ----
+.emp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: $space-5 0;
+  border-bottom: 1rpx solid $slate-100;
+  font-size: $text-md;
+  color: $slate-700;
+  transition: background $dur-fast $ease-smooth;
+
+  &:last-child { border-bottom: none; }
+  &:active { background: $slate-50; }
+
+  .emp-row-label {
+    display: flex;
+    align-items: center;
+    gap: $space-3;
+  }
+
+  .emp-row-icon {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: $radius-md;
+    background: $brand-50;
+    color: $brand-600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28rpx;
+    font-weight: $fw-bold;
+  }
+
+  .emp-row-arrow {
+    color: $slate-300;
+    font-size: $text-lg;
+  }
+
+  .emp-row-badge {
+    background: $danger;
+    color: #fff;
+    font-size: $text-xs;
+    padding: 2rpx 12rpx;
+    border-radius: $radius-pill;
+    font-weight: $fw-semibold;
+    min-width: 32rpx;
+    text-align: center;
+  }
+}
+
+// ---- 左侧色带（状态指示）----
+.emp-card--striped {
+  padding-left: 32rpx;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8rpx;
+    border-radius: $radius-lg 0 0 $radius-lg;
+  }
+
+  &.strip-pending::before { background: $warn; }
+  &.strip-working::before { background: $brand-500; }
+  &.strip-done::before    { background: $success; }
+  &.strip-danger::before  { background: $danger; }
+  &.strip-info::before    { background: $info; }
+}
+
+// ---- 工具类 ----
+.emp-flex { display: flex; }
+.emp-flex-center { display: flex; align-items: center; justify-content: center; }
+.emp-flex-between { display: flex; align-items: center; justify-content: space-between; }
+.emp-gap-sm { gap: $space-2; }
+.emp-gap-md { gap: $space-3; }
+.emp-gap-lg { gap: $space-5; }
+.emp-mt-sm { margin-top: $space-2; }
+.emp-mt-md { margin-top: $space-4; }
+.emp-mt-lg { margin-top: $space-6; }

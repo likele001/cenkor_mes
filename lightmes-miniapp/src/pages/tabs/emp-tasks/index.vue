@@ -1,11 +1,12 @@
 <template>
   <view class="emp-page">
-    <view class="page-head">
-      <text class="page-title">我的任务</text>
-      <text class="refresh" @tap="load(true)">↻</text>
+    <view class="emp-page-head">
+      <text class="emp-page-title">我的任务</text>
+      <view class="emp-page-action" @tap="load(true)">↻</view>
     </view>
 
-    <view class="emp-card overview">
+    <!-- 概览渐变卡 -->
+    <view class="emp-card emp-card--brand overview-card">
       <view class="overview-top">
         <text class="overview-title">任务概览</text>
         <text class="count-badge">{{ stats.total }} 个任务</text>
@@ -26,11 +27,12 @@
       </view>
     </view>
 
-    <scroll-view scroll-x class="tabs">
+    <!-- 横向筛选 tab -->
+    <scroll-view scroll-x class="emp-tabs">
       <view
         v-for="tab in tabs"
         :key="tab.key"
-        class="tab"
+        class="emp-tab"
         :class="{ active: statusFilter === tab.key }"
         @tap="onTab(tab.key)"
       >
@@ -38,7 +40,10 @@
       </view>
     </scroll-view>
 
-    <view v-if="loading" class="emp-empty">加载中...</view>
+    <view v-if="loading" class="emp-empty">
+      <text class="emp-empty-icon">◌</text>
+      加载中...
+    </view>
     <EmpTaskCard
       v-for="t in filteredItems"
       :key="t.task_code"
@@ -46,7 +51,10 @@
       @tap="goDetail(t.task_code)"
       @report="goReport(t)"
     />
-    <view v-if="!loading && !filteredItems.length" class="emp-empty">暂无任务</view>
+    <view v-if="!loading && !filteredItems.length" class="emp-empty">
+      <text class="emp-empty-icon">✓</text>
+      暂无任务
+    </view>
   </view>
 </template>
 
@@ -110,57 +118,27 @@ function goReport(t: H5Task) {
 </script>
 
 <style scoped lang="scss">
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20rpx;
-}
-.page-title {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-.refresh {
-  font-size: 40rpx;
-  color: #2563eb;
-  padding: 8rpx 16rpx;
+.overview-card {
+  padding: $space-5 $space-6;
 }
 .overview-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20rpx;
+  margin-bottom: $space-4;
 }
 .overview-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #334155;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: rgba(255, 255, 255, 0.92);
 }
 .count-badge {
-  font-size: 22rpx;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 6rpx 16rpx;
-  border-radius: 999rpx;
-}
-.tabs {
-  white-space: nowrap;
-  margin-bottom: 20rpx;
-}
-.tab {
-  display: inline-block;
-  padding: 12rpx 28rpx;
-  margin-right: 12rpx;
-  border-radius: 999rpx;
-  font-size: 26rpx;
-  color: #64748b;
-  background: #fff;
-  border: 1rpx solid #e2e8f0;
-}
-.tab.active {
-  background: #2563eb;
+  font-size: $text-xs;
   color: #fff;
-  border-color: #2563eb;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 4rpx 16rpx;
+  border-radius: $radius-pill;
+  font-weight: $fw-medium;
+  backdrop-filter: blur(8rpx);
 }
 </style>

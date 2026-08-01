@@ -2,27 +2,15 @@
   <view class="cust-page">
     <view v-if="loading" class="cust-empty">{{ t('common.loading') }}</view>
     <view v-else-if="!items.length" class="cust-empty">{{ t('common.noData') }}</view>
-    <view v-for="a in items" :key="a.id" class="cust-card">
+
+    <view v-for="a in items" :key="a.id" class="cust-card cust-card--striped strip-info">
       <text class="cust-title mono">{{ a.code }}</text>
-      <view class="kv">
-        <text class="k">{{ t('common.status') }}</text>
-        <text class="v">{{ saleStatusLabel(a.status) }}</text>
-      </view>
-      <view class="kv">
-        <text class="k">{{ t('customer.orderDetail.afterSale') }}</text>
-        <text class="v">{{ saleTypeLabel(a.sale_type) }}</text>
-      </view>
-      <view v-if="a.reason" class="kv">
-        <text class="k">{{ t('customer.orderDetail.reason') }}</text>
-        <text class="v">{{ a.reason }}</text>
-      </view>
-      <view v-if="a.solution" class="kv">
-        <text class="k">{{ t('customer.orderDetail.solution') }}</text>
-        <text class="v">{{ a.solution }}</text>
-      </view>
-      <view v-if="a.created_at" class="kv">
-        <text class="k">{{ t('customer.orderDetail.applyTime') }}</text>
-        <text class="v">{{ a.created_at.slice(0, 16).replace('T', ' ') }}</text>
+      <view class="cust-kv-grid" style="margin-top: 16rpx;">
+        <view class="cust-kv-row"><text class="cust-kv-k">{{ t('common.status') }}</text><text class="cust-kv-v">{{ saleStatusLabel(a.status) }}</text></view>
+        <view class="cust-kv-row"><text class="cust-kv-k">{{ t('customer.orderDetail.afterSale') }}</text><text class="cust-kv-v">{{ saleTypeLabel(a.sale_type) }}</text></view>
+        <view v-if="a.reason" class="cust-kv-row"><text class="cust-kv-k">{{ t('customer.orderDetail.reason') }}</text><text class="cust-kv-v">{{ a.reason }}</text></view>
+        <view v-if="a.solution" class="cust-kv-row"><text class="cust-kv-k">{{ t('customer.orderDetail.solution') }}</text><text class="cust-kv-v">{{ a.solution }}</text></view>
+        <view v-if="a.created_at" class="cust-kv-row"><text class="cust-kv-k">{{ t('customer.orderDetail.applyTime') }}</text><text class="cust-kv-v">{{ a.created_at.slice(0, 16).replace('T', ' ') }}</text></view>
       </view>
     </view>
 
@@ -36,11 +24,7 @@
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import {
-  createAfterSale,
-  getOrderAfterSales,
-  type AfterSaleOut,
-} from '@/api/h5/customer'
+import { createAfterSale, getOrderAfterSales, type AfterSaleOut } from '@/api/h5/customer'
 import { useCustomerLabels } from '@/composables/useCustomerLabels'
 import { useCustomerLocale } from '@/composables/useCustomerLocale'
 import { usePermission } from '@/composables/usePermission'
@@ -67,9 +51,7 @@ async function load() {
   try {
     const res = await getOrderAfterSales(orderId.value)
     items.value = res?.items ?? []
-  } finally {
-    loading.value = false
-  }
+  } finally { loading.value = false }
 }
 
 function applyAfterSale() {
@@ -87,19 +69,14 @@ function applyAfterSale() {
             await createAfterSale(orderId.value, { sale_type: picked.key })
             uni.showToast({ title: t('customer.orderDetail.applySuccess'), icon: 'success' })
             load()
-          } catch {
-            /* toast from request */
-          }
+          } catch { /* toast from request */ }
         },
       })
     },
   })
 }
 
-onLoad((q) => {
-  orderId.value = Number(q?.id || 0)
-})
-
+onLoad((q) => { orderId.value = Number(q?.id || 0) })
 onShow(() => {
   if (!requireCustomer()) return
   setNavTitle('customer.orderDetail.afterSale')
@@ -109,21 +86,6 @@ onShow(() => {
 
 <style scoped lang="scss">
 @use '@/styles/customer-theme.scss';
-.kv {
-  display: flex;
-  justify-content: space-between;
-  padding: 10rpx 0;
-  font-size: 26rpx;
-}
-.k {
-  color: #64748b;
-}
-.mono {
-  font-family: monospace;
-  display: block;
-  margin-bottom: 12rpx;
-}
-.footer {
-  padding: 24rpx;
-}
+.mono { font-family: monospace; display: block; margin-bottom: 12rpx; }
+.footer { padding: 24rpx; }
 </style>

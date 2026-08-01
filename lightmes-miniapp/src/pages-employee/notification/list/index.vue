@@ -1,16 +1,28 @@
 <template>
   <view class="emp-page">
-    <view class="emp-card subscribe-entry" @tap="goSubscribe">
-      <text class="entry-title">📬 微信消息推送订阅管理</text>
-      <text class="entry-hint">管理工资/报工/审核等推送授权（点击消息直接跳到对应页面）</text>
+    <!-- 订阅入口卡 -->
+    <view class="emp-card subscribe-entry tappable" @tap="goSubscribe">
+      <view class="entry-icon-wrap">
+        <view class="entry-icon">📬</view>
+      </view>
+      <view class="entry-body">
+        <text class="entry-title">微信消息推送</text>
+        <text class="entry-hint">管理工资/报工/审核推送授权，点击消息直接跳转对应页面</text>
+      </view>
+      <text class="entry-arrow">›</text>
     </view>
 
-    <view v-if="!items.length" class="emp-empty">暂无消息</view>
+    <!-- 消息列表 -->
+    <view v-if="!items.length" class="emp-empty">
+      <text class="emp-empty-icon">🔕</text>
+      暂无消息
+    </view>
+
     <view
       v-for="n in items"
       :key="n.id"
-      class="emp-card notice-card"
-      hover-class="notice-card-hover"
+      class="emp-card emp-card--striped notice-card tappable"
+      :class="n.is_read ? 'strip-info' : 'strip-working'"
       @tap="read(n)"
     >
       <view class="notice-head">
@@ -41,6 +53,8 @@ onShow(async () => {
 
 async function read(n: NoticeItem) {
   await markRead(n.id)
+  n.is_read = true
+  auth.refreshUnread()
   const biz = n.biz_type
   if (biz === 'salary_slip') uni.navigateTo({ url: '/pages-employee/salary/slip/index' })
   else if (biz === 'report') uni.switchTab({ url: '/pages/tabs/emp-tasks/index' })
@@ -52,52 +66,78 @@ function goSubscribe() {
 </script>
 
 <style scoped lang="scss">
+// 订阅入口
 .subscribe-entry {
+  display: flex;
+  align-items: center;
+  gap: $space-4;
   background: linear-gradient(135deg, #eef2ff, #f0fdf4);
-  border-left: 6rpx solid #4f46e5;
+  border: 1rpx solid rgba($brand-200, 0.4);
+}
+.entry-icon-wrap {
+  flex-shrink: 0;
+}
+.entry-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: $radius-md;
+  background: rgba($brand-600, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+}
+.entry-body {
+  flex: 1;
+  min-width: 0;
 }
 .entry-title {
   display: block;
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 8rpx;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
+  margin-bottom: 4rpx;
 }
 .entry-hint {
   display: block;
-  font-size: 24rpx;
-  color: #666;
-  line-height: 1.6;
+  font-size: $text-xs;
+  color: $slate-500;
+  line-height: 1.5;
 }
+.entry-arrow {
+  color: $slate-300;
+  font-size: $text-xl;
+  flex-shrink: 0;
+}
+
+// 消息卡
 .notice-card {
-  padding: 28rpx;
-}
-.notice-card-hover {
-  opacity: 0.92;
+  padding: $space-5;
+  padding-left: 32rpx;
 }
 .notice-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 12rpx;
+  gap: $space-3;
+  margin-bottom: $space-2;
 }
 .notice-title {
   flex: 1;
   min-width: 0;
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: $text-md;
+  font-weight: $fw-medium;
+  color: $slate-700;
   line-height: 1.4;
   display: block;
 }
 .notice-title.unread {
-  font-weight: 700;
-  color: #0f172a;
+  font-weight: $fw-bold;
+  color: $slate-900;
 }
 .notice-body {
-  font-size: 26rpx;
-  color: #64748b;
+  font-size: $text-sm;
+  color: $slate-500;
   line-height: 1.5;
   display: block;
 }

@@ -1,32 +1,50 @@
-// 管理端视觉（对齐 PC Element Plus 蓝紫系）
+@use '../uni.scss' as *;
+
+// ============================================================
+// CenkorMES 管理端主题 v2.0
+// 蓝紫系，对齐 v2 设计系统精致度
+// 保持原有 adm-* 类名兼容，升级阴影/圆角/按压反馈/过渡
+// ============================================================
+
+// 管理端品牌色（蓝紫系，区别于员工蓝/客户青）
+$adm-brand:     #4338ca;
+$adm-brand-50:  #eef2ff;
+$adm-brand-100: #e0e7ff;
+$adm-brand-200: #c7d2fe;
+$adm-brand-500: #6366f1;
+$adm-brand-600: #4f46e5;
+$adm-brand-700: #4338ca;
+$adm-brand-800: #3730a3;
 
 .adm-page {
   min-height: 100vh;
-  padding: 24rpx;
-  padding-bottom: calc(130rpx + env(safe-area-inset-bottom));
+  padding: $space-5;
+  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: linear-gradient(180deg, #eef2ff 0%, #f4f6f9 280rpx, #f4f6f9 100%);
+  background: linear-gradient(180deg, $adm-brand-50 0%, $slate-100 280rpx, $slate-50 100%);
 }
 
+// ---- Hero ----
 .adm-hero {
-  background: linear-gradient(135deg, #4338ca 0%, #6366f1 55%, #818cf8 100%);
-  border-radius: 24rpx;
-  padding: 36rpx 32rpx;
+  background: linear-gradient(135deg, $adm-brand 0%, $adm-brand-500 55%, #818cf8 100%);
+  border-radius: $radius-xl;
+  padding: $space-7 $space-6;
   color: #fff;
-  margin-bottom: 24rpx;
-  box-shadow: 0 12rpx 40rpx rgba(67, 56, 202, 0.25);
+  margin-bottom: $space-5;
+  box-shadow: 0 12rpx 40rpx rgba($adm-brand, 0.25);
 }
 
 .adm-hero-title {
-  font-size: 40rpx;
-  font-weight: 700;
+  font-size: $text-2xl;
+  font-weight: $fw-bold;
   display: block;
+  letter-spacing: -0.5rpx;
 }
 
 .adm-hero-sub {
-  font-size: 24rpx;
+  font-size: $text-sm;
   opacity: 0.88;
-  margin-top: 8rpx;
+  margin-top: $space-1;
   display: block;
 }
 
@@ -34,145 +52,167 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 24rpx;
-  font-size: 22rpx;
+  margin-top: $space-5;
+  font-size: $text-xs;
   opacity: 0.9;
 }
 
+// ---- 卡片 ----
 .adm-card {
   background: #fff;
-  border-radius: 20rpx;
-  padding: 28rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.05);
+  border-radius: $radius-lg;
+  padding: $space-6;
+  margin-bottom: $space-5;
+  box-shadow: $shadow-sm;
+  border: 1rpx solid rgba($slate-200, 0.5);
+  position: relative;
+  transition: transform $dur-fast $ease-smooth, box-shadow $dur-fast $ease-smooth;
+  &:active {
+    transform: scale(0.99);
+  }
 }
 
-.adm-section {
-  margin-bottom: 28rpx;
-}
+.adm-section { margin-bottom: $space-6; }
 
-.adm-section-head {
-  margin-bottom: 16rpx;
-  padding: 0 4rpx;
-}
+.adm-section-head { margin-bottom: $space-4; padding: 0 4rpx; }
 
 .adm-section-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1e293b;
-  display: block;
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $adm-brand-500;
+    border-radius: $radius-pill;
+  }
 }
 
 .adm-section-sub {
-  font-size: 22rpx;
-  color: #94a3b8;
+  font-size: $text-xs;
+  color: $slate-400;
   margin-top: 4rpx;
   display: block;
 }
 
+// ---- 统计网格 ----
 .adm-stat-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16rpx;
-  margin-bottom: 24rpx;
+  gap: $space-4;
+  margin-bottom: $space-5;
 }
 
 .adm-stat-card {
   background: #fff;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 20rpx rgba(15, 23, 42, 0.04);
+  border-radius: $radius-lg;
+  padding: $space-5;
+  box-shadow: $shadow-sm;
+  border: 1rpx solid rgba($slate-200, 0.5);
+  transition: transform $dur-fast $ease-smooth;
+  &:active { transform: scale(0.97); }
 }
 
 .adm-stat-label {
-  font-size: 22rpx;
-  color: #64748b;
+  font-size: $text-xs;
+  color: $slate-500;
   display: block;
+  font-weight: $fw-medium;
 }
 
 .adm-stat-value {
-  font-size: 36rpx;
-  font-weight: 700;
-  margin-top: 8rpx;
+  font-size: $text-2xl;
+  font-weight: $fw-bold;
+  margin-top: $space-1;
   display: block;
-  color: #1e293b;
+  color: $slate-800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5rpx;
 }
 
-.adm-stat-card.tone-green .adm-stat-value { color: #16a34a; }
-.adm-stat-card.tone-rose .adm-stat-value { color: #e11d48; }
-.adm-stat-card.tone-blue .adm-stat-value { color: #2563eb; }
-.adm-stat-card.tone-orange .adm-stat-value { color: #ea580c; }
+.adm-stat-card.tone-green  .adm-stat-value { color: $success; }
+.adm-stat-card.tone-rose   .adm-stat-value { color: $danger; }
+.adm-stat-card.tone-blue   .adm-stat-value { color: $brand-600; }
+.adm-stat-card.tone-orange .adm-stat-value { color: $warn-deep; }
 .adm-stat-card.tone-violet .adm-stat-value { color: #7c3aed; }
 
+// ---- 菜单宫格 ----
 .adm-menu-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16rpx;
+  gap: $space-4;
   background: #fff;
-  border-radius: 20rpx;
-  padding: 24rpx 16rpx;
-  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.05);
+  border-radius: $radius-lg;
+  padding: $space-5 $space-4;
+  box-shadow: $shadow-sm;
+  border: 1rpx solid rgba($slate-200, 0.5);
 }
 
-.adm-menu-grid.compact {
-  grid-template-columns: repeat(3, 1fr);
-}
+.adm-menu-grid.compact { grid-template-columns: repeat(3, 1fr); }
 
 .adm-menu-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12rpx 4rpx;
+  padding: $space-1 4rpx;
+  transition: transform $dur-fast $ease-smooth;
+  &:active { transform: scale(0.92); }
 }
 
-.adm-menu-item-hover {
-  opacity: 0.75;
-}
+.adm-menu-item-hover { opacity: 0.75; }
 
 .adm-menu-icon {
   width: 88rpx;
   height: 88rpx;
-  border-radius: 22rpx;
+  border-radius: $radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 36rpx;
-  margin-bottom: 10rpx;
+  margin-bottom: $space-2;
 }
 
-.adm-menu-icon.blue { background: #eff6ff; }
-.adm-menu-icon.green { background: #ecfdf5; }
-.adm-menu-icon.orange { background: #fff7ed; }
+.adm-menu-icon.blue   { background: $brand-50; }
+.adm-menu-icon.green  { background: $success-bg; }
+.adm-menu-icon.orange { background: $warn-bg; }
 .adm-menu-icon.violet { background: #f5f3ff; }
-.adm-menu-icon.rose { background: #fff1f2; }
-.adm-menu-icon.slate { background: #f8fafc; }
+.adm-menu-icon.rose   { background: $danger-bg; }
+.adm-menu-icon.slate  { background: $slate-50; }
 
 .adm-menu-text {
-  font-size: 22rpx;
-  color: #334155;
+  font-size: $text-xs;
+  color: $slate-700;
   text-align: center;
   line-height: 1.3;
+  font-weight: $fw-medium;
 }
 
-// ── 列表卡片（MListLayout 统一） ──
+// ---- 列表卡片 ----
 .adm-list-card {
   background: #fff;
-  border-radius: 20rpx;
-  box-shadow: 0 8rpx 32rpx rgba(15, 23, 42, 0.07);
-  border: 1rpx solid rgba(226, 232, 240, 0.95);
+  border-radius: $radius-lg;
+  box-shadow: $shadow-md;
+  border: 1rpx solid rgba($slate-200, 0.6);
   overflow: hidden;
+  margin-bottom: $space-4;
+  transition: transform $dur-fast $ease-smooth, box-shadow $dur-fast $ease-smooth;
 }
 
 .adm-list-card-hover {
-  opacity: 0.94;
-  transform: scale(0.995);
+  opacity: 0.95;
+  transform: scale(0.99);
+  box-shadow: $shadow-sm;
 }
 
 .adm-list-inner {
   display: flex;
   align-items: stretch;
-  padding: 28rpx 24rpx;
-  gap: 12rpx;
+  padding: $space-5 $space-5;
+  gap: $space-2;
 }
 
 .adm-list-body {
@@ -180,15 +220,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: $space-2;
 }
 
 .adm-list-chevron {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: #cbd5e1;
-  font-size: 36rpx;
+  color: $slate-300;
+  font-size: $text-xl;
   font-weight: 300;
   padding-left: 4rpx;
 }
@@ -197,55 +237,66 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: $space-4;
 }
 
 .adm-list-title {
   flex: 1;
   min-width: 0;
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: $text-md;
+  font-weight: $fw-bold;
+  color: $slate-900;
   line-height: 1.35;
   display: block;
   word-break: break-all;
+  letter-spacing: -0.3rpx;
 }
 
 .adm-list-sub {
   display: block;
-  font-size: 26rpx;
-  color: #64748b;
+  font-size: $text-sm;
+  color: $slate-500;
   line-height: 1.5;
+}
+
+.adm-list-subtitle {
+  display: block;
+  font-size: $text-sm;
+  color: $slate-500;
+  margin-top: 4rpx;
+  margin-bottom: 4rpx;
 }
 
 .adm-list-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx 28rpx;
+  gap: $space-2 $space-6;
 }
 
 .adm-list-kv {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  font-size: 24rpx;
+  gap: $space-2;
+  font-size: $text-xs;
   line-height: 1.4;
 }
 
 .adm-list-kv .k {
-  color: #94a3b8;
+  color: $slate-400;
   flex-shrink: 0;
+  font-weight: $fw-medium;
 }
 
 .adm-list-kv .v {
-  color: #334155;
-  font-weight: 500;
+  color: $slate-700;
+  font-weight: $fw-semibold;
+  font-variant-numeric: tabular-nums;
 }
 
 .adm-list-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
+  gap: $space-1;
   flex-shrink: 0;
   justify-content: flex-end;
 }
@@ -253,278 +304,258 @@
 .adm-list-badge {
   flex-shrink: 0;
   padding: 6rpx 16rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-  font-weight: 600;
+  border-radius: $radius-pill;
+  font-size: $text-xs;
+  font-weight: $fw-semibold;
   line-height: 1.3;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+
+  &::before {
+    content: '';
+    width: 8rpx;
+    height: 8rpx;
+    border-radius: 50%;
+  }
 }
 
-.adm-list-badge.tone-draft { background: #f1f5f9; color: #64748b; }
-.adm-list-badge.tone-pending { background: #fef3c7; color: #b45309; }
-.adm-list-badge.tone-active { background: #dbeafe; color: #1d4ed8; }
-.adm-list-badge.tone-success { background: #dcfce7; color: #15803d; }
-.adm-list-badge.tone-danger { background: #fee2e2; color: #b91c1c; }
-.adm-list-badge.tone-violet { background: #ede9fe; color: #6d28d9; }
+.adm-list-badge.tone-draft   { background: $slate-100;  color: $slate-600; &::before { background: $slate-400; } }
+.adm-list-badge.tone-pending { background: $warn-bg;    color: $warn-deep; &::before { background: $warn; } }
+.adm-list-badge.tone-active  { background: $brand-50;   color: $brand-700; &::before { background: $brand-600; } }
+.adm-list-badge.tone-success { background: $success-bg; color: $success-deep; &::before { background: $success; } }
+.adm-list-badge.tone-danger  { background: $danger-bg;  color: $danger-deep; &::before { background: $danger; } }
+.adm-list-badge.tone-violet  { background: #ede9fe;     color: #6d28d9; &::before { background: #7c3aed; } }
 
 .adm-list-foot {
   display: flex;
-  gap: 20rpx;
+  gap: $space-5;
   flex-wrap: wrap;
-  padding-top: 14rpx;
+  padding-top: $space-3;
   margin-top: 4rpx;
-  border-top: 1rpx solid #f1f5f9;
+  border-top: 1rpx solid $slate-100;
 }
 
 .adm-list-actions {
   display: flex;
-  gap: 24rpx;
+  gap: $space-5;
   flex-wrap: wrap;
 }
 
 .adm-list-act {
-  font-size: 24rpx;
-  color: #4338ca;
-  font-weight: 500;
+  font-size: $text-xs;
+  color: $adm-brand-600;
+  font-weight: $fw-medium;
+  padding: 6rpx 16rpx;
+  border-radius: $radius-sm;
+  transition: background $dur-fast $ease-smooth;
+  &:active { background: $adm-brand-50; }
 }
 
-.adm-list-act.primary {
-  color: #6366f1;
-  font-weight: 600;
-}
+.adm-list-act.primary { color: $adm-brand-500; font-weight: $fw-semibold; }
+.adm-list-act.danger  { color: $danger; }
 
-.adm-list-act.danger {
-  color: #ef4444;
-}
-
-// ── 参考卡片：KV 网格 + 底部操作按钮 ──
+// ---- KV 网格 ----
 .adm-kv-grid {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
-  margin-top: 8rpx;
+  margin-top: $space-1;
 }
 
 .adm-kv-row {
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
-  padding: 10rpx 0;
-  font-size: 26rpx;
+  gap: $space-4;
+  padding: $space-2 0;
+  font-size: $text-base;
   line-height: 1.45;
-  border-bottom: 1rpx solid #f8fafc;
-}
-
-.adm-kv-row:last-child {
-  border-bottom: none;
+  border-bottom: 1rpx solid $slate-50;
+  &:last-child { border-bottom: none; }
 }
 
 .adm-kv-k {
   width: 168rpx;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: $slate-400;
+  font-size: $text-xs;
+  font-weight: $fw-medium;
 }
 
 .adm-kv-v {
   flex: 1;
   min-width: 0;
-  color: #334155;
+  color: $slate-800;
+  font-weight: $fw-semibold;
   word-break: break-all;
 }
 
+// ---- 卡片按钮 ----
 .adm-card-btns-wrap {
-  border-top: 1rpx solid #f1f5f9;
-  padding: 20rpx 24rpx 24rpx;
+  border-top: 1rpx solid $slate-100;
+  padding: $space-4 $space-5 $space-5;
 }
 
 .adm-card-btns {
   display: flex;
-  gap: 16rpx;
+  gap: $space-3;
 }
 
 .adm-card-btn {
   flex: 1;
   height: 72rpx;
   line-height: 72rpx;
-  border-radius: 12rpx;
-  font-size: 26rpx;
-  font-weight: 500;
+  border-radius: $radius-md;
+  font-size: $text-sm;
+  font-weight: $fw-semibold;
   color: #fff;
   padding: 0;
   margin: 0;
   border: none;
-}
-
-.adm-card-btn::after {
-  border: none;
+  transition: transform $dur-fast $ease-smooth;
+  &::after { border: none; }
+  &:active { transform: scale(0.97); }
 }
 
 .adm-card-btn.edit,
-.adm-card-btn.primary {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-}
+.adm-card-btn.primary { background: linear-gradient(135deg, $brand-500, $brand-600); box-shadow: 0 2rpx 8rpx rgba($brand-600, 0.2); }
+.adm-card-btn.danger  { background: linear-gradient(135deg, #f87171, $danger); box-shadow: 0 2rpx 8rpx rgba($danger, 0.2); }
+.adm-card-btn.success { background: linear-gradient(135deg, #4ade80, $success); box-shadow: 0 2rpx 8rpx rgba($success, 0.2); }
+.adm-card-btn.ghost   { background: $slate-500; }
+.adm-card-btn.warn    { background: linear-gradient(135deg, #fb923c, $warn); box-shadow: 0 2rpx 8rpx rgba($warn, 0.2); }
+.adm-card-btn.teal    { background: linear-gradient(135deg, #2dd4bf, #14b8a6); box-shadow: 0 2rpx 8rpx rgba(20, 184, 166, 0.2); }
+.adm-card-btn.violet  { background: linear-gradient(135deg, #818cf8, $adm-brand-500); box-shadow: 0 2rpx 8rpx rgba($adm-brand-500, 0.2); }
 
-.adm-card-btn.danger {
-  background: linear-gradient(135deg, #f87171, #ef4444);
-}
+.adm-card-btns.stack { flex-direction: column; }
+.adm-card-btns.stack .adm-card-btn { width: 100%; }
 
-.adm-card-btn.success {
-  background: linear-gradient(135deg, #4ade80, #22c55e);
-}
-
-.adm-card-btn.ghost {
-  background: #64748b;
-}
-
-.adm-card-btn.warn {
-  background: linear-gradient(135deg, #fb923c, #f97316);
-}
-
-.adm-card-btn.teal {
-  background: linear-gradient(135deg, #2dd4bf, #14b8a6);
-}
-
-.adm-card-btn.violet {
-  background: linear-gradient(135deg, #818cf8, #6366f1);
-}
-
-.adm-card-btns.stack {
-  flex-direction: column;
-}
-
-.adm-card-btns.stack .adm-card-btn {
-  width: 100%;
-}
-
-.adm-progress-wrap {
-  margin-top: 12rpx;
-}
+// ---- 进度条 ----
+.adm-progress-wrap { margin-top: $space-2; }
 
 .adm-progress-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 24rpx;
-  color: #64748b;
-  margin-bottom: 8rpx;
+  font-size: $text-xs;
+  color: $slate-500;
+  margin-bottom: $space-1;
 }
 
 .adm-progress-bar {
   height: 14rpx;
-  background: #e2e8f0;
-  border-radius: 999rpx;
+  background: $slate-100;
+  border-radius: $radius-pill;
   overflow: hidden;
 }
 
 .adm-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4ade80, #22c55e);
-  border-radius: 999rpx;
+  background: linear-gradient(90deg, #4ade80, $success);
+  border-radius: $radius-pill;
   min-width: 4rpx;
+  transition: width 600ms $ease-smooth;
 }
 
-.adm-list-subtitle {
-  display: block;
-  font-size: 26rpx;
-  color: #64748b;
-  margin-top: 4rpx;
-  margin-bottom: 4rpx;
-}
+// ---- 兼容旧类名 ----
+.adm-list-item { display: flex; align-items: stretch; }
+.adm-list-arrow { color: $slate-300; font-size: $text-lg; }
 
-// 兼容旧类名
-.adm-list-item {
-  display: flex;
-  align-items: stretch;
-}
-
-.adm-list-arrow {
-  color: #cbd5e1;
-  font-size: 32rpx;
-}
-
-.adm-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-}
+// ---- Chip ----
+.adm-chip-row { display: flex; flex-wrap: wrap; gap: $space-2; }
 
 .adm-chip {
   background: #fff;
-  border: 1rpx solid #e2e8f0;
-  border-radius: 999rpx;
-  padding: 12rpx 24rpx;
-  font-size: 24rpx;
-  color: #475569;
+  border: 1rpx solid $slate-200;
+  border-radius: $radius-pill;
+  padding: $space-2 $space-5;
+  font-size: $text-xs;
+  color: $slate-600;
+  font-weight: $fw-medium;
+  transition: all $dur-fast $ease-smooth;
+  &:active { background: $slate-50; transform: scale(0.97); }
 }
 
+// ---- 审核卡 ----
 .adm-audit-card {
   background: #fff;
-  border-radius: 20rpx;
-  padding: 32rpx;
-  margin-bottom: 20rpx;
+  border-radius: $radius-lg;
+  padding: $space-6;
+  margin-bottom: $space-4;
   display: flex;
   align-items: center;
-  gap: 24rpx;
-  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.05);
+  gap: $space-5;
+  box-shadow: $shadow-sm;
+  border: 1rpx solid rgba($slate-200, 0.5);
+  transition: transform $dur-fast $ease-smooth;
+  &:active { transform: scale(0.99); }
 }
 
 .adm-audit-icon {
   width: 96rpx;
   height: 96rpx;
-  border-radius: 24rpx;
+  border-radius: $radius-lg;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40rpx;
+  font-size: $text-2xl;
   flex-shrink: 0;
 }
 
 .adm-audit-body { flex: 1; }
-.adm-audit-title { font-size: 32rpx; font-weight: 600; color: #1e293b; display: block; }
-.adm-audit-desc { font-size: 24rpx; color: #64748b; margin-top: 6rpx; display: block; }
+.adm-audit-title { font-size: $text-md; font-weight: $fw-bold; color: $slate-800; display: block; }
+.adm-audit-desc { font-size: $text-xs; color: $slate-500; margin-top: 4rpx; display: block; }
 
 .adm-empty-tip {
   text-align: center;
-  padding: 48rpx 24rpx;
-  color: #94a3b8;
-  font-size: 26rpx;
+  padding: $space-7 $space-5;
+  color: $slate-400;
+  font-size: $text-md;
 }
 
 .adm-link {
-  color: #4338ca;
-  font-size: 26rpx;
+  color: $adm-brand-600;
+  font-size: $text-sm;
   text-align: center;
-  padding: 16rpx;
+  padding: $space-3;
+  font-weight: $fw-medium;
 }
 
+// ---- 个人卡 ----
 .adm-profile-card {
-  background: linear-gradient(135deg, #4338ca, #6366f1);
-  border-radius: 24rpx;
-  padding: 40rpx 32rpx;
+  background: linear-gradient(135deg, $adm-brand, $adm-brand-500);
+  border-radius: $radius-xl;
+  padding: $space-7 $space-6;
   color: #fff;
-  margin-bottom: 24rpx;
+  margin-bottom: $space-5;
+  box-shadow: 0 8rpx 24rpx rgba($adm-brand, 0.22);
 }
 
 .adm-profile-name {
-  font-size: 40rpx;
-  font-weight: 700;
+  font-size: $text-2xl;
+  font-weight: $fw-bold;
   display: block;
+  letter-spacing: -0.5rpx;
 }
 
 .adm-profile-meta {
-  font-size: 24rpx;
+  font-size: $text-sm;
   opacity: 0.9;
-  margin-top: 8rpx;
+  margin-top: $space-1;
   display: block;
 }
 
 .adm-row-btn {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 28rpx 32rpx;
-  margin-bottom: 16rpx;
-  font-size: 28rpx;
-  color: #334155;
-  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
+  border-radius: $radius-md;
+  padding: $space-5 $space-6;
+  margin-bottom: $space-3;
+  font-size: $text-md;
+  color: $slate-700;
+  box-shadow: $shadow-xs;
+  border: 1rpx solid rgba($slate-200, 0.5);
+  font-weight: $fw-medium;
+  transition: all $dur-fast $ease-smooth;
+  &:active { background: $slate-50; transform: scale(0.99); }
 }
 
-.adm-row-btn.danger { color: #ef4444; }
+.adm-row-btn.danger { color: $danger; }

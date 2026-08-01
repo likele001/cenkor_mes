@@ -2,25 +2,35 @@
   <view class="cust-page">
     <view v-if="loading" class="cust-empty">{{ t('common.loading') }}</view>
     <template v-else-if="data">
-      <view class="cust-card">
-        <text class="mono cust-title">{{ data.code }}</text>
-        <view class="kv"><text class="k">{{ t('customer.statementDetail.period') }}</text><text class="v">{{ periodLabel() }}</text></view>
-        <view class="kv"><text class="k">{{ t('customer.statementDetail.status') }}</text><text class="v">{{ statementStatusLabel(data.status) }}</text></view>
-        <view class="kv"><text class="k">{{ t('customer.statementDetail.totalAmount') }}</text><text class="v">¥{{ data.total_amount }}</text></view>
-        <view v-if="data.remark" class="kv"><text class="k">{{ t('customer.statementDetail.remark') }}</text><text class="v">{{ data.remark }}</text></view>
+      <view class="cust-card cust-card--brand stmt-hero">
+        <view class="hero-head">
+          <text class="hero-code mono">{{ data.code }}</text>
+          <text class="cust-tag" :class="data.status === 'confirmed' ? 'ok' : 'warn'">{{ statementStatusLabel(data.status) }}</text>
+        </view>
+        <view class="hero-amount">
+          <text class="amount-label">{{ t('customer.statementDetail.totalAmount') }}</text>
+          <text class="amount-value">¥{{ data.total_amount }}</text>
+        </view>
+        <view class="hero-period">{{ periodLabel() }}</view>
+      </view>
+
+      <view v-if="data.remark" class="cust-card">
+        <text class="cust-section-title">{{ t('customer.statementDetail.remark') }}</text>
+        <text class="remark-text">{{ data.remark }}</text>
       </view>
 
       <view class="cust-card">
-        <text class="section">{{ t('customer.statementDetail.detail') }}</text>
-        <view v-for="(it, idx) in data.items" :key="idx" class="line">
-          <text>{{ it.order_code || it.order_id }} · ¥{{ it.amount }}</text>
+        <text class="cust-section-title">{{ t('customer.statementDetail.detail') }}</text>
+        <view v-for="(it, idx) in data.items" :key="idx" class="cust-row">
+          <text>{{ it.order_code || it.order_id }}</text>
+          <text class="amt">¥{{ it.amount }}</text>
         </view>
       </view>
 
       <view class="actions">
         <button v-if="canAck" class="cust-btn-primary" :loading="acting" @tap="onAck">{{ t('customer.statementDetail.confirmAck') }}</button>
         <button v-if="canPaid" class="cust-btn-primary" :loading="acting" @tap="onPaid">{{ t('customer.statementDetail.markPaid') }}</button>
-        <button class="btn-plain" :loading="downloading" @tap="onDownload">{{ t('customer.statementDetail.downloadCsv') }}</button>
+        <button class="cust-btn-outline" :loading="downloading" @tap="onDownload">{{ t('customer.statementDetail.downloadCsv') }}</button>
       </view>
     </template>
   </view>
@@ -30,13 +40,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import {
-  ackMyStatement,
-  buildStatementDownloadUrl,
-  getMyStatementDetail,
-  markMyStatementPaid,
-  type CustomerStatementDetail,
-} from '@/api/h5/customer'
+import { ackMyStatement, buildStatementDownloadUrl, getMyStatementDetail, markMyStatementPaid, type CustomerStatementDetail } from '@/api/h5/customer'
 import { getToken } from '@/api/request'
 import { useCustomerLabels } from '@/composables/useCustomerLabels'
 import { useCustomerLocale } from '@/composables/useCustomerLocale'
@@ -65,11 +69,7 @@ function periodLabel() {
 async function load() {
   if (!statementId.value) return
   loading.value = true
-  try {
-    data.value = await getMyStatementDetail(statementId.value)
-  } finally {
-    loading.value = false
-  }
+  try { data.value = await getMyStatementDetail(statementId.value) } finally { loading.value = false }
 }
 
 async function onAck() {
@@ -83,9 +83,7 @@ async function onAck() {
         await ackMyStatement(statementId.value)
         uni.showToast({ title: t('customer.statementDetail.ackSuccess'), icon: 'success' })
         load()
-      } finally {
-        acting.value = false
-      }
+      } finally { acting.value = false }
     },
   })
 }
@@ -101,9 +99,7 @@ async function onPaid() {
         await markMyStatementPaid(statementId.value)
         uni.showToast({ title: t('customer.statementDetail.markPaidSuccess'), icon: 'success' })
         load()
-      } finally {
-        acting.value = false
-      }
+      } finally { acting.value = false }
     },
   })
 }
@@ -127,16 +123,11 @@ function onDownload() {
       }
     },
     fail: () => uni.showToast({ title: t('customer.statementDetail.downloadFailed'), icon: 'none' }),
-    complete: () => {
-      downloading.value = false
-    },
+    complete: () => { downloading.value = false },
   })
 }
 
-onLoad((q) => {
-  statementId.value = Number(q?.id || 0)
-})
-
+onLoad((q) => { statementId.value = Number(q?.id || 0) })
 onShow(() => {
   if (!requireCustomer()) return
   setNavTitle('customer.statementDetail.title')
@@ -146,40 +137,28 @@ onShow(() => {
 
 <style scoped lang="scss">
 @use '@/styles/customer-theme.scss';
-.kv {
-  display: flex;
-  justify-content: space-between;
-  padding: 10rpx 0;
-  font-size: 26rpx;
-}
-.k {
-  color: #64748b;
-}
-.mono {
-  font-family: monospace;
-  display: block;
-  margin-bottom: 12rpx;
-}
-.section {
-  font-weight: 600;
-  display: block;
-  margin-bottom: 12rpx;
-}
-.line {
-  padding: 10rpx 0;
-  border-bottom: 1rpx solid #f1f5f9;
-  font-size: 26rpx;
-}
-.actions {
-  padding: 24rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-.btn-plain {
+.stmt-hero { padding: 28rpx; border-radius: 24rpx; }
+.hero-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
+.hero-code { font-family: monospace; font-size: 28rpx; font-weight: 700; color: #fff; }
+.hero-amount { text-align: center; margin: 16rpx 0; }
+.amount-label { display: block; font-size: 22rpx; color: rgba(255,255,255,0.72); margin-bottom: 4rpx; }
+.amount-value { font-size: 56rpx; font-weight: 700; color: #fff; letter-spacing: -1rpx; }
+.hero-period { text-align: center; font-size: 22rpx; color: rgba(255,255,255,0.72); }
+
+.remark-text { font-size: 26rpx; color: #64748b; line-height: 1.6; }
+.amt { color: #0284c7; font-weight: 600; }
+
+.actions { padding: 24rpx; display: flex; flex-direction: column; gap: 16rpx; }
+.cust-btn-outline {
   background: #fff;
   color: #0284c7;
   border: 1rpx solid #bae6fd;
-  border-radius: 12rpx;
+  border-radius: 16rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  &::after { border: none; }
+  &:active { background: #f0f9ff; }
 }
 </style>

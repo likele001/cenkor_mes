@@ -1,6 +1,7 @@
 <template>
   <view class="emp-page">
-    <view class="emp-card profile-card">
+    <!-- 渐变个人卡 -->
+    <view class="emp-card emp-card--brand profile-card">
       <view class="profile-row">
         <view class="avatar">{{ avatarText }}</view>
         <view class="profile-info">
@@ -8,61 +9,92 @@
           <text class="role">{{ auth.roles.join(' · ') || '员工' }}</text>
         </view>
       </view>
-    </view>
 
-    <!-- 统计卡片区 -->
-    <view class="emp-card stats-card">
-      <view class="stats-title">本月概览</view>
-      <view class="emp-stat-grid">
+      <view class="hero-stats">
         <view class="stat-item">
           <view class="stat-val">{{ attendanceDays }}</view>
-          <view class="stat-lbl">出勤天数</view>
+          <view class="stat-lbl">本月出勤</view>
         </view>
+        <view class="stat-divider" />
         <view class="stat-item">
           <view class="stat-val">{{ totalReports }}</view>
           <view class="stat-lbl">报工件数</view>
         </view>
+        <view class="stat-divider" />
         <view class="stat-item">
-          <view class="stat-val money">¥{{ monthSalary }}</view>
+          <view class="stat-val">¥{{ monthSalary }}</view>
           <view class="stat-lbl">预估工资</view>
         </view>
       </view>
     </view>
 
+    <!-- 常用功能 -->
+    <view class="section-head">常用功能</view>
     <view class="emp-card menu">
-      <view class="row" @tap="go('/pages-employee/salary/index/index')">
-        <text>工资统计</text>
-        <text class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages-employee/salary/index/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-violet">薪</view>
+          <text>工资统计</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
-      <view class="row" @tap="go('/pages-employee/salary/slip/index')">
-        <text>电子工资条</text>
-        <text class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages-employee/salary/slip/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-emerald">条</view>
+          <text>电子工资条</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
-      <view class="row" @tap="go('/pages-employee/report/history/index')">
-        <text>报工记录</text>
-        <text class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages-employee/report/history/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-blue">录</view>
+          <text>报工记录</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
-      <view class="row" @tap="go('/pages-employee/notification/list/index')">
-        <text>消息中心</text>
-        <text v-if="auth.unreadCount > 0" class="badge">{{ auth.unreadCount }}</text>
-        <text v-else class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages-employee/notification/list/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-rose">消</view>
+          <text>消息中心</text>
+        </view>
+        <text v-if="auth.unreadCount > 0" class="emp-row-badge">{{ auth.unreadCount }}</text>
+        <text v-else class="emp-row-arrow">›</text>
       </view>
-      <view class="row" @tap="go('/pages/shared/help/index')">
-        <text>智能帮助</text>
-        <text class="arrow">›</text>
+    </view>
+
+    <!-- 其他服务 -->
+    <view class="section-head">其他服务</view>
+    <view class="emp-card menu">
+      <view class="emp-row" @tap="go('/pages/shared/help/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-amber">助</view>
+          <text>智能帮助</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
-      <view class="row" @tap="go('/pages/shared/trace/index')">
-        <text>产品溯源查询</text>
-        <text class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages/shared/trace/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-slate">溯</view>
+          <text>产品溯源查询</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
       <view class="bind-section">
         <ChannelBindCard ref="channelBindRef" />
       </view>
-      <view class="row" @tap="go('/pages/shared/about/index')">
-        <text>关于</text>
-        <text class="arrow">›</text>
+      <view class="emp-row" @tap="go('/pages/shared/about/index')">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-slate">于</view>
+          <text>关于</text>
+        </view>
+        <text class="emp-row-arrow">›</text>
       </view>
-      <view class="row danger" @tap="logout">退出登录</view>
+      <view class="emp-row danger-row" @tap="logout">
+        <view class="emp-row-label">
+          <view class="emp-row-icon icon-danger">退</view>
+          <text class="danger-text">退出登录</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -117,78 +149,133 @@ onShow(() => {
 </script>
 
 <style scoped lang="scss">
+// 个人卡
 .profile-card {
-  padding: 32rpx;
+  padding: $space-6;
+  border-radius: $radius-xl;
 }
 .profile-row {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: $space-4;
+  margin-bottom: $space-6;
 }
 .avatar {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 50%;
-  background: #dbeafe;
-  color: #2563eb;
-  font-size: 40rpx;
-  font-weight: 700;
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: $radius-xl;
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8rpx);
+  border: 2rpx solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: $text-2xl;
+  font-weight: $fw-bold;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.name {
-  font-size: 34rpx;
-  font-weight: 700;
-  display: block;
-  color: #1e293b;
+  flex-shrink: 0;
 }
 .profile-info {
   flex: 1;
+  min-width: 0;
+}
+.name {
+  font-size: $text-xl;
+  font-weight: $fw-bold;
+  color: #fff;
+  display: block;
+  letter-spacing: -0.3rpx;
 }
 .role {
-  margin-top: 8rpx;
-  color: #64748b;
-  font-size: 24rpx;
+  margin-top: 6rpx;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: $text-sm;
   display: block;
 }
-.stats-card {
-  padding: 24rpx;
-}
-.stats-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 16rpx;
-}
-.money {
-  font-size: 34rpx;
-}
-.row {
+
+// 渐变卡内的统计
+.hero-stats {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 28rpx 0;
-  border-bottom: 1rpx solid #f1f5f9;
-  font-size: 28rpx;
-  color: #334155;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: $radius-lg;
+  padding: $space-5 $space-3;
+  backdrop-filter: blur(8rpx);
 }
-.arrow {
-  color: #cbd5e1;
-  font-size: 32rpx;
+.hero-stats .stat-item {
+  flex: 1;
+  text-align: center;
 }
-.badge {
-  background: #ef4444;
+.hero-stats .stat-val {
+  font-size: $text-xl;
+  font-weight: $fw-bold;
   color: #fff;
-  font-size: 22rpx;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5rpx;
 }
-.danger {
-  color: #ef4444;
-  border-bottom: none;
+.hero-stats .stat-lbl {
+  margin-top: $space-1;
+  font-size: $text-xs;
+  color: rgba(255, 255, 255, 0.78);
 }
+.stat-divider {
+  width: 1rpx;
+  height: 56rpx;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+// 区块标题
+.section-head {
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  margin: $space-5 0 $space-4 4rpx;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $brand-600;
+    border-radius: $radius-pill;
+  }
+}
+
+// 菜单
+.menu {
+  padding: 0 $space-6;
+}
+.emp-row {
+  padding: $space-5 0;
+}
+.emp-row-icon {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: $radius-md;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $text-sm;
+  font-weight: $fw-bold;
+}
+.icon-blue    { background: $brand-50;  color: $brand-600; }
+.icon-amber   { background: $warn-bg;   color: $warn-deep; }
+.icon-emerald { background: $success-bg; color: $success-deep; }
+.icon-violet  { background: #ede9fe;    color: #6d28d9; }
+.icon-rose    { background: $danger-bg; color: $danger-deep; }
+.icon-slate   { background: $slate-100; color: $slate-700; }
+.icon-danger  { background: $danger-bg; color: $danger-deep; }
+
+.danger-row {
+  .danger-text {
+    color: $danger;
+    font-weight: $fw-medium;
+  }
+}
+
 .bind-section {
-  margin-top: 8rpx;
+  border-bottom: 1rpx solid $slate-100;
 }
 </style>

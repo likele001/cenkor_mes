@@ -1,18 +1,23 @@
 <template>
   <view class="emp-page">
-    <view class="page-head">
-      <text class="page-title">工资统计</text>
-      <text class="refresh" @tap="load">↻</text>
+    <view class="emp-page-head">
+      <text class="emp-page-title">工资统计</text>
+      <view class="emp-page-action" @tap="load">↻</view>
     </view>
 
+    <!-- 月份选择 -->
     <picker mode="date" fields="month" @change="onMonth">
-      <view class="emp-card month-row">
-        <text class="label">选择月份</text>
-        <text class="value">{{ monthLabel }} ›</text>
+      <view class="emp-card month-row tappable">
+        <view class="month-label-wrap">
+          <text class="month-icon">📅</text>
+          <text class="month-label">选择月份</text>
+        </view>
+        <text class="month-value">{{ monthLabel }} ›</text>
       </view>
     </picker>
 
-    <view class="emp-card overview">
+    <!-- 概览渐变卡 -->
+    <view class="emp-card emp-card--brand overview-card">
       <view class="overview-top">
         <text class="overview-title">工资概览</text>
         <text class="count-badge">{{ month || '当月' }}</text>
@@ -33,7 +38,9 @@
       </view>
     </view>
 
-    <view v-for="row in items" :key="row.id" class="emp-card row-card">
+    <!-- 工序明细 -->
+    <view class="section-head">工序明细</view>
+    <view v-for="row in items" :key="row.id" class="emp-card emp-card--striped strip-info row-card tappable">
       <view class="row-head">
         <text class="proc">{{ row.process_name || `工序#${row.process_id}` }}</text>
         <text class="amt">¥{{ formatMoney(row.amount) }}</text>
@@ -41,7 +48,11 @@
       <view class="row-sub">{{ row.good_qty }} 件 × ¥{{ formatMoney(row.unit_price) }}</view>
     </view>
 
-    <view v-if="!items.length && loaded" class="emp-empty">该月份没有报工记录</view>
+    <view v-if="!items.length && loaded" class="emp-empty">
+      <text class="emp-empty-icon">📋</text>
+      该月份没有报工记录
+    </view>
+
     <button class="emp-btn-outline slip-btn" @tap="goSlip">查看电子工资条</button>
   </view>
 </template>
@@ -74,7 +85,6 @@ onMounted(() => {
   const now = new Date()
   month.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   load()
-  // 工资页：用户最关心工资，订阅提醒推送
   smartAutoSubscribe('emp-salary', [
     'salary.slip_remind',
     'salary.slip_reset',
@@ -105,56 +115,80 @@ function goSlip() {
 </script>
 
 <style scoped lang="scss">
-.page-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20rpx;
-}
-.page-title {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-.refresh {
-  font-size: 40rpx;
-  color: #2563eb;
-}
+// 月份选择
 .month-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.label {
-  font-size: 28rpx;
-  color: #64748b;
+.month-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
 }
-.value {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e293b;
+.month-icon {
+  font-size: $text-md;
+}
+.month-label {
+  font-size: $text-md;
+  color: $slate-600;
+  font-weight: $fw-medium;
+}
+.month-value {
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $brand-600;
+}
+
+// 概览
+.overview-card {
+  padding: $space-5 $space-6;
 }
 .overview-top {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 20rpx;
+  align-items: center;
+  margin-bottom: $space-4;
 }
 .overview-title {
-  font-size: 28rpx;
-  font-weight: 600;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: rgba(255, 255, 255, 0.92);
 }
 .count-badge {
-  font-size: 22rpx;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 6rpx 16rpx;
-  border-radius: 999rpx;
+  font-size: $text-xs;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 4rpx 16rpx;
+  border-radius: $radius-pill;
+  font-weight: $fw-medium;
 }
-.money {
-  font-size: 36rpx;
+.overview-card .stat-val.money {
+  font-size: $text-lg;
 }
+
+// 区块标题
+.section-head {
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  margin: $space-5 0 $space-4 4rpx;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $brand-600;
+    border-radius: $radius-pill;
+  }
+}
+
+// 明细卡
 .row-card {
-  padding: 24rpx;
+  padding: $space-5;
+  padding-left: 32rpx;
 }
 .row-head {
   display: flex;
@@ -162,21 +196,24 @@ function goSlip() {
   align-items: center;
 }
 .proc {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
 }
 .amt {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #2563eb;
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $brand-600;
+  font-variant-numeric: tabular-nums;
 }
 .row-sub {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: #94a3b8;
+  margin-top: $space-1;
+  font-size: $text-xs;
+  color: $slate-400;
 }
+
 .slip-btn {
-  margin-top: 24rpx;
+  margin-top: $space-5;
+  width: 100%;
 }
 </style>

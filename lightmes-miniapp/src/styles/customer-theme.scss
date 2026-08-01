@@ -1,121 +1,274 @@
+@use '../uni.scss' as *;
+
+// 客户端品牌色（青色系，区别于员工端蓝色）
+$cust-brand:     #0ea5e9;
+$cust-brand-50:  #f0f9ff;
+$cust-brand-100: #e0f2fe;
+$cust-brand-200: #bae6fd;
+$cust-brand-500: #0ea5e9;
+$cust-brand-600: #0284c7;
+$cust-brand-700: #0369a1;
+$cust-brand-deep:#0c4a6e;
+
+// ============================================================
+// CenkorMES 客户端主题 v2.0
+// 青色系，明亮清爽，对齐员工端设计系统精致度
+// ============================================================
+
 .cust-page {
   min-height: 100vh;
-  background: #f0f9ff;
-  padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
+  padding: $space-5;
+  padding-bottom: calc(140rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: linear-gradient(180deg, $cust-brand-50 0%, $slate-50 240rpx);
 }
 
+// ---- 卡片 ----
 .cust-card {
   background: #fff;
-  border-radius: 20rpx;
-  margin: 24rpx;
-  padding: 28rpx;
-  box-shadow: 0 8rpx 28rpx rgba(14, 116, 144, 0.08);
-  border: 1rpx solid rgba(186, 230, 253, 0.6);
+  border-radius: $radius-lg;
+  padding: $space-6;
+  margin-bottom: $space-5;
+  box-shadow: 0 4rpx 20rpx rgba(14, 116, 144, 0.06);
+  border: 1rpx solid rgba($cust-brand-200, 0.5);
+  position: relative;
+
+  &.tappable {
+    transition: transform $dur-fast $ease-smooth;
+    &:active { transform: scale(0.985); }
+  }
 }
 
-.cust-list-head {
+.cust-card--brand {
+  background: linear-gradient(135deg, $cust-brand-500 0%, $cust-brand-600 100%);
+  border: none;
+  box-shadow: 0 8rpx 24rpx rgba(14, 165, 233, 0.22);
+  color: #fff;
+}
+
+.cust-card--striped {
+  padding-left: 32rpx;
+  overflow: hidden;
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 8rpx;
+    border-radius: $radius-lg 0 0 $radius-lg;
+  }
+  &.strip-pending::before { background: $warn; }
+  &.strip-working::before { background: $cust-brand-500; }
+  &.strip-done::before    { background: $success; }
+  &.strip-info::before    { background: $info; }
+}
+
+// ---- 标题 ----
+.cust-title {
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $cust-brand-deep;
+  letter-spacing: -0.3rpx;
+}
+
+.cust-section-title {
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  margin-bottom: $space-4;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 12rpx;
+  align-items: center;
+  gap: $space-2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $cust-brand-500;
+    border-radius: $radius-pill;
+  }
 }
 
-.cust-card.list-card {
-  transition: opacity 0.15s ease;
+.cust-sub {
+  font-size: $text-sm;
+  color: $slate-500;
+  margin-top: $space-1;
+  display: block;
 }
 
-.cust-card.list-card:active {
-  opacity: 0.92;
+// ---- 统计网格 ----
+.cust-stat-grid {
+  display: flex;
+  gap: $space-3;
+  .stat-item {
+    flex: 1;
+    background: $cust-brand-50;
+    border-radius: $radius-md;
+    padding: $space-5 $space-3;
+    text-align: center;
+    border: 1rpx solid rgba($cust-brand-200, 0.4);
+  }
+  .stat-val {
+    font-size: $text-2xl;
+    font-weight: $fw-bold;
+    color: $cust-brand-deep;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-lbl {
+    margin-top: $space-1;
+    font-size: $text-xs;
+    color: $slate-500;
+  }
 }
 
+.cust-card--brand .cust-stat-grid {
+  .stat-item {
+    background: rgba(255,255,255,0.14);
+    border-color: rgba(255,255,255,0.18);
+  }
+  .stat-val { color: #fff; }
+  .stat-lbl { color: rgba(255,255,255,0.78); }
+}
+
+// ---- 按钮 ----
+.cust-btn-primary {
+  background: $cust-brand-500;
+  color: #fff;
+  border-radius: $radius-md;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  border: none;
+  letter-spacing: 1rpx;
+  transition: transform $dur-fast $ease-smooth, background $dur-fast $ease-smooth;
+  box-shadow: 0 4rpx 12rpx rgba($cust-brand-500, 0.22);
+  &::after { border: none; }
+  &:active { transform: scale(0.98); background: $cust-brand-600; }
+  &[disabled] { background: $slate-200; color: $slate-400; box-shadow: none; }
+}
+
+// ---- 标签 ----
+.cust-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4rpx 16rpx;
+  border-radius: $radius-pill;
+  font-size: $text-xs;
+  font-weight: $fw-semibold;
+  background: $cust-brand-100;
+  color: $cust-brand-700;
+
+  &.ok      { background: $success-bg; color: $success-deep; }
+  &.warn    { background: $warn-bg;    color: $warn-deep; }
+  &.info    { background: $cust-brand-100; color: $cust-brand-700; }
+  &.muted   { background: $slate-100;  color: $slate-600; }
+  &.danger  { background: $danger-bg;  color: $danger-deep; }
+}
+
+// ---- KV 网格 ----
 .cust-kv-grid {
   display: flex;
   flex-direction: column;
   gap: 4rpx;
-  margin-top: 8rpx;
+  margin-top: $space-2;
 }
-
 .cust-kv-row {
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
-  padding: 10rpx 0;
-  font-size: 26rpx;
-  border-bottom: 1rpx solid #f0f9ff;
+  gap: $space-4;
+  padding: $space-2 0;
+  font-size: $text-base;
+  border-bottom: 1rpx solid $cust-brand-50;
+  &:last-child { border-bottom: none; }
 }
-
-.cust-kv-row:last-child {
-  border-bottom: none;
-}
-
 .cust-kv-k {
   width: 168rpx;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: $slate-400;
+  font-size: $text-xs;
+  font-weight: $fw-medium;
 }
-
 .cust-kv-v {
   flex: 1;
   min-width: 0;
-  color: #334155;
+  color: $slate-800;
+  font-weight: $fw-semibold;
   word-break: break-all;
 }
 
-.cust-title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #0c4a6e;
+// ---- 页头 ----
+.cust-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $space-5;
+  padding: 0 4rpx;
+  .cust-page-title {
+    font-size: $text-xl;
+    font-weight: $fw-bold;
+    color: $cust-brand-deep;
+  }
 }
 
-.cust-sub {
-  font-size: 24rpx;
-  color: #64748b;
-  margin-top: 8rpx;
-}
-
-.cust-tag {
-  display: inline-block;
-  padding: 4rpx 16rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
-.cust-btn-primary {
-  background: linear-gradient(135deg, #0ea5e9, #0284c7);
-  color: #fff;
-  border-radius: 12rpx;
-  font-size: 28rpx;
-}
-
+// ---- 空状态 ----
 .cust-empty {
   text-align: center;
-  color: #94a3b8;
-  padding: 80rpx 40rpx;
-  font-size: 28rpx;
+  padding: $space-8 $space-5;
+  color: $slate-400;
+  font-size: $text-md;
 }
 
+// ---- 横向 tab ----
 .cust-tabs {
   display: flex;
   background: #fff;
-  margin: 24rpx;
-  border-radius: 16rpx;
-  padding: 8rpx;
+  margin-bottom: $space-5;
+  border-radius: $radius-md;
+  padding: $space-1;
+  border: 1rpx solid rgba($cust-brand-200, 0.5);
 }
-
 .cust-tab {
   flex: 1;
   text-align: center;
-  padding: 16rpx 0;
-  font-size: 26rpx;
-  color: #64748b;
-  border-radius: 12rpx;
+  padding: $space-3 0;
+  font-size: $text-base;
+  color: $slate-600;
+  border-radius: $radius-sm;
+  font-weight: $fw-medium;
+  transition: all $dur-fast $ease-smooth;
+  &.active {
+    background: $cust-brand-500;
+    color: #fff;
+    font-weight: $fw-semibold;
+    box-shadow: 0 2rpx 8rpx rgba($cust-brand-500, 0.22);
+  }
 }
 
-.cust-tab.active {
-  background: #0ea5e9;
-  color: #fff;
-  font-weight: 600;
+// ---- 进度条 ----
+.cust-progress {
+  margin-top: $space-3;
+  .cust-progress-bar {
+    height: 16rpx;
+    background: $cust-brand-50;
+    border-radius: $radius-pill;
+    overflow: hidden;
+  }
+  .cust-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, $cust-brand-500, $cust-brand-600);
+    border-radius: $radius-pill;
+    transition: width 600ms $ease-smooth;
+  }
+}
+
+// ---- 列表行 ----
+.cust-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: $space-5 0;
+  border-bottom: 1rpx solid $cust-brand-50;
+  font-size: $text-md;
+  color: $slate-700;
+  &:last-child { border-bottom: none; }
+  &:active { background: $cust-brand-50; }
 }

@@ -1,60 +1,73 @@
 <template>
   <view class="emp-page">
-    <view class="section-head">消息推送订阅</view>
+    <view class="emp-page-head">
+      <text class="emp-page-title">消息订阅</text>
+    </view>
+
+    <!-- 介绍卡 -->
     <view class="emp-card intro-card">
-      <text class="intro-title">为什么需要订阅？</text>
-      <text class="intro-body">微信小程序推送需要您主动授权。每次订阅后，您可以收到一条相关消息（如工资发放、报工审核完成）。点击下方按钮可随时管理订阅状态。</text>
+      <view class="intro-icon">💡</view>
+      <view class="intro-body">
+        <text class="intro-title">为什么需要订阅？</text>
+        <text class="intro-text">微信小程序推送需要您主动授权。每次订阅后可收到一条相关消息（如工资发放、报工审核完成）。</text>
+      </view>
     </view>
 
-    <!-- 模板未配置提示 -->
+    <!-- 占位符警告 -->
     <view v-if="!loading && templates.length && hasPlaceholder" class="emp-card warn-card">
-      <text class="warn-icon">⚠</text>
-      <text class="warn-text">模板 ID 尚未在后台配置，请联系管理员在「系统设置 → 微信消息推送」中填入真实的微信模板 ID。</text>
+      <view class="warn-icon">⚠</view>
+      <view class="warn-body">
+        <text class="warn-title">模板 ID 未配置</text>
+        <text class="warn-text">请联系管理员在「系统设置 → 微信消息推送」中填入真实的微信模板 ID。</text>
+      </view>
     </view>
 
-    <view v-if="loading" class="emp-empty">加载中...</view>
+    <!-- 加载中 -->
+    <view v-if="loading" class="emp-empty">
+      <text class="emp-empty-icon">◌</text>
+      加载中...
+    </view>
+
+    <!-- 空状态 -->
     <view v-else-if="!templates.length" class="emp-empty">
-      <text class="empty-icon">📭</text>
-      <text class="empty-text">暂无可订阅的推送消息</text>
+      <text class="emp-empty-icon">📭</text>
+      暂无可订阅的推送消息
       <text class="empty-hint">请联系管理员在后台开启微信消息推送</text>
     </view>
 
+    <!-- 模板列表 -->
     <view v-else>
       <view
         v-for="tpl in templates"
         :key="tpl.event_code"
-        class="emp-card tpl-card"
-        :class="{ subscribed: isSubscribed(tpl.event_code) }"
+        class="emp-card emp-card--striped tpl-card tappable"
+        :class="isSubscribed(tpl.event_code) ? 'strip-done' : 'strip-info'"
       >
         <view class="tpl-head">
-          <view class="tpl-icon-wrap">
+          <view class="tpl-icon-wrap" :class="getEventTone(tpl.event_code)">
             <text class="tpl-icon">{{ getEventIcon(tpl.event_code) }}</text>
           </view>
           <view class="tpl-title-area">
             <text class="tpl-name">{{ getEventLabel(tpl.event_code) }}</text>
             <text class="tpl-desc">{{ getEventDesc(tpl.event_code) }}</text>
           </view>
-          <text v-if="isSubscribed(tpl.event_code)" class="emp-tag success">已订阅</text>
-          <text v-else class="emp-tag info">未订阅</text>
+          <text v-if="isSubscribed(tpl.event_code)" class="emp-tag ok">已订阅</text>
+          <text v-else class="emp-tag muted">未订阅</text>
         </view>
 
-        <!-- 订阅统计（有历史记录时显示） -->
+        <!-- 订阅统计 -->
         <view v-if="getMyStatus(tpl.event_code)" class="tpl-stats">
-          <text class="stat-item">
-            已授权 {{ getMyStatus(tpl.event_code)!.accept_count }} 次
-          </text>
-          <text v-if="getMyStatus(tpl.event_code)!.reject_count" class="stat-item dim">
-            · 拒绝 {{ getMyStatus(tpl.event_code)!.reject_count }} 次
-          </text>
-          <text v-if="getMyStatus(tpl.event_code)!.last_accepted_at" class="stat-item dim">
-            · 最近 {{ formatTime(getMyStatus(tpl.event_code)!.last_accepted_at) }}
-          </text>
+          <text class="stat-item ok">已授权 {{ getMyStatus(tpl.event_code)!.accept_count }} 次</text>
+          <text v-if="getMyStatus(tpl.event_code)!.reject_count" class="stat-item dim">· 拒绝 {{ getMyStatus(tpl.event_code)!.reject_count }} 次</text>
+          <text v-if="getMyStatus(tpl.event_code)!.last_accepted_at" class="stat-item dim">· 最近 {{ formatTime(getMyStatus(tpl.event_code)!.last_accepted_at) }}</text>
         </view>
 
-        <!-- 推送内容预览 -->
-        <view class="keyword-hint" v-if="getKeywordHint(tpl.event_code).length">
+        <!-- 推送字段 -->
+        <view v-if="getKeywordHint(tpl.event_code).length" class="keyword-hint">
           <text class="hint-title">推送内容包含：</text>
-          <text v-for="(kw, i) in getKeywordHint(tpl.event_code)" :key="i" class="hint-tag">{{ kw }}</text>
+          <view class="hint-tags">
+            <text v-for="(kw, i) in getKeywordHint(tpl.event_code)" :key="i" class="hint-tag">{{ kw }}</text>
+          </view>
         </view>
 
         <button
@@ -67,16 +80,14 @@
         </button>
       </view>
 
-      <view class="bulk-action">
-        <button
-          class="emp-btn-primary bulk-btn"
-          :loading="bulkLoading"
-          :disabled="hasPlaceholder"
-          @tap="onSubscribeAll"
-        >
-          一键订阅全部
-        </button>
-      </view>
+      <button
+        class="emp-btn-primary bulk-btn"
+        :loading="bulkLoading"
+        :disabled="hasPlaceholder"
+        @tap="onSubscribeAll"
+      >
+        一键订阅全部
+      </button>
     </view>
   </view>
 </template>
@@ -85,37 +96,21 @@
 import { onShow } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { apiGet } from '@/api/request'
-import {
-  listAvailableTemplates,
-  requestSubscribe,
-  type WechatTemplate,
-} from '@/utils/subscribe'
+import { listAvailableTemplates, requestSubscribe, type WechatTemplate } from '@/utils/subscribe'
 
 type MySub = {
-  event_code: string
-  template_id: string
-  accept_count: number
-  reject_count: number
-  last_accepted_at: string | null
-  last_rejected_at: string | null
+  event_code: string; template_id: string; accept_count: number; reject_count: number;
+  last_accepted_at: string | null; last_rejected_at: string | null;
 }
 
-// ---- 事件友好名称 ----
 const EVENT_LABELS: Record<string, string> = {
-  'report.submitted': '报工提交通知',
-  'report.leader_approved': '报工审核结果',
-  'report.qc_approved': '质检结果通知',
-  'report.rejected': '报工驳回通知',
-  'salary.slip_remind': '工资条发放提醒',
-  'salary.slip_reset': '工资条重置通知',
-  'salary.slip_rejected': '工资条拒签通知',
-  'dispatch.assigned': '派工任务通知',
-  'order.customer_submitted': '客户订单通知',
-  'alert': '系统告警通知',
-  'plan.automation_failed': '自动化异常通知',
-  'brief.daily': '每日经营简报',
+  'report.submitted': '报工提交通知', 'report.leader_approved': '报工审核结果',
+  'report.qc_approved': '质检结果通知', 'report.rejected': '报工驳回通知',
+  'salary.slip_remind': '工资条发放提醒', 'salary.slip_reset': '工资条重置通知',
+  'salary.slip_rejected': '工资条拒签通知', 'dispatch.assigned': '派工任务通知',
+  'order.customer_submitted': '客户订单通知', 'alert': '系统告警通知',
+  'plan.automation_failed': '自动化异常通知', 'brief.daily': '每日经营简报',
 }
-
 const EVENT_DESCS: Record<string, string> = {
   'report.submitted': '提交报工单后，通知审核人',
   'report.leader_approved': '主管审核通过或驳回时通知您',
@@ -130,56 +125,41 @@ const EVENT_DESCS: Record<string, string> = {
   'plan.automation_failed': '自动化任务执行失败时通知',
   'brief.daily': '每日自动推送经营数据摘要',
 }
-
 const EVENT_ICONS: Record<string, string> = {
-  'report.submitted': '📋',
-  'report.leader_approved': '✅',
-  'report.qc_approved': '🔍',
-  'report.rejected': '❌',
-  'salary.slip_remind': '💰',
-  'salary.slip_reset': '🔄',
-  'salary.slip_rejected': '📝',
-  'dispatch.assigned': '🔧',
-  'order.customer_submitted': '📦',
-  'alert': '🚨',
-  'plan.automation_failed': '⚙️',
-  'brief.daily': '📊',
+  'report.submitted': '📋', 'report.leader_approved': '✅', 'report.qc_approved': '🔍',
+  'report.rejected': '❌', 'salary.slip_remind': '💰', 'salary.slip_reset': '🔄',
+  'salary.slip_rejected': '📝', 'dispatch.assigned': '🔧', 'order.customer_submitted': '📦',
+  'alert': '🚨', 'plan.automation_failed': '⚙️', 'brief.daily': '📊',
 }
 
-function getEventLabel(code: string): string {
-  return EVENT_LABELS[code] || code
-}
-function getEventDesc(code: string): string {
-  return EVENT_DESCS[code] || ''
-}
-function getEventIcon(code: string): string {
-  return EVENT_ICONS[code] || '📩'
+function getEventLabel(code: string) { return EVENT_LABELS[code] || code }
+function getEventDesc(code: string) { return EVENT_DESCS[code] || '' }
+function getEventIcon(code: string) { return EVENT_ICONS[code] || '📩' }
+function getEventTone(code: string) {
+  if (code.startsWith('salary')) return 'tone-amber'
+  if (code.startsWith('report')) return 'tone-blue'
+  if (code === 'alert' || code === 'plan.automation_failed') return 'tone-rose'
+  if (code === 'brief.daily') return 'tone-violet'
+  return 'tone-slate'
 }
 
-// ---- 状态 ----
 const loading = ref(false)
 const templates = ref<WechatTemplate[]>([])
 const mySubs = ref<MySub[]>([])
 const keywordHints = ref<Record<string, string[]>>({})
-const subscribing = ref<string>('')
+const subscribing = ref('')
 const bulkLoading = ref(false)
 
-// 检测模板 ID 是否为占位符
 const hasPlaceholder = computed(() =>
   templates.value.some((t) => !t.template_id || t.template_id.startsWith('tpl_'))
 )
 
-onShow(async () => {
-  await load()
-})
+onShow(async () => { await load() })
 
 async function load() {
   loading.value = true
   try {
-    const [tpls, mine] = await Promise.all([
-      listAvailableTemplates(),
-      loadMySubs(),
-    ])
+    const [tpls, mine] = await Promise.all([listAvailableTemplates(), loadMySubs()])
     templates.value = tpls
     mySubs.value = mine
     keywordHints.value = tpls.length ? await loadKeywordHints() : {}
@@ -192,19 +172,14 @@ async function loadMySubs(): Promise<MySub[]> {
   try {
     const r = await apiGet<{ items: MySub[] }>('/miniapp/wechat-mp/my-subscriptions')
     return r?.items || []
-  } catch (e) {
-    console.warn('[subs] loadMySubs failed:', e)
-    return []
-  }
+  } catch { return [] }
 }
 
 async function loadKeywordHints(): Promise<Record<string, string[]>> {
   try {
     const r = await apiGet<{ keyword_hints: Record<string, string[]> }>('/miniapp/wechat-mp/templates')
     return r?.keyword_hints || {}
-  } catch {
-    return {}
-  }
+  } catch { return {} }
 }
 
 function isSubscribed(eventCode: string): boolean {
@@ -230,46 +205,28 @@ function formatTime(s: string | null): string {
   try {
     const d = new Date(s)
     return `${d.getMonth() + 1}/${d.getDate()}`
-  } catch {
-    return s
-  }
+  } catch { return s }
 }
 
 async function onSubscribeOne(tpl: WechatTemplate) {
-  if (hasPlaceholder.value) {
-    uni.showToast({ title: '模板 ID 未配置，请联系管理员', icon: 'none' })
-    return
-  }
+  if (hasPlaceholder.value) { uni.showToast({ title: '模板 ID 未配置，请联系管理员', icon: 'none' }); return }
   subscribing.value = tpl.event_code
   try {
     const r = await requestSubscribe([tpl.template_id], { showToast: true, recordOnServer: true })
-    if (r.accepted.length) {
-      mySubs.value = await loadMySubs()
-    }
-  } finally {
-    subscribing.value = ''
-  }
+    if (r.accepted.length) mySubs.value = await loadMySubs()
+  } finally { subscribing.value = '' }
 }
 
 async function onSubscribeAll() {
-  if (hasPlaceholder.value) {
-    uni.showToast({ title: '模板 ID 未配置，请联系管理员', icon: 'none' })
-    return
-  }
+  if (hasPlaceholder.value) { uni.showToast({ title: '模板 ID 未配置，请联系管理员', icon: 'none' }); return }
   const wanted = templates.value
-  if (!wanted.length) {
-    uni.showToast({ title: '暂无可订阅模板', icon: 'none' })
-    return
-  }
+  if (!wanted.length) { uni.showToast({ title: '暂无可订阅模板', icon: 'none' }); return }
   bulkLoading.value = true
   try {
     let totalAccepted = 0
     for (let i = 0; i < wanted.length; i += 3) {
       const slice = wanted.slice(i, i + 3)
-      const r = await requestSubscribe(
-        slice.map((t) => t.template_id),
-        { showToast: false, recordOnServer: true }
-      )
+      const r = await requestSubscribe(slice.map((t) => t.template_id), { showToast: false, recordOnServer: true })
       totalAccepted += r.accepted.length
     }
     if (totalAccepted > 0) {
@@ -278,204 +235,165 @@ async function onSubscribeAll() {
     } else {
       uni.showToast({ title: '未订阅', icon: 'none' })
     }
-  } finally {
-    bulkLoading.value = false
-  }
+  } finally { bulkLoading.value = false }
 }
 </script>
 
 <style scoped lang="scss">
-.emp-page {
-  padding: 24rpx;
-  background: linear-gradient(180deg, #f0f4ff, #f5f7fa);
-  min-height: 100vh;
+// 介绍卡
+.intro-card {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-4;
+  background: linear-gradient(135deg, $brand-50, #f0fdf4);
+  border: 1rpx solid rgba($brand-200, 0.4);
 }
-.section-head {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 8rpx 0 24rpx;
+.intro-icon {
+  font-size: 40rpx;
+  flex-shrink: 0;
 }
-.emp-card {
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 28rpx;
-  margin-bottom: 20rpx;
-  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.05);
-}
-.emp-empty {
-  text-align: center;
-  padding: 100rpx 0;
-  .empty-icon {
-    display: block;
-    font-size: 60rpx;
-    margin-bottom: 16rpx;
-  }
-  .empty-text {
-    display: block;
-    font-size: 28rpx;
-    color: #666;
-  }
-  .empty-hint {
-    display: block;
-    font-size: 24rpx;
-    color: #999;
-    margin-top: 8rpx;
-  }
-}
-/* 介绍卡 */
+.intro-body { flex: 1; }
 .intro-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #333;
   display: block;
-  margin-bottom: 8rpx;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
+  margin-bottom: 6rpx;
 }
-.intro-body {
-  font-size: 26rpx;
-  color: #666;
+.intro-text {
+  font-size: $text-sm;
+  color: $slate-600;
   line-height: 1.6;
   display: block;
 }
-/* 警告卡 */
+
+// 警告卡
 .warn-card {
-  background: #fff8e1;
-  border-left: 6rpx solid #fa8c16;
   display: flex;
   align-items: flex-start;
-  gap: 12rpx;
+  gap: $space-3;
+  background: $warn-bg;
+  border: 1rpx solid rgba($warn, 0.3);
 }
 .warn-icon {
   font-size: 32rpx;
   flex-shrink: 0;
-  margin-top: 2rpx;
+}
+.warn-body { flex: 1; }
+.warn-title {
+  display: block;
+  font-size: $text-sm;
+  font-weight: $fw-semibold;
+  color: $warn-deep;
+  margin-bottom: 4rpx;
 }
 .warn-text {
-  font-size: 26rpx;
-  color: #8c5e00;
+  font-size: $text-xs;
+  color: $warn-deep;
   line-height: 1.5;
+  display: block;
 }
-/* 模板卡 */
+
+// 空状态
+.empty-hint {
+  display: block;
+  margin-top: $space-1;
+  font-size: $text-xs;
+  color: $slate-400;
+}
+
+// 模板卡
 .tpl-card {
-  &.subscribed {
-    border-left: 6rpx solid #07c160;
-  }
+  padding: $space-5;
+  padding-left: 32rpx;
 }
 .tpl-head {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 16rpx;
+  gap: $space-3;
+  margin-bottom: $space-3;
 }
 .tpl-icon-wrap {
   width: 72rpx;
   height: 72rpx;
-  border-radius: 18rpx;
-  background: #f0f4ff;
+  border-radius: $radius-md;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
-.tpl-icon {
-  font-size: 36rpx;
-}
-.tpl-title-area {
-  flex: 1;
-  min-width: 0;
-}
+.tpl-icon { font-size: 32rpx; }
+.tone-blue    { background: $brand-50; }
+.tone-amber   { background: $warn-bg; }
+.tone-rose    { background: $danger-bg; }
+.tone-violet  { background: #ede9fe; }
+.tone-slate   { background: $slate-100; }
+
+.tpl-title-area { flex: 1; min-width: 0; }
 .tpl-name {
   display: block;
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1a1a1a;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
 }
 .tpl-desc {
   display: block;
-  font-size: 24rpx;
-  color: #999;
+  font-size: $text-xs;
+  color: $slate-500;
   margin-top: 4rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.emp-tag {
-  font-size: 22rpx;
-  padding: 4rpx 16rpx;
-  border-radius: 24rpx;
-  flex-shrink: 0;
-  &.info {
-    background: #fff7e6;
-    color: #fa8c16;
-  }
-  &.success {
-    background: #e8f9ed;
-    color: #07c160;
-  }
-}
-/* 统计行 */
+
+// 统计
 .tpl-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 4rpx;
-  margin-bottom: 16rpx;
-  font-size: 24rpx;
+  margin-bottom: $space-3;
+  font-size: $text-xs;
 }
-.stat-item {
-  color: #07c160;
-  &.dim {
-    color: #999;
-  }
-}
-/* 推送字段 */
+.stat-item { color: $success-deep; }
+.stat-item.dim { color: $slate-400; }
+
+// 推送字段
 .keyword-hint {
-  background: #f8f9fa;
-  border-radius: 12rpx;
-  padding: 16rpx;
-  margin-bottom: 16rpx;
+  background: $slate-50;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  margin-bottom: $space-3;
 }
 .hint-title {
   display: block;
-  font-size: 24rpx;
-  color: #999;
-  margin-bottom: 8rpx;
+  font-size: $text-xs;
+  color: $slate-500;
+  margin-bottom: $space-1;
+}
+.hint-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6rpx;
 }
 .hint-tag {
-  display: inline-block;
-  font-size: 22rpx;
-  color: #5b6c7c;
+  font-size: $text-xs;
+  color: $slate-700;
   background: #fff;
   padding: 4rpx 14rpx;
-  border-radius: 8rpx;
-  margin: 4rpx 8rpx 4rpx 0;
-  border: 1rpx solid #eee;
+  border-radius: $radius-sm;
+  border: 1rpx solid $slate-200;
 }
-/* 按钮 */
-.emp-btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #fff;
-  border-radius: 12rpx;
-  font-size: 28rpx;
-  padding: 20rpx 0;
-  text-align: center;
-  border: none;
-  width: 100%;
-  &::after { border: none; }
-  &[disabled] {
-    background: #ccc;
-    color: #fff;
-  }
-}
+
+// 按钮
 .subscribe-btn {
-  margin-top: 8rpx;
-}
-.bulk-action {
-  margin: 32rpx 0 48rpx;
+  width: 100%;
+  margin-top: $space-2;
 }
 .bulk-btn {
+  width: 100%;
+  margin: $space-6 0 $space-7;
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  font-size: 30rpx;
-  font-weight: 600;
-  padding: 24rpx 0;
+  box-shadow: 0 4rpx 12rpx rgba(79, 70, 229, 0.22);
+  font-weight: $fw-semibold;
 }
 </style>

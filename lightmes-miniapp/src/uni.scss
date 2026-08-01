@@ -1,1 +1,89 @@
-$uni-color-primary: #2563eb;
+// ============================================================
+// CenkorMES 小程序设计系统 v2.0
+// 保留蓝色工厂风，提升精致度与系统化
+// ============================================================
+
+// ---- 品牌主色（蓝色梯度）----
+$brand-50:  #eff6ff;
+$brand-100: #dbeafe;
+$brand-200: #bfdbfe;
+$brand-300: #93c5fd;
+$brand-500: #3b82f6;
+$brand-600: #2563eb;  // 主色
+$brand-700: #1d4ed8;
+$brand-800: #1e40af;
+$uni-color-primary: $brand-600;
+
+// ---- 中性灰阶（slate）----
+$slate-50:  #f8fafc;
+$slate-100: #f1f5f9;
+$slate-200: #e2e8f0;
+$slate-300: #cbd5e1;
+$slate-400: #94a3b8;
+$slate-500: #64748b;
+$slate-600: #475569;
+$slate-700: #334155;
+$slate-800: #1e293b;
+$slate-900: #0f172a;
+
+// ---- 语义色 ----
+$success:     #10b981;
+$success-bg:  #d1fae5;
+$success-deep:#047857;
+$warn:        #f59e0b;
+$warn-bg:     #fef3c7;
+$warn-deep:   #b45309;
+$danger:      #ef4444;
+$danger-bg:   #fee2e2;
+$danger-deep: #b91c1c;
+$info:        #3b82f6;
+$info-bg:     #dbeafe;
+$info-deep:   #1d4ed8;
+
+// ---- 圆角 ----
+$radius-xs:   8rpx;
+$radius-sm:   12rpx;
+$radius-md:   16rpx;
+$radius-lg:   20rpx;
+$radius-xl:   28rpx;
+$radius-2xl:  36rpx;
+$radius-pill: 999rpx;
+
+// ---- 阴影（柔和）----
+$shadow-xs: 0 1rpx 4rpx rgba(15, 23, 42, 0.03);
+$shadow-sm: 0 2rpx 8rpx rgba(15, 23, 42, 0.04);
+$shadow-md: 0 8rpx 24rpx rgba(15, 23, 42, 0.06);
+$shadow-lg: 0 16rpx 48rpx rgba(15, 23, 42, 0.08);
+$shadow-brand: 0 8rpx 24rpx rgba(37, 99, 235, 0.20);
+
+// ---- 字号 ----
+$text-xs:   22rpx;
+$text-sm:   24rpx;
+$text-base: 26rpx;
+$text-md:   28rpx;
+$text-lg:   30rpx;
+$text-xl:   34rpx;
+$text-2xl:  40rpx;
+$text-3xl:  48rpx;
+$text-4xl:  64rpx;
+
+// ---- 字重 ----
+$fw-normal:   400;
+$fw-medium:   500;
+$fw-semibold: 600;
+$fw-bold:     700;
+
+// ---- 间距 ----
+$space-1: 8rpx;
+$space-2: 12rpx;
+$space-3: 16rpx;
+$space-4: 20rpx;
+$space-5: 24rpx;
+$space-6: 32rpx;
+$space-7: 40rpx;
+$space-8: 56rpx;
+
+// ---- 过渡 ----
+$ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+$dur-fast: 150ms;
+$dur-base: 220ms;

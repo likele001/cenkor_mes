@@ -1,26 +1,22 @@
 <template>
   <view class="cust-page">
-    <view class="cust-card subscribe-entry" @tap="goSubscribe">
-      <text class="entry-title">📬 微信消息推送订阅管理</text>
-      <text class="entry-hint">管理订单进度/发货/对账等推送授权</text>
+    <view class="cust-card tappable subscribe-entry" @tap="goSubscribe">
+      <view class="entry-icon">📬</view>
+      <view class="entry-body">
+        <text class="entry-title">微信消息推送</text>
+        <text class="entry-hint">管理订单进度/发货/对账等推送授权</text>
+      </view>
+      <text class="entry-arrow">›</text>
     </view>
 
     <view v-if="!items.length" class="cust-empty">暂无消息</view>
-      <view
-        v-for="n in items"
-        :key="n.id"
-        class="cust-card notice-card"
-        hover-class="notice-card-hover"
-        @tap="read(n)"
-      >
-        <view class="notice-head">
-          <text class="notice-title" :class="{ unread: !n.is_read }">{{ n.title }}</text>
-          <text v-if="!n.is_read" class="cust-tag info">未读</text>
-        </view>
-        <text class="notice-body">{{ n.content }}</text>
+    <view v-for="n in items" :key="n.id" class="cust-card cust-card--striped tappable" :class="n.is_read ? 'strip-info' : 'strip-working'" @tap="read(n)">
+      <view class="notice-head">
+        <text class="notice-title" :class="{ unread: !n.is_read }">{{ n.title }}</text>
+        <text v-if="!n.is_read" class="cust-tag info">未读</text>
       </view>
-
-    <CustTabBar :active="2" />
+      <text class="notice-body">{{ n.content }}</text>
+    </view>
   </view>
 </template>
 
@@ -29,10 +25,8 @@ import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import { getNotifications, markRead } from '@/api/h5/notifications'
 import { useAuthStore } from '@/stores/auth'
-import CustTabBar from '@/components/customer-ui/CustTabBar.vue'
 
 type NoticeItem = { id: number; title: string; content?: string; is_read?: boolean; biz_type?: string }
-
 const items = ref<NoticeItem[]>([])
 const auth = useAuthStore()
 
@@ -44,6 +38,8 @@ onShow(async () => {
 
 async function read(n: NoticeItem) {
   await markRead(n.id)
+  n.is_read = true
+  auth.refreshUnread()
 }
 
 function goSubscribe() {
@@ -54,27 +50,40 @@ function goSubscribe() {
 <style scoped lang="scss">
 @use '@/styles/customer-theme.scss';
 .subscribe-entry {
-  background: linear-gradient(135deg, #eef2ff, #f0fdf4);
-  border-left: 6rpx solid #0ea5e9;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  background: linear-gradient(135deg, #f0f9ff, #f0fdf4);
+  border: 1rpx solid rgba(186, 230, 253, 0.6);
 }
+.entry-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 16rpx;
+  background: rgba(14, 165, 233, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32rpx;
+  flex-shrink: 0;
+}
+.entry-body { flex: 1; min-width: 0; }
 .entry-title {
   display: block;
-  font-size: 30rpx;
+  font-size: 28rpx;
   font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 8rpx;
+  color: #0c4a6e;
 }
 .entry-hint {
   display: block;
-  font-size: 24rpx;
-  color: #666;
-  line-height: 1.6;
+  font-size: 22rpx;
+  color: #64748b;
+  margin-top: 4rpx;
 }
-.notice-card {
-  padding: 28rpx;
-}
-.notice-card-hover {
-  opacity: 0.92;
+.entry-arrow {
+  color: #cbd5e1;
+  font-size: 34rpx;
+  flex-shrink: 0;
 }
 .notice-head {
   display: flex;
@@ -85,34 +94,18 @@ function goSubscribe() {
 }
 .notice-title {
   flex: 1;
-  min-width: 0;
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #334155;
   line-height: 1.4;
-  display: block;
 }
 .notice-title.unread {
   font-weight: 700;
-  color: #0f172a;
+  color: #0c4a6e;
 }
 .notice-body {
-  font-size: 26rpx;
+  font-size: 24rpx;
   color: #64748b;
   line-height: 1.5;
-  display: block;
-}
-.cust-empty {
-  text-align: center;
-  padding: 80rpx 0;
-  font-size: 28rpx;
-  color: #94a3b8;
-}
-.info {
-  background: #fff7e6;
-  color: #fa8c16;
-  font-size: 22rpx;
-  padding: 4rpx 16rpx;
-  border-radius: 24rpx;
 }
 </style>

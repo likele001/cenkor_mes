@@ -1,15 +1,22 @@
 <template>
   <view class="emp-page">
+    <view class="emp-page-head">
+      <text class="emp-page-title">考勤打卡</text>
+    </view>
+
     <!-- 今日状态卡 -->
-    <view class="emp-card today-card">
+    <view class="emp-card emp-card--brand today-card">
       <view class="today-head">
-        <text class="today-date">{{ todayStr }}</text>
-        <text class="today-weekday">{{ weekdayStr }}</text>
+        <view>
+          <text class="today-date">{{ todayStr }}</text>
+          <text class="today-weekday">{{ weekdayStr }}</text>
+        </view>
+        <view class="today-status-pill" :class="todayStatusClass">
+          <view class="status-dot" />
+          <text>{{ todayStatusText }}</text>
+        </view>
       </view>
-      <view class="today-status">
-        <view class="status-dot" :class="todayStatusClass" />
-        <text class="status-text">{{ todayStatusText }}</text>
-      </view>
+
       <view class="today-times">
         <view class="time-block">
           <text class="time-label">上班</text>
@@ -20,7 +27,7 @@
           <text class="time-label">下班</text>
           <text class="time-value">{{ todayOut || '--:--' }}</text>
         </view>
-        <view class="time-block right">
+        <view class="time-block hours-block">
           <text class="time-label">工时</text>
           <text class="time-value hours">{{ todayMinutes ? formatHours(todayMinutes) : '—' }}</text>
         </view>
@@ -32,15 +39,15 @@
       <button class="emp-btn-primary" :loading="loading" :disabled="!!todayIn" @tap="checkIn">
         {{ todayIn ? '已打卡' : '上班打卡' }}
       </button>
-      <button class="emp-btn-primary out" :loading="loading" :disabled="!todayIn || !!todayOut" @tap="checkOut">
+      <button class="emp-btn-primary out-btn" :loading="loading" :disabled="!todayIn || !!todayOut" @tap="checkOut">
         {{ todayOut ? '已打卡' : '下班打卡' }}
       </button>
     </view>
 
     <!-- 月度统计 -->
-    <view class="emp-card overview">
+    <view class="emp-card">
       <view class="overview-top">
-        <text class="overview-title">月度统计</text>
+        <text class="emp-section-title">月度统计</text>
         <picker mode="date" fields="month" :value="month" @change="onMonth">
           <text class="month-pick">{{ monthLabel }} ›</text>
         </picker>
@@ -63,14 +70,17 @@
 
     <!-- 打卡记录 -->
     <view class="section-head">打卡记录</view>
-    <view v-if="!records.length && !loading" class="emp-empty">暂无打卡记录</view>
-    <view v-for="r in records" :key="r.id" class="emp-card record-card">
+    <view v-if="!records.length && !loading" class="emp-empty">
+      <text class="emp-empty-icon">◌</text>
+      暂无打卡记录
+    </view>
+    <view v-for="r in records" :key="r.id" class="emp-card emp-card--striped record-card" :class="getRecordStrip(r)">
       <view class="record-head">
         <view class="record-date-row">
           <text class="record-date">{{ r.work_date }}</text>
           <text class="record-weekday">{{ getWeekday(r.work_date) }}</text>
         </view>
-        <text class="record-tag" :class="getRecordTag(r).tone">{{ getRecordTag(r).text }}</text>
+        <text class="emp-tag" :class="getRecordTag(r).tone">{{ getRecordTag(r).text }}</text>
       </view>
       <view class="record-times">
         <view class="record-time-item">
@@ -208,181 +218,217 @@ function getRecordTag(r: AttendanceRecord) {
   if (r.minutes && r.minutes < 480) return { text: '工时不足', tone: 'warn' }
   return { text: '已出勤', tone: 'ok' }
 }
+
+function getRecordStrip(r: AttendanceRecord) {
+  if (!r.check_in_at) return 'strip-warn'
+  if (r.check_in_at && !r.check_out_at) return 'strip-info'
+  if (r.minutes && r.minutes < 480) return 'strip-pending'
+  return 'strip-done'
+}
 </script>
 
 <style scoped lang="scss">
+// 今日卡（品牌渐变）
 .today-card {
-  padding: 32rpx;
+  padding: $space-6;
+  border-radius: $radius-xl;
 }
 .today-head {
   display: flex;
-  align-items: center;
-  gap: 16rpx;
-  margin-bottom: 16rpx;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: $space-5;
 }
 .today-date {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: $text-xl;
+  font-weight: $fw-bold;
+  color: #fff;
+  display: block;
+  letter-spacing: -0.3rpx;
 }
 .today-weekday {
-  font-size: 24rpx;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 4rpx 16rpx;
-  border-radius: 999rpx;
+  font-size: $text-sm;
+  color: rgba(255, 255, 255, 0.78);
+  margin-top: 4rpx;
+  display: block;
 }
-.today-status {
-  display: flex;
+.today-status-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 12rpx;
-  margin-bottom: 24rpx;
+  gap: 8rpx;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8rpx);
+  border: 1rpx solid rgba(255, 255, 255, 0.25);
+  padding: 8rpx 20rpx;
+  border-radius: $radius-pill;
+  font-size: $text-xs;
+  color: #fff;
+  font-weight: $fw-semibold;
 }
 .status-dot {
-  width: 16rpx;
-  height: 16rpx;
+  width: 12rpx;
+  height: 12rpx;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: #fff;
 }
-.status-dot.none { background: #f59e0b; }
-.status-dot.working { background: #22c55e; animation: pulse 2s infinite; }
-.status-dot.done { background: #3b82f6; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-.status-text {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #334155;
+.today-status-pill.working .status-dot {
+  background: #34d399;
+  box-shadow: 0 0 0 4rpx rgba(52, 211, 153, 0.4);
+  animation: pulse 2s infinite;
+}
+.today-status-pill.done .status-dot { background: #60a5fa; }
+.today-status-pill.none .status-dot { background: #fbbf24; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .today-times {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  background: #f8fafc;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  gap: $space-3;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: $radius-lg;
+  padding: $space-5 $space-4;
+  backdrop-filter: blur(8rpx);
 }
 .time-block {
   flex: 1;
   text-align: center;
 }
-.time-block.right {
-  flex: 0.8;
+.hours-block {
+  flex: 0.85;
+  border-left: 1rpx solid rgba(255, 255, 255, 0.2);
 }
 .time-label {
   display: block;
-  font-size: 22rpx;
-  color: #94a3b8;
-  margin-bottom: 8rpx;
+  font-size: $text-xs;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 6rpx;
 }
 .time-value {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: $text-xl;
+  font-weight: $fw-bold;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5rpx;
 }
 .time-value.hours {
-  color: #2563eb;
+  color: #fde68a;
 }
 .time-arrow {
-  font-size: 28rpx;
-  color: #cbd5e1;
+  font-size: $text-md;
+  color: rgba(255, 255, 255, 0.5);
 }
+
+// 按钮区
 .actions {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: $space-3;
 }
-.out {
-  background: linear-gradient(135deg, #64748b, #334155);
+.out-btn {
+  background: linear-gradient(135deg, $slate-600, $slate-800);
+  box-shadow: 0 4rpx 12rpx rgba($slate-700, 0.22);
+  &:active {
+    background: $slate-900;
+  }
 }
-.overview {
-  padding: 24rpx;
-}
+
+// 概览
 .overview-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20rpx;
+  margin-bottom: $space-4;
 }
-.overview-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #334155;
+.overview-top .emp-section-title {
+  margin-bottom: 0;
 }
 .month-pick {
-  font-size: 24rpx;
-  color: #2563eb;
-  padding: 6rpx 16rpx;
-  background: #eff6ff;
-  border-radius: 999rpx;
+  font-size: $text-sm;
+  color: $brand-600;
+  padding: 6rpx 18rpx;
+  background: $brand-50;
+  border-radius: $radius-pill;
+  font-weight: $fw-medium;
 }
+
+// 记录卡
 .section-head {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #334155;
-  margin: 8rpx 0 16rpx 4rpx;
+  font-size: $text-lg;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  margin: $space-5 0 $space-4 4rpx;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  &::before {
+    content: '';
+    width: 6rpx;
+    height: 28rpx;
+    background: $brand-600;
+    border-radius: $radius-pill;
+  }
 }
 .record-card {
-  padding: 24rpx;
+  padding: $space-5;
+  padding-left: 32rpx;
 }
+.strip-warn::before { background: $warn !important; }
+.strip-info::before { background: $info !important; }
+.strip-pending::before { background: $warn !important; }
 .record-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: $space-4;
 }
 .record-date-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: $space-2;
 }
 .record-date {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
 }
 .record-weekday {
-  font-size: 22rpx;
-  color: #94a3b8;
+  font-size: $text-xs;
+  color: $slate-400;
 }
-.record-tag {
-  font-size: 22rpx;
-  padding: 4rpx 14rpx;
-  border-radius: 999rpx;
-}
-.record-tag.ok { background: #dcfce7; color: #15803d; }
-.record-tag.warn { background: #fef3c7; color: #b45309; }
-.record-tag.info { background: #dbeafe; color: #2563eb; }
 .record-times {
   display: flex;
-  gap: 24rpx;
+  gap: $space-3;
 }
 .record-time-item {
   flex: 1;
   text-align: center;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  padding: 16rpx 8rpx;
+  background: $slate-50;
+  border-radius: $radius-md;
+  padding: $space-3 $space-2;
 }
 .rt-label {
   display: block;
-  font-size: 22rpx;
-  color: #94a3b8;
+  font-size: $text-xs;
+  color: $slate-400;
   margin-bottom: 6rpx;
 }
 .rt-value {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: $text-md;
+  font-weight: $fw-semibold;
+  color: $slate-800;
+  font-variant-numeric: tabular-nums;
 }
 .rt-value.accent {
-  color: #2563eb;
+  color: $brand-600;
 }
 .record-remark {
-  margin-top: 16rpx;
-  padding: 12rpx 16rpx;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  font-size: 24rpx;
-  color: #64748b;
+  margin-top: $space-3;
+  padding: $space-2 $space-3;
+  background: $warn-bg;
+  border-radius: $radius-sm;
+  font-size: $text-sm;
+  color: $warn-deep;
 }
 </style>

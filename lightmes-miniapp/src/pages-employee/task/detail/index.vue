@@ -1,8 +1,10 @@
 <template>
   <view class="emp-page">
-    <view v-if="item" class="emp-card">
-      <text class="title">{{ title }}</text>
-      <text class="emp-tag" :class="status.tone">{{ status.text }}</text>
+    <view v-if="item" class="emp-card emp-card--striped detail-card" :class="stripClass">
+      <view class="detail-head">
+        <text class="title">{{ title }}</text>
+        <text class="emp-tag" :class="status.tone">{{ status.text }}</text>
+      </view>
 
       <view class="emp-kv-grid body">
         <view class="emp-kv">
@@ -19,7 +21,7 @@
         </view>
         <view class="emp-kv">
           <text class="k">已报数量</text>
-          <text class="v">{{ item.reported_qty ?? 0 }}</text>
+          <text class="v reported">{{ item.reported_qty ?? 0 }}</text>
         </view>
         <view class="emp-kv">
           <text class="k">剩余数量</text>
@@ -36,17 +38,17 @@
           <view class="emp-progress-fill" :style="{ width: progressWidth }" />
         </view>
         <view class="emp-progress-meta">
-          <text>进度</text>
-          <text>{{ item.reported_qty ?? 0 }} / {{ item.assigned_qty ?? 0 }}</text>
+          <text>完成进度</text>
+          <text class="progress-pct">{{ progressPct }}%</text>
         </view>
       </view>
 
-      <button v-if="canReport" class="emp-btn-primary" @tap="goReport">开始报工</button>
+      <button v-if="canReport" class="emp-btn-primary report-btn" @tap="goReport">开始报工</button>
     </view>
 
-    <!-- 工单信息区块 -->
-    <view v-if="item?.work_order" class="emp-card wo-card">
-      <text class="section-title">工单信息</text>
+    <!-- 工单信息 -->
+    <view v-if="item?.work_order" class="emp-card">
+      <text class="emp-section-title">工单信息</text>
       <view class="emp-kv-grid">
         <view class="emp-kv">
           <text class="k">工单数量</text>
@@ -67,25 +69,29 @@
       </view>
     </view>
 
-    <!-- 最近报工记录 -->
-    <view v-if="recentReports.length" class="emp-card reports-card">
-      <text class="section-title">最近报工</text>
+    <!-- 最近报工 -->
+    <view v-if="recentReports.length" class="emp-card">
+      <text class="emp-section-title">最近报工</text>
       <view v-for="r in recentReports" :key="r.id" class="report-item">
         <view class="report-left">
           <text class="report-label">{{ r.sku_label || r.unit_label || r.task_code || `#${r.unit_seq}` }}</text>
           <text class="report-time">{{ formatReportTime(r.submitted_at || r.created_at) }}</text>
         </view>
-        <text class="report-tag" :class="r.result_type === 'bad' ? 'bad' : 'good'">
+        <text class="emp-tag" :class="r.result_type === 'bad' ? 'danger' : 'ok'">
           {{ r.result_type === 'bad' ? '不良' : '合格' }}
         </text>
       </view>
+    </view>
+
+    <view v-if="loadError" class="emp-empty">
+      <text class="emp-empty-icon">!</text>
+      {{ loadError }}
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { onLoad } from '@dcloudio/uni-app'
-import { onPullDownRefresh } from '@dcloudio/uni-app'
+import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { getTaskDetail, type H5Task, type H5Sku } from '@/api/h5/tasks'
 import { getMyReportUnits, type ReportUnitItem } from '@/api/h5/reportUnits'
@@ -94,6 +100,9 @@ import { taskOrderLabel, taskSkuTitle } from '@/utils/taskDisplay'
 
 const item = ref<H5Task | null>(null)
 const recentReports = ref<ReportUnitItem[]>([])
+const loadError = ref('')
+const loading = ref(false)
+const taskCode = ref('')
 
 const title = computed(() => (item.value ? taskSkuTitle(item.value) : ''))
 const orderLabel = computed(() => (item.value ? taskOrderLabel(item.value) : '—'))
@@ -101,13 +110,22 @@ const status = computed(() => taskStatusLabel(item.value?.status || ''))
 const canReport = computed(
   () => item.value && item.value.status !== 'done' && (item.value.remaining_qty ?? 0) > 0,
 )
-const progressWidth = computed(() => {
-  if (!item.value) return '0%'
+const stripClass = computed(() => {
+  const map: Record<string, string> = {
+    pending: 'strip-pending',
+    working: 'strip-working',
+    done: 'strip-done',
+  }
+  return map[item.value?.status || ''] || 'strip-info'
+})
+const progressPct = computed(() => {
+  if (!item.value) return 0
   const a = Number(item.value.assigned_qty ?? 0)
   const r = Number(item.value.reported_qty ?? 0)
-  if (!a) return '0%'
-  return `${Math.min(100, Math.round((r / a) * 100))}%`
+  if (!a) return 0
+  return Math.min(100, Math.round((r / a) * 100))
 })
+const progressWidth = computed(() => `${progressPct.value}%`)
 
 function skuDisplay(sku: H5Sku) {
   return sku.display_label || sku.name || sku.code || '—'
@@ -121,13 +139,11 @@ function formatReportTime(dt: string | null | undefined) {
 
 onLoad((q) => {
   if (q?.code) {
-    load(String(q.code))
-    loadRecentReports(String(q.code))
+    taskCode.value = String(q.code)
+    load(taskCode.value)
+    loadRecentReports(taskCode.value)
   }
 })
-
-const loadError = ref('')
-const loading = ref(false)
 
 async function load(code: string) {
   loading.value = true
@@ -135,7 +151,7 @@ async function load(code: string) {
   try {
     item.value = await getTaskDetail(code)
   } catch (e: any) {
-    loadError.value = (e?.message) ? String(e.message) :  加载失败
+    loadError.value = (e?.message) ? String(e.message) : '加载失败'
     uni.showToast({ title: loadError.value, icon: 'none' })
   } finally {
     loading.value = false
@@ -164,77 +180,70 @@ function goReport() {
 onPullDownRefresh(() => {
   load(taskCode.value).finally(() => uni.stopPullDownRefresh())
 })
-
 </script>
 
 <style scoped lang="scss">
+.detail-card {
+  padding: $space-5;
+  padding-left: 32rpx;
+}
+.detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $space-3;
+  margin-bottom: $space-4;
+}
 .title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #1e293b;
-  display: block;
-  margin-bottom: 12rpx;
+  flex: 1;
+  font-size: $text-xl;
+  font-weight: $fw-bold;
+  color: $slate-800;
+  line-height: 1.4;
+  letter-spacing: -0.3rpx;
 }
 .body {
-  margin-top: 24rpx;
+  margin-top: $space-4;
 }
 .mono {
-  font-size: 22rpx;
+  font-size: $text-xs;
+  font-family: monospace;
+}
+.reported {
+  color: $brand-600;
 }
 .highlight {
-  color: #2563eb;
-  font-weight: 600;
+  color: $warn-deep;
+  font-weight: $fw-bold;
 }
-.emp-btn-primary {
-  margin-top: 32rpx;
+.progress-pct {
+  color: $brand-600;
+  font-weight: $fw-semibold;
 }
-.wo-card {
-  padding: 24rpx;
+.report-btn {
+  margin-top: $space-5;
 }
-.section-title {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 16rpx;
-}
-.reports-card {
-  padding: 24rpx;
-}
+
 .report-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #f1f5f9;
-}
-.report-item:last-child {
-  border-bottom: none;
+  padding: $space-4 0;
+  border-bottom: 1rpx solid $slate-100;
+  &:last-child { border-bottom: none; }
 }
 .report-left {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 4rpx;
 }
 .report-label {
-  font-size: 26rpx;
-  color: #1e293b;
+  font-size: $text-base;
+  color: $slate-800;
+  font-weight: $fw-medium;
 }
 .report-time {
-  font-size: 22rpx;
-  color: #94a3b8;
-}
-.report-tag {
-  font-size: 22rpx;
-  padding: 4rpx 14rpx;
-  border-radius: 999rpx;
-}
-.report-tag.good {
-  background: #dcfce7;
-  color: #15803d;
-}
-.report-tag.bad {
-  background: #fee2e2;
-  color: #b91c1c;
+  font-size: $text-xs;
+  color: $slate-400;
 }
 </style>
