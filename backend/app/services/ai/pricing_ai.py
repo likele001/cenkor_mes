@@ -13,7 +13,7 @@ from app.models.task import Task
 from app.models.work_order import WorkOrder
 
 
-def suggest_price_adjustments(db: Session, tenant_id: int, *, min_reports: int = 20) -> dict:
+def suggest_price_adjustments(db: Session, *, min_reports: int = 20) -> dict:
     """Rule-based price adjustment recommendation."""
     rows = db.execute(
         select(
@@ -26,7 +26,7 @@ def suggest_price_adjustments(db: Session, tenant_id: int, *, min_reports: int =
         .join(Task, Task.process_id == ProcessPrice.process_id)
         .join(WorkOrder, (WorkOrder.id == Task.work_order_id) & (WorkOrder.sku_id == ProcessPrice.sku_id))
         .join(Report, Report.task_id == Task.id)
-        .where(WorkOrder.tenant_id == tenant_id, Report.status == "qc_approved")
+        .where(Report.status == "qc_approved")
         .group_by(ProcessPrice.sku_id, ProcessPrice.process_id)
     ).all()
     suggestions = []
@@ -56,10 +56,10 @@ def suggest_price_adjustments(db: Session, tenant_id: int, *, min_reports: int =
     return {"ok": True, "analyzed": len(suggestions), "suggestions": suggestions[:20]}
 
 
-def suggest_prices_enhanced(db: Session, tenant_id: int, *, min_reports: int = 10) -> dict:
+def suggest_prices_enhanced(db: Session, *, min_reports: int = 10) -> dict:
     """Enhanced multi-factor pricing recommendation (L3+)."""
     try:
         from app.services.ai.pricing.enhanced_pricing import suggest_prices_enhanced as _enhanced
-        return _enhanced(db, tenant_id, min_reports=min_reports)
+        return _enhanced(db, min_reports=min_reports)
     except Exception as e:
-        return suggest_price_adjustments(db, tenant_id, min_reports=min_reports)
+        return suggest_price_adjustments(db, min_reports=min_reports)

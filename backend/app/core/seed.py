@@ -33,6 +33,8 @@ DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("supplier.manage", "供应商管理"),
     ("bom.manage", "BOM管理"),
     ("exec_dashboard.view", "老板看板查看"),
+    ("ai.use", "AI功能"),
+    ("ai.alert.view", "AI预警"),
 ]
 
 DEFAULT_ROLES: list[tuple[str, str]] = [

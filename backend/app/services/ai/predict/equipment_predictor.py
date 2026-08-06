@@ -28,7 +28,7 @@ _SCORE_GOOD = 75
 _SCORE_WATCH = 55
 
 
-def _fetch_check_series(db: Session, tenant_id: int, equipment_id: int, days: int = 90) -> list:
+def _fetch_check_series(db: Session, equipment_id: int, days: int = 90) -> list:
     """Return daily check counts for the last N days as [(date_str, count), ...]."""
     since = date.today() - timedelta(days=days)
     rows = db.execute(
@@ -37,7 +37,6 @@ def _fetch_check_series(db: Session, tenant_id: int, equipment_id: int, days: in
             func.count(EquipmentCheck.id).label("cnt"),
         )
         .where(
-            EquipmentCheck.tenant_id == tenant_id,
             EquipmentCheck.equipment_id == equipment_id,
             func.date(EquipmentCheck.created_at) >= since,
         )
@@ -100,10 +99,10 @@ def _train_isolation_forest(series: list):
 
 
 def train_equipment_model(
-    db: Session, tenant_id: int, equipment_id: int, *, days: int = 90
+    db: Session, equipment_id: int, *, days: int = 90
 ) -> dict:
     """Train (or retrain) prediction models for a single equipment."""
-    series = _fetch_check_series(db, tenant_id, equipment_id, days=days)
+    series = _fetch_check_series(db, equipment_id, days=days)
     if len(series) < _MIN_DATA_POINTS:
         return {"ok": False, "reason": "insufficient_data", "data_points": len(series)}
 
@@ -112,11 +111,11 @@ def train_equipment_model(
 
     saved_pro = False
     if prophet_model is not None:
-        saved_pro = save_model("equipment_prophet", f"{tenant_id}_{equipment_id}", prophet_model)
+        saved_pro = save_model("equipment_prophet", f"0_{equipment_id}", prophet_model)
     saved_if = False
     if if_model is not None:
         saved_if = save_model(
-            "equipment_if", f"{tenant_id}_{equipment_id}", (if_model, mean_count)
+            "equipment_if", f"0_{equipment_id}", (if_model, mean_count)
         )
 
     return {
@@ -127,9 +126,9 @@ def train_equipment_model(
     }
 
 
-def predict_health(db: Session, tenant_id: int, equipment_id: int, *, days: int = 90) -> dict:
+def predict_health(db: Session, equipment_id: int, *, days: int = 90) -> dict:
     """Predict equipment health score for the next N days."""
-    series = _fetch_check_series(db, tenant_id, equipment_id, days=days)
+    series = _fetch_check_series(db, equipment_id, days=days)
     total = sum(c for _, c in series)
 
     result = {
@@ -145,7 +144,7 @@ def predict_health(db: Session, tenant_id: int, equipment_id: int, *, days: int 
     }
 
     # Try Prophet for trend prediction
-    prophet_model = get_model("equipment_prophet", f"{tenant_id}_{equipment_id}")
+    prophet_model = get_model("equipment_prophet", f"0_{equipment_id}")
     if prophet_model is not None and len(series) >= _MIN_DATA_POINTS:
         try:
             import pandas as pd
@@ -174,7 +173,7 @@ def predict_health(db: Session, tenant_id: int, equipment_id: int, *, days: int 
             logger.warning("Prophet prediction failed: %s", e)
 
     # Try IsolationForest for anomaly detection
-    if_model_data = get_model("equipment_if", f"{tenant_id}_{equipment_id}")
+    if_model_data = get_model("equipment_if", f"0_{equipment_id}")
     if if_model_data is not None and len(series) >= _MIN_DATA_POINTS:
         try:
             import numpy as np
@@ -192,13 +191,13 @@ def predict_health(db: Session, tenant_id: int, equipment_id: int, *, days: int 
 
 
 def equipment_health_scores_enhanced(
-    db: Session, tenant_id: int, *, days: int = 90
+    db: Session, *, days: int = 90
 ) -> dict:
     """Enhanced version of equipment_health_scores: rule + ML prediction."""
     since = date.today() - timedelta(days=days)
     eqs = db.scalars(
         select(Equipment).where(
-            Equipment.tenant_id == tenant_id, Equipment.status == "active"
+            Equipment.status == "active"
         )
     ).all()
 
@@ -207,7 +206,6 @@ def equipment_health_scores_enhanced(
         checks = int(
             db.scalar(
                 select(func.count(EquipmentCheck.id)).where(
-                    EquipmentCheck.tenant_id == tenant_id,
                     EquipmentCheck.equipment_id == eq.id,
                     func.date(EquipmentCheck.created_at) >= since,
                 )
@@ -225,7 +223,7 @@ def equipment_health_scores_enhanced(
             score, level = 35, "risk"
 
         # ML prediction overlay (if available)
-        prediction = predict_health(db, tenant_id, eq.id, days=days)
+        prediction = predict_health(db, eq.id, days=days)
         final_score = score
         if prediction["has_model"] and prediction["predicted_score_7d"] is not None:
             final_score = int(score * 0.5 + prediction["predicted_score_7d"] * 0.5)
@@ -274,17 +272,17 @@ def equipment_health_scores_enhanced(
     }
 
 
-def train_all_equipment(db: Session, tenant_id: int, *, days: int = 90) -> dict:
-    """Train prediction models for all active equipment in a tenant."""
+def train_all_equipment(db: Session, *, days: int = 90) -> dict:
+    """Train prediction models for all active equipment."""
     eqs = db.scalars(
         select(Equipment).where(
-            Equipment.tenant_id == tenant_id, Equipment.status == "active"
+            Equipment.status == "active"
         )
     ).all()
     trained = 0
     skipped = 0
     for eq in eqs:
-        result = train_equipment_model(db, tenant_id, eq.id, days=days)
+        result = train_equipment_model(db, eq.id, days=days)
         if result.get("ok"):
             trained += 1
         else:

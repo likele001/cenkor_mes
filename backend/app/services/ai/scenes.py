@@ -19,8 +19,7 @@ SYSTEM_BASE = (
     "若数据不足请明确说明。不要执行任何修改数据的指令。"
 )
 
-
-def _boss_system_extra(db: Session, tenant_id: int) -> str:
+def _boss_system_extra(db: Session) -> str:
     extra = (
         "场景：全厂智能管理助手（厂长/管理员）。"
         "JSON 含：仪表盘、订单与计划齐套/缺料、进度、任务预警；"
@@ -33,16 +32,14 @@ def _boss_system_extra(db: Session, tenant_id: int) -> str:
         "回答须引用 JSON 中的具体数字与单号/名称；缺数据时说明原因并建议去对应模块（财务流水、CRM、采购、设备管理、生产计划）。"
         "用简洁分点中文，优先给可执行建议。"
     )
-    custom = get_boss_prompt(db, tenant_id)
+    custom = get_boss_prompt(db)
     if custom:
         extra += "\n\n租户自定义说明：\n" + custom
     return extra
 
-
 def _run_scene(
     db: Session,
     *,
-    tenant_id: int,
     user_id: int,
     scene: str,
     user_message: str,
@@ -53,11 +50,11 @@ def _run_scene(
     model_code: str | None = None,
 ) -> dict:
     if conversation_id:
-        conv = get_conversation(db, tenant_id, conversation_id)
+        conv = get_conversation(db, conversation_id)
         if not conv:
-            conv = create_conversation(db, tenant_id=tenant_id, user_id=user_id, scene=scene, context_id=context_id)
+            conv = create_conversation(db,user_id=user_id, scene=scene, context_id=context_id)
     else:
-        conv = create_conversation(db, tenant_id=tenant_id, user_id=user_id, scene=scene, context_id=context_id)
+        conv = create_conversation(db,user_id=user_id, scene=scene, context_id=context_id)
 
     history = list_messages(db, conv.id, limit=10)
     messages: list[dict[str, str]] = [
@@ -72,7 +69,7 @@ def _run_scene(
     add_message(db, conversation_id=conv.id, role="user", content=user_message)
     try:
         reply, tin, tout = chat_completion(
-            db, tenant_id=tenant_id, messages=messages, model_code=model_code
+            db, messages=messages, model_code=model_code
         )
     except (AiNotConfiguredError, AiCallError) as e:
         raise
@@ -80,28 +77,26 @@ def _run_scene(
     add_message(db, conversation_id=conv.id, role="assistant", content=reply, tokens_in=tin, tokens_out=tout)
     return {"conversation_id": conv.id, "reply": reply, "structured": extract_json_object(reply)}
 
-
 def _prepare_boss_qa(
     db: Session,
     *,
-    tenant_id: int,
     user_id: int,
     message: str,
     conversation_id: int | None = None,
     model_code: str | None = None,
     context_id: int | None = None,
 ) -> tuple[object, list[dict[str, str]]]:
-    ctx = build_boss_context(db, tenant_id, plan_id=context_id)
+    ctx = build_boss_context(db, plan_id=context_id)
     if conversation_id:
-        conv = get_conversation(db, tenant_id, conversation_id)
+        conv = get_conversation(db, conversation_id)
         if not conv:
-            conv = create_conversation(db, tenant_id=tenant_id, user_id=user_id, scene="boss_qa")
+            conv = create_conversation(db,user_id=user_id, scene="boss_qa")
     else:
-        conv = create_conversation(db, tenant_id=tenant_id, user_id=user_id, scene="boss_qa")
+        conv = create_conversation(db,user_id=user_id, scene="boss_qa")
 
     history = list_messages(db, conv.id, limit=10)
     messages: list[dict[str, str]] = [
-        {"role": "system", "content": SYSTEM_BASE + "\n" + _boss_system_extra(db, tenant_id)},
+        {"role": "system", "content": SYSTEM_BASE + "\n" + _boss_system_extra(db)},
         {"role": "system", "content": "业务数据 JSON:\n" + json.dumps(ctx, ensure_ascii=False, default=str)},
     ]
     for m in history[-8:]:
@@ -111,10 +106,8 @@ def _prepare_boss_qa(
     add_message(db, conversation_id=conv.id, role="user", content=message)
     return conv, messages
 
-
 def boss_qa_stream_chunks(
     db: Session,
-    tenant_id: int,
     user_id: int,
     message: str,
     conversation_id: int | None = None,
@@ -124,7 +117,7 @@ def boss_qa_stream_chunks(
     """生成 SSE 文本片段；调用方在流结束后 commit。"""
     conv, messages = _prepare_boss_qa(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         message=message,
         conversation_id=conversation_id,
@@ -134,7 +127,7 @@ def boss_qa_stream_chunks(
     parts: list[str] = []
     tokens_in: int | None = None
     tokens_out: int | None = None
-    for chunk in chat_completion_stream(db, tenant_id=tenant_id, messages=messages, model_code=model_code):
+    for chunk in chat_completion_stream(db, messages=messages, model_code=model_code):
         if chunk.delta:
             parts.append(chunk.delta)
             yield ("delta", chunk.delta)
@@ -153,20 +146,18 @@ def boss_qa_stream_chunks(
     )
     yield ("done", {"conversation_id": conv.id, "reply": reply})
 
-
 def boss_qa(
     db: Session,
-    tenant_id: int,
     user_id: int,
     message: str,
     conversation_id: int | None = None,
     model_code: str | None = None,
     context_id: int | None = None,
 ) -> dict:
-    ctx = build_boss_context(db, tenant_id, plan_id=context_id)
+    ctx = build_boss_context(db, plan_id=context_id)
     return _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="boss_qa",
         user_message=message,
@@ -177,9 +168,8 @@ def boss_qa(
         model_code=model_code,
     )
 
-
-def plan_risk(db: Session, tenant_id: int, user_id: int, plan_id: int) -> dict:
-    ctx = build_plan_context(db, tenant_id, plan_id)
+def plan_risk(db: Session,user_id: int, plan_id: int) -> dict:
+    ctx = build_plan_context(db, plan_id)
     prompt = (
         "请分析该生产计划的交期风险。"
         "输出 JSON：{\"risk_level\":\"low|medium|high\",\"summary\":\"\",\"risks\":[\"\"],\"suggestions\":[\"\"]}"
@@ -187,7 +177,7 @@ def plan_risk(db: Session, tenant_id: int, user_id: int, plan_id: int) -> dict:
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="plan_risk",
         user_message=prompt,
@@ -204,9 +194,8 @@ def plan_risk(db: Session, tenant_id: int, user_id: int, plan_id: int) -> dict:
         "suggestions": structured.get("suggestions") or [],
     }
 
-
-def plan_schedule(db: Session, tenant_id: int, user_id: int, plan_id: int) -> dict:
-    ctx = build_plan_context(db, tenant_id, plan_id)
+def plan_schedule(db: Session, user_id: int, plan_id: int) -> dict:
+    ctx = build_plan_context(db, plan_id)
     prompt = (
         "请给出智能排产建议。"
         "输出 JSON：{"
@@ -221,7 +210,7 @@ def plan_schedule(db: Session, tenant_id: int, user_id: int, plan_id: int) -> di
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="plan_schedule",
         user_message=prompt,
@@ -244,10 +233,8 @@ def plan_schedule(db: Session, tenant_id: int, user_id: int, plan_id: int) -> di
         "overload_warnings": structured.get("overload_warnings") or [],
     }
 
-
 def report_assist(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     task_id: int,
@@ -258,7 +245,6 @@ def report_assist(
 ) -> dict:
     ctx = build_report_assist_context(
         db,
-        tenant_id,
         task_id=task_id,
         user_id=user_id,
         result_type=result_type,
@@ -275,7 +261,7 @@ def report_assist(
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="report_assist",
         user_message=prompt,
@@ -291,11 +277,10 @@ def report_assist(
         "suggest_remark": structured.get("suggest_remark"),
     }
 
-
-def audit_batch_summary(db: Session, tenant_id: int, user_id: int, *, status: str = "submitted", limit: int = 30) -> dict:
+def audit_batch_summary(db: Session,user_id: int, *, status: str = "submitted", limit: int = 30) -> dict:
     from app.crud.report_unit import list_report_units
 
-    items = list_report_units(db, tenant_id=tenant_id, status=status, offset=0, limit=limit)
+    items = list_report_units(db,status=status, offset=0, limit=limit)
     rows = []
     for u in items:
         rows.append(
@@ -327,7 +312,7 @@ def audit_batch_summary(db: Session, tenant_id: int, user_id: int, *, status: st
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="audit_summary",
         user_message=prompt,
@@ -344,18 +329,17 @@ def audit_batch_summary(db: Session, tenant_id: int, user_id: int, *, status: st
         "pending_count": len(rows),
     }
 
-
-def report_vision_audit(db: Session, tenant_id: int, user_id: int, report_unit_id: int) -> dict:
+def report_vision_audit(db: Session, user_id: int, report_unit_id: int) -> dict:
     from app.crud.attachment import get_attachments_by_ids
     from app.crud.report_unit import get_unit_by_id, _parse_attachment_ids
     from app.services.ai.client import vision_completion
     from app.services.attachment_media import attachment_play_url
 
-    unit = get_unit_by_id(db, tenant_id=tenant_id, unit_id=report_unit_id)
+    unit = get_unit_by_id(db,unit_id=report_unit_id)
     if not unit:
         return {"ok": False, "error": "报工记录不存在"}
     ids = _parse_attachment_ids(unit.employee_attachment_ids)
-    atts = get_attachments_by_ids(db, tenant_id, ids)
+    atts = get_attachments_by_ids(db, ids)
     urls = [attachment_play_url(a, db=db) for a in atts if attachment_play_url(a, db=db)]
     if not urls:
         return {"ok": False, "error": "无员工上传的图片/视频附件"}
@@ -367,7 +351,7 @@ def report_vision_audit(db: Session, tenant_id: int, user_id: int, report_unit_i
     ctx_text = f"报工结果={unit.result_type} 备注={(unit.remark or '')[:300]}"
     reply, tin, tout = vision_completion(
         db,
-        tenant_id=tenant_id,
+
         image_urls=urls,
         prompt=ctx_text + "\n" + prompt,
     )
@@ -385,15 +369,12 @@ def report_vision_audit(db: Session, tenant_id: int, user_id: int, report_unit_i
         "tokens_out": tout,
     }
 
-
 # =========================================================================
 # 拍照自动计数（photo_count）
 # =========================================================================
 
-
 def photo_count(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     image_urls: list[str],
@@ -426,7 +407,7 @@ def photo_count(
     )
     reply, tin, tout = vision_completion(
         db,
-        tenant_id=tenant_id,
+
         image_urls=image_urls,
         prompt=ctx_text + "\n" + prompt,
         temperature=0.1,
@@ -450,15 +431,12 @@ def photo_count(
         "tokens_out": tout,
     }
 
-
 # =========================================================================
 # 语音报工解析（voice_parse_report）
 # =========================================================================
 
-
 def voice_parse_report(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     text: str,
@@ -478,7 +456,6 @@ def voice_parse_report(
         try:
             ctx["task"] = build_report_assist_context(
                 db,
-                tenant_id,
                 task_id=task_id,
                 user_id=user_id,
                 result_type="good",
@@ -489,7 +466,7 @@ def voice_parse_report(
 
     # 将员工口述文本直接嵌入 user_message，让 LLM 明确知道要解析什么
     prompt = (
-        f'员工口述内容："{text}"\n\n'
+        f'员工口述内容：“{text}”\n\n'
         "请从上述口述内容中提取结构化字段，只输出 JSON，不要输出其他内容：\n"
         "{\n"
         '  "good_qty": <合格品数量，整数；提取不到则 null>,\n'
@@ -506,7 +483,7 @@ def voice_parse_report(
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="voice_parse_report",
         user_message=prompt,
@@ -534,7 +511,6 @@ def voice_parse_report(
         "summary": summary,
     }
 
-
 def _safe_int(v) -> int | None:
     if v is None:
         return None
@@ -543,15 +519,12 @@ def _safe_int(v) -> int | None:
     except (TypeError, ValueError):
         return None
 
-
 # =========================================================================
 # AI 缺陷自动分类（defect_classify）
 # =========================================================================
 
-
 def defect_classify(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     image_urls: list[str],
@@ -571,7 +544,7 @@ def defect_classify(
     if not image_urls:
         return {"ok": False, "error": "未提供图片"}
 
-    codes = list_defect_codes(db, tenant_id=tenant_id, offset=0, limit=200) or []
+    codes = list_defect_codes(db, offset=0, limit=200) or []
     active_codes = [c for c in codes if getattr(c, "is_active", True)]
     code_options = [
         {
@@ -603,7 +576,7 @@ def defect_classify(
     )
     reply, tin, tout = vision_completion(
         db,
-        tenant_id=tenant_id,
+
         image_urls=image_urls,
         prompt=ctx_text + "\n" + prompt,
         temperature=0.1,
@@ -636,15 +609,12 @@ def defect_classify(
         "options_count": len(code_options),
     }
 
-
 # =========================================================================
 # 换班/交接 AI 摘要（shift_handover_summary）
 # =========================================================================
 
-
 def shift_handover_summary(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     shift_start: str | None = None,
@@ -671,7 +641,7 @@ def shift_handover_summary(
     unit_q = (
         select(_RU)
         .where(
-            _RU.tenant_id == tenant_id,
+
             _RU.created_at >= start_dt,
             _RU.created_at < end_dt,
         )
@@ -687,7 +657,7 @@ def shift_handover_summary(
     rep_q = (
         select(Report)
         .where(
-            Report.tenant_id == tenant_id,
+
             Report.created_at >= start_dt,
             Report.created_at < end_dt,
         )
@@ -740,7 +710,7 @@ def shift_handover_summary(
     reported_subq = (
         select(func.count(_RU.id))
         .where(
-            _RU.tenant_id == tenant_id,
+
             _RU.task_assignment_id == TaskAssignment.id,
             _RU.status != "rejected",
             _RU.result_type.isnot(None),
@@ -751,7 +721,7 @@ def shift_handover_summary(
     open_assign_q = (
         select(func.count(TaskAssignment.id))
         .where(
-            TaskAssignment.tenant_id == tenant_id,
+
             reported_subq < TaskAssignment.assigned_qty,
         )
     )
@@ -783,7 +753,7 @@ def shift_handover_summary(
     )
     out = _run_scene(
         db,
-        tenant_id=tenant_id,
+
         user_id=user_id,
         scene="shift_handover",
         user_message=prompt,

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 _MIN_DATA_POINTS = 7
 
 
-def _fetch_yield_series(db: Session, tenant_id: int, process_id: int, days: int = 90) -> list:
+def _fetch_yield_series(db: Session, process_id: int, days: int = 90) -> list:
     """Return daily yield rate series: [(date_str, good_qty, bad_qty, yield_rate), ...]."""
     since = date.today() - timedelta(days=days)
     rows = db.execute(
@@ -36,7 +36,6 @@ def _fetch_yield_series(db: Session, tenant_id: int, process_id: int, days: int 
         .select_from(Report)
         .join(Task, Task.id == Report.task_id)
         .where(
-            Report.tenant_id == tenant_id,
             Task.process_id == process_id,
             func.date(Report.created_at) >= since,
         )
@@ -54,7 +53,7 @@ def _fetch_yield_series(db: Session, tenant_id: int, process_id: int, days: int 
     return series
 
 
-def _fetch_factory_series(db: Session, tenant_id: int, days: int = 90) -> list:
+def _fetch_factory_series(db: Session, days: int = 90) -> list:
     """Return factory-wide daily yield rate."""
     since = date.today() - timedelta(days=days)
     rows = db.execute(
@@ -64,7 +63,6 @@ def _fetch_factory_series(db: Session, tenant_id: int, days: int = 90) -> list:
             func.sum(Report.bad_qty).label("b"),
         )
         .where(
-            Report.tenant_id == tenant_id,
             func.date(Report.created_at) >= since,
         )
         .group_by(func.date(Report.created_at))
@@ -134,9 +132,9 @@ def _train_isolation_forest_yield(series: list):
         return None
 
 
-def train_yield_model(db: Session, tenant_id: int, process_id: int, *, days: int = 90) -> dict:
+def train_yield_model(db: Session, process_id: int, *, days: int = 90) -> dict:
     """Train prediction model for a specific process."""
-    series = _fetch_yield_series(db, tenant_id, process_id, days=days)
+    series = _fetch_yield_series(db, process_id, days=days)
     if len(series) < _MIN_DATA_POINTS:
         return {"ok": False, "reason": "insufficient_data", "data_points": len(series)}
 
@@ -145,10 +143,10 @@ def train_yield_model(db: Session, tenant_id: int, process_id: int, *, days: int
 
     saved_pro = False
     if prophet_model is not None:
-        saved_pro = save_model("yield_prophet", f"{tenant_id}_{process_id}", prophet_model)
+        saved_pro = save_model("yield_prophet", f"0_{process_id}", prophet_model)
     saved_if = False
     if if_model is not None:
-        saved_if = save_model("yield_if", f"{tenant_id}_{process_id}", if_model)
+        saved_if = save_model("yield_if", f"0_{process_id}", if_model)
 
     return {
         "ok": True,
@@ -159,9 +157,9 @@ def train_yield_model(db: Session, tenant_id: int, process_id: int, *, days: int
     }
 
 
-def predict_yield(db: Session, tenant_id: int, process_id: int, *, days: int = 7) -> dict:
+def predict_yield(db: Session, process_id: int, *, days: int = 7) -> dict:
     """Predict yield rate for a process."""
-    model = get_model("yield_prophet", f"{tenant_id}_{process_id}")
+    model = get_model("yield_prophet", f"0_{process_id}")
 
     if model is None:
         return {"ok": False, "reason": "no_model", "process_id": process_id}
@@ -178,7 +176,7 @@ def predict_yield(db: Session, tenant_id: int, process_id: int, *, days: int = 7
         avg_yield = round(float(forecast["yhat"].mean()), 4)
 
         # Historical comparison
-        series = _fetch_yield_series(db, tenant_id, process_id, days=30)
+        series = _fetch_yield_series(db, process_id, days=30)
         recent_rates = [r for _, _, _, r in series if r > 0]
         historical_avg = round(sum(recent_rates) / len(recent_rates), 4) if recent_rates else None
 
@@ -201,19 +199,19 @@ def predict_yield(db: Session, tenant_id: int, process_id: int, *, days: int = 7
         return {"ok": False, "reason": "prediction_error", "error": str(e)[:100]}
 
 
-def detect_factory_anomalies(db: Session, tenant_id: int, *, days: int = 90) -> dict:
+def detect_factory_anomalies(db: Session, *, days: int = 90) -> dict:
     """Detect factory-wide anomalous production days using IsolationForest."""
-    series = _fetch_factory_series(db, tenant_id, days=days)
+    series = _fetch_factory_series(db, days=days)
     if len(series) < _MIN_DATA_POINTS:
         return {"ok": False, "reason": "insufficient_data", "data_points": len(series)}
 
     # Try IsolationForest for anomaly detection
-    if_model = get_model("yield_if", f"{tenant_id}_factory")
+    if_model = get_model("yield_if", "0_factory")
     if if_model is None:
         # Train on the fly
         if_model = _train_isolation_forest_yield(series)
         if if_model is not None:
-            save_model("yield_if", f"{tenant_id}_factory", if_model)
+            save_model("yield_if", "0_factory", if_model)
 
     if if_model is None:
         return {"ok": False, "reason": "model_unavailable"}
@@ -257,7 +255,7 @@ def detect_factory_anomalies(db: Session, tenant_id: int, *, days: int = 90) -> 
         return {"ok": False, "reason": "analysis_error", "error": str(e)[:100]}
 
 
-def list_all_yield_predictions(db: Session, tenant_id: int, *, days: int = 7) -> dict:
+def list_all_yield_predictions(db: Session, *, days: int = 7) -> dict:
     """Get yield predictions for all processes with trained models."""
     from app.services.ai.predict.model_manager import list_trained_models
 
@@ -268,8 +266,7 @@ def list_all_yield_predictions(db: Session, tenant_id: int, *, days: int = 7) ->
             pid = int(key.split("_")[-1])
         except (ValueError, IndexError):
             continue
-        if key.startswith(f"{tenant_id}_"):
-            pred = predict_yield(db, tenant_id, pid, days=days)
-            if pred.get("ok"):
-                results.append(pred)
+        pred = predict_yield(db, pid, days=days)
+        if pred.get("ok"):
+            results.append(pred)
     return {"ok": True, "predictions": results, "total_processes": len(results)}

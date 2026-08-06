@@ -47,15 +47,15 @@ def save_wechat_miniapp_settings(db: Session, tenant_id: int, payload: dict) -> 
     app_secret = payload.get("app_secret")
 
     if app_id:
-        upsert_setting(db, tenant_id=tenant_id, key=KEY_APP_ID, value=app_id)
+        upsert_setting(db, tenant_id, KEY_APP_ID, app_id)
     elif payload.get("clear_app_id"):
-        upsert_setting(db, tenant_id=tenant_id, key=KEY_APP_ID, value="")
+        upsert_setting(db, tenant_id, KEY_APP_ID, "")
 
     if app_secret is not None:
         secret_str = str(app_secret).strip()
         if secret_str and secret_str != SECRET_MASK:
-            upsert_setting(db, tenant_id=tenant_id, key=KEY_APP_SECRET, value=secret_str)
+            upsert_setting(db, tenant_id, KEY_APP_SECRET, secret_str)
         elif secret_str == "":
-            upsert_setting(db, tenant_id=tenant_id, key=KEY_APP_SECRET, value="")
+            upsert_setting(db, tenant_id, KEY_APP_SECRET, "")
 
     return get_wechat_miniapp_settings_admin(db, tenant_id)

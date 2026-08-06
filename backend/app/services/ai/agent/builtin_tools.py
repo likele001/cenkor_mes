@@ -15,16 +15,15 @@ from app.services.ai.agent.tools_registry import registry
 logger = logging.getLogger(__name__)
 
 
-def _get_db_and_tenant(context: dict) -> tuple:
+def _get_db(context: dict) -> Session | None:
     db = context.get("db")
-    tenant_id = context.get("tenant_id")
-    return db, tenant_id
+    return db
 
 
 # === Tool: query_order_status ===
 def tool_query_orders(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     status_filter = args.get("status")
@@ -33,7 +32,7 @@ def tool_query_orders(args: dict, context: dict) -> str:
 
     from app.models.work_order import WorkOrder
 
-    query = select(WorkOrder).where(WorkOrder.tenant_id == tenant_id)
+    query = select(WorkOrder)
     if status_filter:
         query = query.where(WorkOrder.status == status_filter)
     if code_contains:
@@ -51,8 +50,8 @@ def tool_query_orders(args: dict, context: dict) -> str:
 
 # === Tool: query_tasks ===
 def tool_query_tasks(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     status_filter = args.get("status")
@@ -60,7 +59,7 @@ def tool_query_tasks(args: dict, context: dict) -> str:
 
     from app.models.task import Task
 
-    query = select(Task).where(Task.tenant_id == tenant_id)
+    query = select(Task)
     if status_filter:
         query = query.where(Task.status == status_filter)
     query = query.order_by(desc(Task.id)).limit(limit)
@@ -73,14 +72,14 @@ def tool_query_tasks(args: dict, context: dict) -> str:
 
 # === Tool: query_equipment_status ===
 def tool_query_equipment(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     from app.models.equipment import Equipment
 
     rows = db.scalars(
-        select(Equipment).where(Equipment.tenant_id == tenant_id).order_by(Equipment.id).limit(10)
+        select(Equipment).order_by(Equipment.id).limit(10)
     ).all()
     if not rows:
         return "No equipment found."
@@ -89,14 +88,14 @@ def tool_query_equipment(args: dict, context: dict) -> str:
 
 # === Tool: query_materials ===
 def tool_query_materials(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     from app.models.material import Material
 
     rows = db.scalars(
-        select(Material).where(Material.tenant_id == tenant_id).order_by(desc(Material.id)).limit(10)
+        select(Material).order_by(desc(Material.id)).limit(10)
     ).all()
     if not rows:
         return "No materials found."
@@ -105,8 +104,8 @@ def tool_query_materials(args: dict, context: dict) -> str:
 
 # === Tool: query_reports ===
 def tool_query_reports(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     days = int(args.get("days", 7))
@@ -115,7 +114,7 @@ def tool_query_reports(args: dict, context: dict) -> str:
 
     row = db.execute(
         select(func.sum(Report.good_qty), func.sum(Report.bad_qty))
-        .where(Report.tenant_id == tenant_id, func.date(Report.created_at) >= since)
+        .where(func.date(Report.created_at) >= since)
     ).first()
     good = int(row[0] or 0) if row else 0
     bad = int(row[1] or 0) if row else 0
@@ -126,7 +125,7 @@ def tool_query_reports(args: dict, context: dict) -> str:
 
 # === Tool: query_knowledge (RAG) ===
 def tool_query_knowledge(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
+    db = _get_db(context)
     if not db:
         return "System context not available"
 
@@ -136,7 +135,7 @@ def tool_query_knowledge(args: dict, context: dict) -> str:
 
     try:
         from app.services.ai.rag_vector import semantic_search
-        results = semantic_search(db, question, top_k=3, tenant_id=tenant_id)
+        results = semantic_search(db, question, top_k=3)
         if not results:
             return "No relevant documentation found."
         return "\n\n".join([f"[{r.get('source','doc')}] {r.get('snippet','')}" for r in results])
@@ -147,13 +146,13 @@ def tool_query_knowledge(args: dict, context: dict) -> str:
 
 # === Tool: query_yield_prediction ===
 def tool_query_yield_prediction(args: dict, context: dict) -> str:
-    db, tenant_id = _get_db_and_tenant(context)
-    if not db or not tenant_id:
+    db = _get_db(context)
+    if not db:
         return "System context not available"
 
     try:
         from app.services.ai.predict.yield_predictor import list_all_yield_predictions
-        result = list_all_yield_predictions(db, tenant_id)
+        result = list_all_yield_predictions(db)
         preds = result.get("predictions", []) if isinstance(result, dict) else []
         if not preds:
             return "No yield prediction data available yet."

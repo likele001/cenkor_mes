@@ -11,7 +11,7 @@ from app.crud.notification import notify_users_with_permission
 from app.models.ai import AiAlertEvent
 from app.models.order import Order
 from app.models.report import Report
-from app.models.tenant import Tenant
+
 from app.models.task import Task
 from app.models.work_order import WorkOrder
 from app.crud.task_assignment import task_has_assignments
@@ -19,11 +19,10 @@ from app.services.ai.alert_settings import get_alert_thresholds
 from app.services.ai.client import AiCallError, AiNotConfiguredError, chat_completion
 
 
-def _already_notified(db: Session, tenant_id: int, dedupe_key: str, hours: int = 24) -> bool:
+def _already_notified(db: Session, dedupe_key: str, hours: int = 24) -> bool:
     since = datetime.utcnow() - timedelta(hours=hours)
     row = db.scalar(
         select(AiAlertEvent.id).where(
-            AiAlertEvent.tenant_id == tenant_id,
             AiAlertEvent.dedupe_key == dedupe_key,
             AiAlertEvent.notified_at.isnot(None),
             AiAlertEvent.created_at >= since,
@@ -51,8 +50,8 @@ def _narrative(db: Session, rule_code: str, facts: dict) -> str:
         return facts.get("fallback_summary") or str(facts)
 
 
-def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | None = None) -> list[dict]:
-    thresholds = get_alert_thresholds(db, tenant_id)
+def scan_tenant_alerts(db: Session, *, pending_threshold: int | None = None) -> list[dict]:
+    thresholds = get_alert_thresholds(db)
     if pending_threshold is None:
         pending_threshold = int(thresholds.get("pending_audit") or 50)
     yield_drop_delta = float(thresholds.get("yield_drop_delta") or 0.05)
@@ -61,16 +60,15 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
     created: list[dict] = []
     today = date.today()
 
-    summary = get_dashboard_summary(db, tenant_id)
+    summary = get_dashboard_summary(db)
     pending = int(summary.get("reports", {}).get("pending_audit") or 0)
     if pending >= pending_threshold:
         dedupe = f"pending_audit:{today.isoformat()}"
-        if not _already_notified(db, tenant_id, dedupe):
+        if not _already_notified(db, dedupe):
             facts = {"pending_audit": pending, "threshold": pending_threshold}
             title = f"待审报工积压 {pending} 条"
             narrative = _narrative(db, "pending_audit_high", {**facts, "fallback_summary": title})
             ev = AiAlertEvent(
-                tenant_id=tenant_id,
                 rule_code="pending_audit_high",
                 level="warning",
                 title=title,
@@ -84,7 +82,6 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
 
     overdue_orders = db.scalars(
         select(Order).where(
-            Order.tenant_id == tenant_id,
             Order.status.in_(("confirmed", "producing")),
             Order.due_date.isnot(None),
             Order.due_date < today,
@@ -92,13 +89,12 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
     ).all()
     if overdue_orders:
         dedupe = f"order_overdue:{today.isoformat()}"
-        if not _already_notified(db, tenant_id, dedupe):
+        if not _already_notified(db, dedupe):
             codes = [o.code for o in overdue_orders[:5]]
             facts = {"count": len(overdue_orders), "sample_orders": codes}
             title = f"逾期订单 {len(overdue_orders)} 笔"
             narrative = _narrative(db, "order_overdue", {**facts, "fallback_summary": title})
             ev = AiAlertEvent(
-                tenant_id=tenant_id,
                 rule_code="order_overdue",
                 level="danger",
                 title=title,
@@ -117,7 +113,6 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
         g = int(
             db.scalar(
                 select(func.coalesce(func.sum(Report.good_qty), 0)).where(
-                    Report.tenant_id == tenant_id,
                     Report.status == "qc_approved",
                     func.date(Report.created_at) >= d0,
                     func.date(Report.created_at) < d1,
@@ -128,7 +123,6 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
         b = int(
             db.scalar(
                 select(func.coalesce(func.sum(Report.bad_qty), 0)).where(
-                    Report.tenant_id == tenant_id,
                     Report.status == "qc_approved",
                     func.date(Report.created_at) >= d0,
                     func.date(Report.created_at) < d1,
@@ -143,12 +137,11 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
     y_prev = _yield_for_days(14)
     if y_recent is not None and y_prev is not None and y_prev - y_recent >= yield_drop_delta:
         dedupe = f"yield_drop:{today.isocalendar()[1]}"
-        if not _already_notified(db, tenant_id, dedupe):
+        if not _already_notified(db, dedupe):
             facts = {"yield_recent_7d": y_recent, "yield_prev_7d": y_prev}
             title = "近7日良率较上周下降"
             narrative = _narrative(db, "yield_drop", {**facts, "fallback_summary": title})
             ev = AiAlertEvent(
-                tenant_id=tenant_id,
                 rule_code="yield_drop",
                 level="warning",
                 title=title,
@@ -165,7 +158,7 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
             select(func.count(Task.id))
             .select_from(WorkOrder)
             .join(Task, Task.work_order_id == WorkOrder.id)
-            .where(WorkOrder.tenant_id == tenant_id, Task.status.in_(("pending", "working")))
+            .where(Task.status.in_(("pending", "working")))
         )
         or 0
     )
@@ -174,18 +167,17 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
             select(Task.id)
             .select_from(WorkOrder)
             .join(Task, Task.work_order_id == WorkOrder.id)
-            .where(WorkOrder.tenant_id == tenant_id, Task.status.in_(("pending", "working")))
+            .where(Task.status.in_(("pending", "working")))
             .limit(5)
         ).all()
-        unassigned_not_dispatch = sum(1 for tid in sample if not task_has_assignments(db, tenant_id, tid))
+        unassigned_not_dispatch = sum(1 for tid in sample if not task_has_assignments(db, tid))
         if unassigned_not_dispatch >= unassigned_sample_min:
             dedupe = f"plan_dispatch_backlog:{today.isoformat()}"
-            if not _already_notified(db, tenant_id, dedupe):
+            if not _already_notified(db, dedupe):
                 facts = {"pending_tasks": unassigned, "sample_unassigned": unassigned_not_dispatch}
                 title = f"在制任务 {unassigned} 条，派工可能不足"
                 narrative = _narrative(db, "plan_overload", {**facts, "fallback_summary": title})
                 ev = AiAlertEvent(
-                    tenant_id=tenant_id,
                     rule_code="plan_overload",
                     level="warning",
                     title=title,
@@ -202,7 +194,6 @@ def scan_tenant_alerts(db: Session, tenant_id: int, *, pending_threshold: int | 
 
 def notify_pending_alerts(
     db: Session,
-    tenant_id: int,
     *,
     alert_prefs: dict | None = None,
 ) -> int:
@@ -213,7 +204,6 @@ def notify_pending_alerts(
 
     rows = db.scalars(
         select(AiAlertEvent).where(
-            AiAlertEvent.tenant_id == tenant_id,
             AiAlertEvent.notified_at.is_(None),
         )
     ).all()
@@ -223,7 +213,6 @@ def notify_pending_alerts(
         if notify_on_scan:
             notify_users_with_permission(
                 db,
-                tenant_id=tenant_id,
                 permission_code="ai.alert.view",
                 title=f"[AI预警] {ev.title}",
                 content=ev.summary or ev.title,
@@ -235,7 +224,6 @@ def notify_pending_alerts(
         if create_todo_on_critical and ev.level == "danger":
             notify_users_with_permission(
                 db,
-                tenant_id=tenant_id,
                 permission_code="plan.manage",
                 title=f"[待办] {ev.title}",
                 content=ev.summary or ev.title,
@@ -254,7 +242,6 @@ def notify_pending_alerts(
 
                 _dispatch(
                     db,
-                    tenant_id,
                     "alert",
                     title=f"[AI预警] {ev.title}",
                     content=ev.summary or ev.title,
@@ -270,25 +257,22 @@ def notify_pending_alerts(
 def scan_all_tenants(db: Session) -> dict:
     from app.services.production_automation_settings import get_automation_settings
 
-    tenant_ids = [r[0] for r in db.execute(select(Tenant.id).where(Tenant.status == "active")).all()]
     total_events = 0
     total_notify = 0
-    for tid in tenant_ids:
-        try:
-            events = scan_tenant_alerts(db, tid)
-            total_events += len(events)
-            alert_prefs = get_automation_settings(db, tid).get("alerts") or {}
-            total_notify += notify_pending_alerts(db, tid, alert_prefs=alert_prefs)
-            db.commit()
-        except Exception:
-            db.rollback()
-    return {"tenants": len(tenant_ids), "events": total_events, "notified": total_notify}
+    try:
+        events = scan_tenant_alerts(db)
+        total_events += len(events)
+        alert_prefs = get_automation_settings(db).get("alerts") or {}
+        total_notify += notify_pending_alerts(db, alert_prefs=alert_prefs)
+        db.commit()
+    except Exception:
+        db.rollback()
+    return {"events": total_events, "notified": total_notify}
 
 
-def list_recent_alerts(db: Session, tenant_id: int, limit: int = 20) -> list[dict]:
+def list_recent_alerts(db: Session, limit: int = 20) -> list[dict]:
     rows = db.scalars(
         select(AiAlertEvent)
-        .where(AiAlertEvent.tenant_id == tenant_id)
         .order_by(AiAlertEvent.id.desc())
         .limit(limit)
     ).all()

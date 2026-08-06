@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.ai import AiConversation, AiMessage
 
 
-def ai_usage_stats(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def ai_usage_stats(db: Session, *, days: int = 30) -> dict:
     days = max(1, min(int(days), 365))
     since = datetime.utcnow() - timedelta(days=days)
 
@@ -22,7 +22,7 @@ def ai_usage_stats(db: Session, tenant_id: int, *, days: int = 30) -> dict:
             func.coalesce(func.sum(AiMessage.tokens_out), 0),
         )
         .join(AiConversation, AiConversation.id == AiMessage.conversation_id)
-        .where(AiConversation.tenant_id == tenant_id, AiMessage.role == "assistant", AiMessage.created_at >= since)
+        .where(AiMessage.role == "assistant", AiMessage.created_at >= since)
         .group_by(AiConversation.scene)
     )
     by_scene = []
@@ -47,7 +47,6 @@ def ai_usage_stats(db: Session, tenant_id: int, *, days: int = 30) -> dict:
         )
         .join(AiConversation, AiConversation.id == AiMessage.conversation_id)
         .where(
-            AiConversation.tenant_id == tenant_id,
             AiMessage.role == "assistant",
             AiMessage.created_at >= since,
         )

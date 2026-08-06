@@ -47,6 +47,12 @@ const routes: RouteRecordRaw[] = [
       { path: 'system/dictionary', name: 'system-dictionary', component: () => import('@/pages/system/DictionaryPage.vue'), meta: { title: () => i18n.global.t('menu.dictionary'), permissions: ['dict.manage'] } },
       { path: 'system/attachments', name: 'system-attachments', component: () => import('@/pages/system/AttachmentsPage.vue'), meta: { title: () => i18n.global.t('menu.attachments'), permissions: ['attachment.view'] } },
       { path: 'system/operation-logs', name: 'system-operation-logs', component: () => import('@/pages/system/OperationLogsPage.vue'), meta: { title: () => i18n.global.t('menu.operationLogs'), permissions: ['operation_log.view'] } },
+      { path: 'system/approval-flows', name: 'system-approval-flows', component: () => import('@/pages/system/ApprovalFlowsPage.vue'), meta: { title: () => i18n.global.t('menu.approvalFlows'), permissions: ['setting.manage'] } },
+      { path: 'system/feishu-notify', name: 'system-feishu-notify', component: () => import('@/pages/system/FeishuNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.feishuNotify'), permissions: ['setting.manage'] } },
+      { path: 'system/wecom-notify', name: 'system-wecom-notify', component: () => import('@/pages/system/WecomNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.wecomNotify'), permissions: ['setting.manage'] } },
+      { path: 'system/dingtalk-notify', name: 'system-dingtalk-notify', component: () => import('@/pages/system/DingtalkNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.dingtalkNotify'), permissions: ['setting.manage'] } },
+      { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['notification.view'] } },
+      { path: 'system/push-monitor', name: 'system-push-monitor', component: () => import('@/pages/system/PushMonitorPage.vue'), meta: { title: () => i18n.global.t('menu.pushMonitor'), permissions: ['setting.manage'] } },
       { path: 'account/profile', name: 'account-profile', component: () => import('@/pages/account/ProfilePage.vue'), meta: { title: () => i18n.global.t('menu.profile') } },
 
       { path: 'master/products', name: 'master-products', component: () => import('@/pages/master/ProductsPage.vue'), meta: { title: () => i18n.global.t('menu.products'), permissions: ['product.manage'] } },
@@ -150,9 +156,35 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/production/TracePage.vue'),
         meta: { title: () => i18n.global.t('menu.trace'), permissions: ['trace.query'] },
       },
+      {
+        path: 'production/trace-tree',
+        name: 'production-trace-tree',
+        component: () => import('@/pages/production/TraceTreePage.vue'),
+        meta: { title: () => i18n.global.t('menu.traceTree'), permissions: ['trace.query'] },
+      },
+      {
+        path: 'production/mrp',
+        name: 'production-mrp',
+        component: () => import('@/pages/production/MrpPage.vue'),
+        meta: { title: () => i18n.global.t('menu.mrp'), permissions: ['work.manage'] },
+      },
       { path: 'plans', name: 'plans', component: () => import('@/pages/production/PlansPage.vue'), meta: { title: () => i18n.global.t('menu.plans'), permissions: ['plan.manage'] } },
       { path: 'plans/new', name: 'plans-new', component: () => import('@/pages/production/PlanFormPage.vue'), meta: { title: () => i18n.global.t('menu.planNew'), permissions: ['plan.manage'] } },
       { path: 'plans/:id/edit', name: 'plans-edit', component: () => import('@/pages/production/PlanFormPage.vue'), meta: { title: () => i18n.global.t('menu.planEdit'), permissions: ['plan.manage'] } },
+
+      { path: 'warehouse/warehouses', name: 'warehouse-warehouses', component: () => import('@/pages/warehouse/WarehousesPage.vue'), meta: { title: () => i18n.global.t('menu.warehouses'), permissions: ['warehouse.manage'] } },
+      { path: 'warehouse/stocks', name: 'warehouse-stocks', component: () => import('@/pages/warehouse/StocksPage.vue'), meta: { title: () => i18n.global.t('menu.stocks'), permissions: ['warehouse.manage'] } },
+      { path: 'warehouse/shipments', name: 'warehouse-shipments', component: () => import('@/pages/warehouse/ShipmentsPage.vue'), meta: { title: () => i18n.global.t('menu.shipments'), permissions: ['order.manage'] } },
+
+      { path: 'purchase/orders', name: 'purchase-orders', component: () => import('@/pages/purchase/PurchaseOrdersPage.vue'), meta: { title: () => i18n.global.t('menu.purchaseOrders'), permissions: ['purchase.manage'] } },
+      { path: 'purchase/orders/:id', name: 'purchase-order-detail', component: () => import('@/pages/purchase/PurchaseOrderDetailPage.vue'), meta: { title: () => i18n.global.t('menu.purchaseOrderDetail'), permissions: ['purchase.manage'] } },
+      { path: 'purchase/subcontract', name: 'purchase-subcontract', component: () => import('@/pages/purchase/SubcontractOrdersPage.vue'), meta: { title: () => i18n.global.t('menu.subcontractOrders'), permissions: ['purchase.manage'] } },
+
+      { path: 'finance/statements', name: 'finance-statements', component: () => import('@/pages/finance/CustomerStatementsPage.vue'), meta: { title: () => i18n.global.t('menu.financeStatements'), permissions: ['finance.manage'] } },
+      { path: 'finance/statements/:id', name: 'finance-statement-detail', component: () => import('@/pages/finance/CustomerStatementDetailPage.vue'), meta: { title: () => i18n.global.t('menu.financeStatementDetail'), permissions: ['finance.manage'] } },
+      { path: 'finance/ledgers', name: 'finance-ledgers', component: () => import('@/pages/finance/LedgersPage.vue'), meta: { title: () => i18n.global.t('menu.financeLedgers'), permissions: ['finance.manage'] } },
+      { path: 'finance/profit', name: 'finance-profit', component: () => import('@/pages/finance/ProfitPage.vue'), meta: { title: () => i18n.global.t('menu.financeProfit'), permissions: ['finance.manage'] } },
+
       { path: ':pathMatch(.*)*', name: 'adminNotFound', redirect: '/home' },
     ],
   },

@@ -12,7 +12,7 @@ from app.models.task import Task
 from app.models.work_order import WorkOrder
 
 
-def analyze_yield_causes(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def analyze_yield_causes(db: Session, *, days: int = 30) -> dict:
     """Basic yield analysis (kept for backward compatibility)."""
     since = date.today() - timedelta(days=days)
     rows = db.execute(
@@ -20,7 +20,6 @@ def analyze_yield_causes(db: Session, tenant_id: int, *, days: int = 30) -> dict
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
         .join(Report, Report.task_id == Task.id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Report.status == "qc_approved",
             func.date(Report.created_at) >= since,
         )
@@ -51,10 +50,10 @@ def analyze_yield_causes(db: Session, tenant_id: int, *, days: int = 30) -> dict
     }
 
 
-def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def analyze_yield_causes_enhanced(db: Session, *, days: int = 30) -> dict:
     """Enhanced causal analysis (L3+) with trend analysis and hypothesis generation."""
     try:
         from app.services.ai.causal.enhanced_causal import analyze_yield_causes_enhanced as _enhanced
-        return _enhanced(db, tenant_id, days=days)
+        return _enhanced(db, days=days)
     except Exception as e:
-        return analyze_yield_causes(db, tenant_id, days=days)
+        return analyze_yield_causes(db, days=days)

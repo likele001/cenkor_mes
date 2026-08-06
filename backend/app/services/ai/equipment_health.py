@@ -11,20 +11,17 @@ from sqlalchemy.orm import Session
 from app.models.equipment import Equipment, EquipmentCheck
 
 
-def equipment_health_scores(db: Session, tenant_id: int, *, days: int = 90) -> dict:
+def equipment_health_scores(db: Session, *, days: int = 90) -> dict:
     """Original rule-based scores (kept for backward compatibility)."""
     since = date.today() - timedelta(days=days)
     eqs = db.scalars(
-        select(Equipment).where(
-            Equipment.tenant_id == tenant_id, Equipment.status == "active"
-        )
+        select(Equipment).where(Equipment.status == "active")
     ).all()
     items = []
     for eq in eqs:
         checks = int(
             db.scalar(
                 select(func.count(EquipmentCheck.id)).where(
-                    EquipmentCheck.tenant_id == tenant_id,
                     EquipmentCheck.equipment_id == eq.id,
                     func.date(EquipmentCheck.created_at) >= since,
                 )
@@ -54,7 +51,7 @@ def equipment_health_scores(db: Session, tenant_id: int, *, days: int = 90) -> d
 
 
 def equipment_health_scores_enhanced(
-    db: Session, tenant_id: int, *, days: int = 90
+    db: Session, *, days: int = 90
 ) -> dict:
     """Enhanced: rule base + ML prediction overlay."""
     try:
@@ -68,9 +65,7 @@ def equipment_health_scores_enhanced(
 
     since = date.today() - timedelta(days=days)
     eqs = db.scalars(
-        select(Equipment).where(
-            Equipment.tenant_id == tenant_id, Equipment.status == "active"
-        )
+        select(Equipment).where(Equipment.status == "active")
     ).all()
 
     items = []
@@ -78,7 +73,6 @@ def equipment_health_scores_enhanced(
         checks = int(
             db.scalar(
                 select(func.count(EquipmentCheck.id)).where(
-                    EquipmentCheck.tenant_id == tenant_id,
                     EquipmentCheck.equipment_id == eq.id,
                     func.date(EquipmentCheck.created_at) >= since,
                 )
@@ -99,7 +93,7 @@ def equipment_health_scores_enhanced(
 
         if ml_available:
             try:
-                prediction = predict_health(db, tenant_id, eq.id, days=days)
+                prediction = predict_health(db, eq.id, days=days)
                 if prediction.get("has_model") and prediction.get("predicted_score_7d"):
                     final_score = int(base_score * 0.5 + prediction["predicted_score_7d"] * 0.5)
                     if final_score >= 90:

@@ -30,7 +30,6 @@ BATCH_QTY_RATIO = 1.5         # 批量报工数量 > 计划×1.5 → suspect
 
 def check_report_anomaly(
     db: Session,
-    tenant_id: int,
     user_id: int,
     task_id: int,
     *,
@@ -42,7 +41,6 @@ def check_report_anomaly(
 
     Args:
         db: DB session
-        tenant_id: 租户 ID
         user_id: 报工员工 ID
         task_id: 任务 ID
         good_qty: 合格数（批量模式使用）
@@ -58,7 +56,7 @@ def check_report_anomaly(
     detail: dict = {}
 
     # ── 规则 1: 双次点击 / 重复提交 ──
-    last_report_time = _last_submit_time(db, tenant_id, user_id)
+    last_report_time = _last_submit_time(db, user_id)
     if last_report_time:
         elapsed = (datetime.now() - last_report_time).total_seconds()
         detail["elapsed_seconds"] = round(elapsed, 1)
@@ -74,7 +72,7 @@ def check_report_anomaly(
             detail["rapid_gap"] = True
 
     # ── 规则 3: 短时爆发提交 ──
-    burst_count = _count_recent_submits(db, tenant_id, user_id, minutes=BURST_WINDOW_MINUTES)
+    burst_count = _count_recent_submits(db, user_id, minutes=BURST_WINDOW_MINUTES)
     detail["burst_count"] = burst_count
     if burst_count > BURST_THRESHOLD:
         issues.append(f"近{BURST_WINDOW_MINUTES}分钟报工{burst_count}次，报工频率异常")
@@ -82,7 +80,7 @@ def check_report_anomaly(
 
     # ── 规则 4: 不良率突增（仅 piece mode） ──
     if is_piece_mode:
-        recent_bad_ratio = _recent_bad_ratio(db, tenant_id, user_id, n=BAD_RATE_WINDOW)
+        recent_bad_ratio = _recent_bad_ratio(db, user_id, n=BAD_RATE_WINDOW)
         if recent_bad_ratio is not None and recent_bad_ratio > BAD_RATE_THRESHOLD:
             issues.append(f"最近{BAD_RATE_WINDOW}件中不良占比{recent_bad_ratio:.0%}，请确认产品质量")
             detail["bad_ratio"] = round(recent_bad_ratio, 4)
@@ -106,7 +104,7 @@ def check_report_anomaly(
     return {"level": "suspect", "reason": "; ".join(issues), "detail": detail}
 
 
-def _last_submit_time(db: Session, tenant_id: int, user_id: int) -> datetime | None:
+def _last_submit_time(db: Session, user_id: int) -> datetime | None:
     """查询该员工最近一次报工提交时间"""
     for model_cls, status_col in [(ReportUnit, ReportUnit.status), (Report, Report.status)]:
         # Report 没有 submitted_at，用 created_at 替代
@@ -114,7 +112,6 @@ def _last_submit_time(db: Session, tenant_id: int, user_id: int) -> datetime | N
         t = db.scalar(
             select(func.max(time_col))
             .where(
-                model_cls.tenant_id == tenant_id,
                 model_cls.user_id == user_id if hasattr(model_cls, "user_id") else model_cls.report_user_id == user_id,
                 status_col == "submitted",
                 time_col.isnot(None),
@@ -126,7 +123,7 @@ def _last_submit_time(db: Session, tenant_id: int, user_id: int) -> datetime | N
 
 
 def _count_recent_submits(
-    db: Session, tenant_id: int, user_id: int, minutes: int = 10
+    db: Session, user_id: int, minutes: int = 10
 ) -> int:
     """统计该员工最近 minutes 分钟的提交次数"""
     since = datetime.now() - timedelta(minutes=minutes)
@@ -139,7 +136,6 @@ def _count_recent_submits(
         time_col = model_cls.submitted_at if hasattr(model_cls, "submitted_at") else model_cls.created_at
         n = db.scalar(
             select(func.count(model_cls.id)).where(
-                model_cls.tenant_id == tenant_id,
                 uid_col == user_id,
                 status_col == "submitted",
                 time_col.isnot(None),
@@ -151,13 +147,12 @@ def _count_recent_submits(
 
 
 def _recent_bad_ratio(
-    db: Session, tenant_id: int, user_id: int, n: int = 10
+    db: Session, user_id: int, n: int = 10
 ) -> float | None:
     """该员工最近 n 次提交中不良占比（仅 ReportUnit, 逐件模式）"""
     rows = db.scalars(
         select(ReportUnit)
         .where(
-            ReportUnit.tenant_id == tenant_id,
             ReportUnit.user_id == user_id,
             ReportUnit.status == "submitted",
         )
@@ -171,14 +166,13 @@ def _recent_bad_ratio(
 
 
 def _batch_report_qty_for_user(
-    db: Session, tenant_id: int, user_id: int, task_id: int, days: int = 30
+    db: Session, user_id: int, task_id: int, days: int = 30
 ) -> list[int]:
     """该员工近 days 天对此任务(工序)的历史报工数量"""
     since = datetime.now() - timedelta(days=days)
     rows = db.execute(
         select(Report.good_qty + Report.bad_qty)
         .where(
-            Report.tenant_id == tenant_id,
             Report.report_user_id == user_id,
             Report.task_id == task_id,
             Report.status == "submitted",

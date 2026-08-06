@@ -19,7 +19,6 @@ from app.models.work_order import WorkOrder
 
 def get_recommended_tasks(
     db: Session,
-    tenant_id: int,
     user_id: int,
     *,
     top: int = 3,
@@ -37,7 +36,6 @@ def get_recommended_tasks(
     stmt = (
         select(TaskAssignment)
         .where(
-            TaskAssignment.tenant_id == tenant_id,
             TaskAssignment.user_id == user_id,
         )
         .options(
@@ -62,7 +60,6 @@ def get_recommended_tasks(
         reported = db.scalar(
             select(func.coalesce(func.sum(ReportUnit.unit_seq), 0))
             .where(
-                ReportUnit.tenant_id == tenant_id,
                 ReportUnit.task_assignment_id == a.id,
             )
         ) or 0
@@ -77,7 +74,6 @@ def get_recommended_tasks(
         last_unit = db.scalar(
             select(ReportUnit)
             .where(
-                ReportUnit.tenant_id == tenant_id,
                 ReportUnit.task_assignment_id == a.id,
             )
             .order_by(ReportUnit.submitted_at.desc(), ReportUnit.id.desc())

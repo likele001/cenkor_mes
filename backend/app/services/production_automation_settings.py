@@ -58,7 +58,7 @@ def _merge_dict(base: dict, patch: dict) -> dict:
     return out
 
 
-def get_automation_settings(db: Session, tenant_id: int) -> dict:
+def get_automation_settings(db: Session, tenant_id: int = 1) -> dict:
     row = get_setting(db, tenant_id, KEY)
     if not row or not row.value:
         return deepcopy(DEFAULTS)

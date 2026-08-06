@@ -12,12 +12,11 @@ _KEYWORDS = ["划痕", "磕碰", "色差", "毛刺", "尺寸超差", "装配不�
              "焊接不良", "粗糙度", "平整度", "断差", "外观不良"]
 
 
-def list_quality_genes(db: Session, tenant_id: int, *, limit: int = 50) -> dict:
+def list_quality_genes(db: Session, *, limit: int = 50) -> dict:
     """Basic keyword-based defect pattern extraction."""
     rows = db.scalars(
         select(ReportUnit)
         .where(
-            ReportUnit.tenant_id == tenant_id,
             ReportUnit.status == "qc_approved",
             ReportUnit.result_type == "bad",
             ReportUnit.remark.isnot(None),
@@ -37,20 +36,20 @@ def list_quality_genes(db: Session, tenant_id: int, *, limit: int = 50) -> dict:
     return {"ok": True, "genes": gene_list, "scanned": len(rows), "pattern_count": len(gene_list)}
 
 
-def extract_quality_patterns(db: Session, tenant_id: int, *, limit: int = 500) -> dict:
+def extract_quality_patterns(db: Session, *, limit: int = 500) -> dict:
     """Enhanced pattern extraction using LLM semantic grouping."""
     try:
         from app.services.ai.quality.enhanced_quality import extract_quality_patterns as _enhanced
-        return _enhanced(db, tenant_id, limit=limit)
+        return _enhanced(db, limit=limit)
     except Exception as e:
-        return list_quality_genes(db, tenant_id, limit=limit)
+        return list_quality_genes(db, limit=limit)
 
 
-def auto_defect_dictionary(db: Session, tenant_id: int) -> dict:
+def auto_defect_dictionary(db: Session) -> dict:
     """Auto-generate defect code dictionary."""
     try:
         from app.services.ai.quality.enhanced_quality import auto_defect_dictionary as _enhanced
-        return _enhanced(db, tenant_id)
+        return _enhanced(db)
     except Exception as e:
-        basic = list_quality_genes(db, tenant_id)
+        basic = list_quality_genes(db)
         return {"ok": True, "dictionary": [{"code": "DEF_" + g["tag"][:3], "label": g["tag"], "sample_count": g["count"]} for g in basic.get("genes", [])]}

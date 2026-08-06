@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def analyze_yield_causes_enhanced(db: Session, *, days: int = 30) -> dict:
     """Enhanced yield analysis with process-level breakdown, trend comparison, and LLM hypothesis."""
     from app.models.report import Report
     from app.models.task import Task
@@ -26,7 +26,6 @@ def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
         .join(Report, Report.task_id == Task.id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Report.status == "qc_approved",
             func.date(Report.created_at) >= since,
         )
@@ -55,7 +54,7 @@ def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30
         select(func.sum(Report.good_qty), func.sum(Report.bad_qty))
         .join(Task, Task.id == Report.task_id)
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
-        .where(WorkOrder.tenant_id == tenant_id, Report.status == "qc_approved",
+        .where(Report.status == "qc_approved",
                func.date(Report.created_at) >= half_point)
     ).first()
 
@@ -63,7 +62,7 @@ def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30
         select(func.sum(Report.good_qty), func.sum(Report.bad_qty))
         .join(Task, Task.id == Report.task_id)
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
-        .where(WorkOrder.tenant_id == tenant_id, Report.status == "qc_approved",
+        .where(Report.status == "qc_approved",
                func.date(Report.created_at) >= since, func.date(Report.created_at) < half_point)
     ).first()
 
@@ -129,7 +128,7 @@ def analyze_yield_causes_enhanced(db: Session, tenant_id: int, *, days: int = 30
     }
 
 
-def correlation_matrix(db: Session, tenant_id: int, *, days: int = 30) -> dict:
+def correlation_matrix(db: Session, *, days: int = 30) -> dict:
     """Compute simple correlation between per-process bad quantities."""
     from app.models.report import Report
     from app.models.task import Task
@@ -141,7 +140,6 @@ def correlation_matrix(db: Session, tenant_id: int, *, days: int = 30) -> dict:
         select(Task.process_id, func.date(Report.created_at), func.sum(Report.bad_qty))
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Report.status == "qc_approved",
             func.date(Report.created_at) >= since,
         )

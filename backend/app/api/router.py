@@ -22,6 +22,12 @@ from app.api.admin.cron_jobs import router as admin_cron_jobs_router
 from app.api.admin.export_jobs import router as admin_export_jobs_router
 from app.api.admin.automation.router import router as admin_automation_router
 from app.api.admin.ai.router import router as admin_ai_router
+from app.api.admin.finance.router import router as admin_finance_router
+from app.api.admin.purchase.router import router as admin_purchase_router
+from app.api.admin.warehouse.router import router as admin_warehouse_router
+from app.api.admin.approval.router import router as admin_approval_router
+from app.api.admin.mrp.router import router as admin_mrp_router
+from app.api.admin.subcontract.router import router as admin_subcontract_router
 
 
 api_router = APIRouter()
@@ -44,6 +50,12 @@ api_router.include_router(admin_cron_jobs_router, prefix="/admin/cron-jobs", tag
 api_router.include_router(admin_export_jobs_router, prefix="/admin", tags=["admin-export-jobs"], dependencies=_admin_deps)
 api_router.include_router(admin_ai_router, prefix="/ai", tags=["ai"], dependencies=_admin_deps)
 api_router.include_router(admin_automation_router, prefix="/admin/automation", tags=["admin-automation"], dependencies=_admin_deps)
+api_router.include_router(admin_finance_router, prefix="/admin/finance", tags=["admin-finance"], dependencies=_admin_deps)
+api_router.include_router(admin_purchase_router, prefix="/admin/purchase", tags=["admin-purchase"], dependencies=_admin_deps)
+api_router.include_router(admin_warehouse_router, prefix="/admin/warehouse", tags=["admin-warehouse"], dependencies=_admin_deps)
+api_router.include_router(admin_approval_router, prefix="/admin/approval", tags=["admin-approval"], dependencies=_admin_deps)
+api_router.include_router(admin_mrp_router, prefix="/admin/mrp", tags=["admin-mrp"], dependencies=_admin_deps)
+api_router.include_router(admin_subcontract_router, prefix="/admin/subcontract", tags=["admin-subcontract"], dependencies=_admin_deps)
 api_router.include_router(h5_router, prefix="/h5", tags=["h5"])
 api_router.include_router(ws_dashboard_router, prefix="/ws", tags=["websocket"])
 

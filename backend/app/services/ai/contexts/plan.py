@@ -14,13 +14,13 @@ from app.models.work_order import WorkOrder
 from app.services.plan_readiness import build_plan_readiness
 
 
-def build_plan_context(db: Session, tenant_id: int, plan_id: int) -> dict:
-    plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+def build_plan_context(db: Session, plan_id: int) -> dict:
+    plan = get_plan_by_id(db, plan_id=plan_id)
     if not plan:
         return {}
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=plan.order_id, with_items=True)
+    order = get_order_by_id(db, order_id=plan.order_id, with_items=True)
     try:
-        readiness = build_plan_readiness(db, tenant_id=tenant_id, order_id=plan.order_id, plan_id=plan_id)
+        readiness = build_plan_readiness(db, order_id=plan.order_id, plan_id=plan_id)
     except ValueError as e:
         readiness = {"ready": False, "blockers": [str(e)], "kitting": {}, "process": {}}
 
@@ -28,7 +28,7 @@ def build_plan_context(db: Session, tenant_id: int, plan_id: int) -> dict:
         select(Task.status, func.count(Task.id))
         .select_from(WorkOrder)
         .join(Task, Task.work_order_id == WorkOrder.id)
-        .where(WorkOrder.tenant_id == tenant_id, WorkOrder.order_id == plan.order_id)
+        .where(WorkOrder.order_id == plan.order_id)
         .group_by(Task.status)
     ).all()
     task_stats = {str(s): int(c) for s, c in task_rows}
@@ -38,10 +38,10 @@ def build_plan_context(db: Session, tenant_id: int, plan_id: int) -> dict:
         select(Task)
         .select_from(WorkOrder)
         .join(Task, Task.work_order_id == WorkOrder.id)
-        .where(WorkOrder.tenant_id == tenant_id, WorkOrder.order_id == plan.order_id, Task.status != "done")
+        .where(WorkOrder.order_id == plan.order_id, Task.status != "done")
     ).all()
     for t in pending_tasks:
-        if not task_has_assignments(db, tenant_id, t.id):
+        if not task_has_assignments(db, t.id):
             unassigned += 1
 
     today = date.today()

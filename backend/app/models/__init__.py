@@ -33,6 +33,7 @@ from app.models.work_order_piece import WorkOrderPiece
 from app.models.export_job import ExportJob
 from app.models.print_template import PrintTemplate
 from app.models.notification import Notification
+from app.models.approval import ApprovalFlow, ApprovalStep
 from app.models.attendance import AttendanceRecord
 from app.models.employee_skill import Skill, UserSkillLink
 from app.models.production_calendar import ProductionCalendarDay
@@ -42,6 +43,9 @@ from app.models.supplier import Supplier
 
 from app.models.tenant import Tenant
 from app.models.crm import CustomerContact, CrmOpportunity, CrmOpportunityActivity, CustomerTag, CustomerTagLink, CrmLead, CrmLeadActivity, CrmQuotation, CrmQuotationItem, CrmContract, CrmPaymentPlan, CrmWinLossReason, CrmCampaign, CrmCampaignMember, CrmSalesTarget, CrmDataImportJob, CrmDataImportError
+
+from app.models.mrp import MrpPlan, MrpItem
+from app.models.subcontract import SubcontractOrder, SubcontractOrderItem, SubcontractSendLog, SubcontractReceiveLog
 
 __all__ = [
     "Base",

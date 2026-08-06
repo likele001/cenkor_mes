@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def suggest_prices_enhanced(db: Session, tenant_id: int, *, min_reports: int = 10) -> dict:
+def suggest_prices_enhanced(db: Session, *, min_reports: int = 10) -> dict:
     """Enhanced multi-factor pricing recommendation."""
     from app.models.process_price import ProcessPrice
     from app.models.report import Report
@@ -34,8 +34,6 @@ def suggest_prices_enhanced(db: Session, tenant_id: int, *, min_reports: int = 1
         .join(WorkOrder, (WorkOrder.id == Task.work_order_id) & (WorkOrder.sku_id == ProcessPrice.sku_id))
         .join(Report, Report.task_id == Task.id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
-            ProcessPrice.tenant_id == tenant_id,
             Report.status == "qc_approved",
             func.date(Report.created_at) >= since,
         )
@@ -48,7 +46,6 @@ def suggest_prices_enhanced(db: Session, tenant_id: int, *, min_reports: int = 1
         .join(Task, Task.id == Report.task_id)
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Report.status == "qc_approved",
             func.date(Report.created_at) >= since,
         )

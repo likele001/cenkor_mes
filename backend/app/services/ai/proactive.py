@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def _check_order_overdue(db: Session, tenant_id: int) -> list:
+def _check_order_overdue(db: Session) -> list:
     """Find orders approaching their deadline."""
     from app.models.order import Order
 
@@ -20,7 +20,6 @@ def _check_order_overdue(db: Session, tenant_id: int) -> list:
     deadline = today + timedelta(days=7)
     rows = db.execute(
         select(Order).where(
-            Order.tenant_id == tenant_id,
             Order.status.in_(("confirmed", "processing", "in_production")),
             Order.due_date.isnot(None),
             Order.due_date <= deadline,
@@ -39,7 +38,7 @@ def _check_order_overdue(db: Session, tenant_id: int) -> list:
     return risky
 
 
-def _check_yield_drop(db: Session, tenant_id: int) -> list:
+def _check_yield_drop(db: Session) -> list:
     """Detect significant yield drops."""
     from app.models.report import Report
     from app.models.task import Task
@@ -53,7 +52,7 @@ def _check_yield_drop(db: Session, tenant_id: int) -> list:
         select(func.sum(Report.good_qty), func.sum(Report.bad_qty))
         .join(Task, Task.id == Report.task_id)
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
-        .where(WorkOrder.tenant_id == tenant_id, func.date(Report.created_at) >= since_7d)
+        .where(func.date(Report.created_at) >= since_7d)
     ).first()
 
     prior = db.execute(
@@ -61,7 +60,6 @@ def _check_yield_drop(db: Session, tenant_id: int) -> list:
         .join(Task, Task.id == Report.task_id)
         .join(WorkOrder, WorkOrder.id == Task.work_order_id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             func.date(Report.created_at) >= since_30d,
             func.date(Report.created_at) < since_7d,
         )
@@ -88,11 +86,11 @@ def _check_yield_drop(db: Session, tenant_id: int) -> list:
     return []
 
 
-def _check_equipment_risk(db: Session, tenant_id: int) -> list:
+def _check_equipment_risk(db: Session) -> list:
     """Check equipment health alerts."""
     try:
         from app.services.ai.predict.equipment_predictor import equipment_health_scores_enhanced
-        result = equipment_health_scores_enhanced(db, tenant_id)
+        result = equipment_health_scores_enhanced(db)
         risky_items = [item for item in result.get("items", [])
                        if item.get("health_score", 100) < 50 or item.get("trend") == "declining"]
         suggestions = []
@@ -109,12 +107,12 @@ def _check_equipment_risk(db: Session, tenant_id: int) -> list:
         return []
 
 
-def _check_pending_dispatch(db: Session, tenant_id: int) -> list:
+def _check_pending_dispatch(db: Session) -> list:
     """Check for pending tasks waiting for dispatch."""
     from app.models.task import Task
 
     count = db.scalar(
-        select(func.count(Task.id)).where(Task.tenant_id == tenant_id, Task.status == "pending")
+        select(func.count(Task.id)).where(Task.status == "pending")
     ) or 0
     if count >= 10:
         return [{
@@ -126,13 +124,13 @@ def _check_pending_dispatch(db: Session, tenant_id: int) -> list:
     return []
 
 
-def check_and_recommend(db: Session, tenant_id: int) -> dict:
+def check_and_recommend(db: Session) -> dict:
     """Scan all business state and generate recommendations."""
     all_recs = []
-    all_recs.extend(_check_order_overdue(db, tenant_id))
-    all_recs.extend(_check_yield_drop(db, tenant_id))
-    all_recs.extend(_check_equipment_risk(db, tenant_id))
-    all_recs.extend(_check_pending_dispatch(db, tenant_id))
+    all_recs.extend(_check_order_overdue(db))
+    all_recs.extend(_check_yield_drop(db))
+    all_recs.extend(_check_equipment_risk(db))
+    all_recs.extend(_check_pending_dispatch(db))
     return {
         "ok": True,
         "count": len(all_recs),
@@ -140,6 +138,6 @@ def check_and_recommend(db: Session, tenant_id: int) -> dict:
     }
 
 
-def get_recommendations(db: Session, tenant_id: int, *, limit: int = 20) -> dict:
+def get_recommendations(db: Session, *, limit: int = 20) -> dict:
     """Get current recommendations (live scan)."""
-    return check_and_recommend(db, tenant_id)
+    return check_and_recommend(db)

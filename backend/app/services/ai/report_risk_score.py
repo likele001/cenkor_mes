@@ -54,7 +54,6 @@ def _level_for_score(score: float) -> str:
 def calculate_risk_score(
     db: Session,
     *,
-    tenant_id: int,
     user_id: int,
     task_id: int | None,
     good_qty: int = 0,
@@ -78,7 +77,7 @@ def calculate_risk_score(
     reasons: list[str] = []
 
     # ── 1. 历史良率（25 分）──
-    history = _user_history(db, tenant_id=tenant_id, user_id=user_id, days=HISTORY_WINDOW_DAYS)
+    history = _user_history(db, user_id=user_id, days=HISTORY_WINDOW_DAYS)
     total_hist = history["total"]
     if total_hist >= MIN_HISTORY_SAMPLE:
         good_rate = history["good_qty"] / max(1, history["good_qty"] + history["bad_qty"])
@@ -119,7 +118,7 @@ def calculate_risk_score(
 
     # ── 4. 报工数量合理性（15 分）──
     if task_id:
-        remaining = _task_remaining(db, tenant_id=tenant_id, task_id=task_id, user_id=user_id)
+        remaining = _task_remaining(db, task_id=task_id, user_id=user_id)
         submitted_now = good_qty + bad_qty
         if remaining > 0 and submitted_now > remaining * OVER_REMAIN_RATIO:
             breakdown["qty_sanity"] = 15
@@ -172,7 +171,7 @@ def calculate_risk_score(
     }
 
 
-def _user_history(db: Session, *, tenant_id: int, user_id: int, days: int) -> dict:
+def _user_history(db: Session, *, user_id: int, days: int) -> dict:
     """统计员工近 days 天的报工历史。
 
     合并 ReportUnit + Report 两种来源（不同业务路径）。
@@ -190,7 +189,6 @@ def _user_history(db: Session, *, tenant_id: int, user_id: int, days: int) -> di
     unit_rows = db.execute(
         select(ReportUnit.result_type, ReportUnit.status)
         .where(
-            ReportUnit.tenant_id == tenant_id,
             ReportUnit.user_id == user_id,
             ReportUnit.submitted_at.isnot(None),
             ReportUnit.submitted_at >= since,
@@ -217,7 +215,6 @@ def _user_history(db: Session, *, tenant_id: int, user_id: int, days: int) -> di
     rep_rows = db.execute(
         select(Report.good_qty, Report.bad_qty, Report.status)
         .where(
-            Report.tenant_id == tenant_id,
             Report.report_user_id == user_id,
             Report.created_at.isnot(None),
             Report.created_at >= since,
@@ -258,11 +255,10 @@ def _user_tenure_days(db: Session, *, user_id: int) -> int:
         return 0
 
 
-def _task_remaining(db: Session, *, tenant_id: int, task_id: int, user_id: int) -> int:
+def _task_remaining(db: Session, *, task_id: int, user_id: int) -> int:
     """查询员工对某任务的剩余可报量。"""
     a = db.scalar(
         select(TaskAssignment).where(
-            TaskAssignment.tenant_id == tenant_id,
             TaskAssignment.task_id == task_id,
             TaskAssignment.user_id == user_id,
         )
@@ -273,7 +269,6 @@ def _task_remaining(db: Session, *, tenant_id: int, task_id: int, user_id: int) 
     done = int(
         db.scalar(
             select(func.count(ReportUnit.id)).where(
-                ReportUnit.tenant_id == tenant_id,
                 ReportUnit.task_assignment_id == a.id,
                 ReportUnit.status != "draft",
             )
@@ -301,7 +296,7 @@ def apply_auto_pass(
     from app.crud.report_unit import create_unit_audit
     from app.services.approval_flow_resolver import get_status_after_approval
 
-    unit.status = get_status_after_approval(db, unit.tenant_id, 0)
+    unit.status = get_status_after_approval(db, 0)
     # 记录预审结果（给班组长/终审可见）
     unit.prescreen_level = risk.get("level")
     import json
@@ -319,7 +314,6 @@ def apply_auto_pass(
     unit.prescreen_at = datetime.now()
     create_unit_audit(
         db,
-        tenant_id=unit.tenant_id,
         report_unit_id=unit.id,
         auditor_id=audit_user_id or 0,  # 0 代表系统自动
         audit_level="auto",

@@ -2,6 +2,7 @@
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from io import BytesIO
 
 from celery import shared_task
@@ -10,22 +11,163 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.crud.attachment import create_attachment
+from app.crud.salary_slip import ensure_salary_slip
 from app.models.export_job import ExportJob
 from app.models.process import Process
+from app.models.process_price import ProcessPrice
+from app.models.report import Report
 from app.models.salary import SalaryItem
 from app.models.sku import Sku
+from app.models.task import Task
 from app.models.user import User
+from app.models.work_order import WorkOrder
 from app.storage import get_storage as get_active_storage
 
 logger = logging.getLogger(__name__)
 
 
 def calculate_salary_items(month: str | None = None) -> dict:
-    return {"ok": True, "msg": "stub"}
+    """批量计算计件工资：扫描当月已终审(qc_approved)的报工记录，生成 SalaryItem
+
+    审核通过时 calc_and_create_salary() 已逐条生成，此函数用于：
+    1. 补漏：因异步或异常遗漏的报工
+    2. 批量重算：管理员手动触发
+    """
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    db = SessionLocal()
+    try:
+        # 查找当月所有已终审的报工，排除已生成工资明细的
+        reports = db.scalars(
+            select(Report).where(
+                Report.status == "qc_approved",
+                Report.created_at >= f"{month}-01",
+                Report.created_at < _next_month(month),
+            )
+        ).all()
+
+        created = 0
+        skipped = 0
+        for report in reports:
+            # 检查是否已存在
+            existing = db.scalar(
+                select(SalaryItem).where(SalaryItem.report_id == report.id)
+            )
+            if existing:
+                skipped += 1
+                continue
+
+            task = db.get(Task, report.task_id)
+            if not task:
+                skipped += 1
+                continue
+            wo = db.get(WorkOrder, task.work_order_id)
+            if not wo:
+                skipped += 1
+                continue
+
+            price = db.scalar(
+                select(ProcessPrice).where(
+                    ProcessPrice.sku_id == wo.sku_id,
+                    ProcessPrice.process_id == task.process_id,
+                    ProcessPrice.is_active.is_(True),
+                )
+            )
+            if not price:
+                logger.warning(
+                    "报工 %s 缺少工价配置(sku=%s, process=%s)，跳过",
+                    report.id, wo.sku_id, task.process_id,
+                )
+                skipped += 1
+                continue
+
+            unit_price = Decimal(str(price.unit_price))
+            amount = Decimal(str(report.good_qty)) * unit_price
+
+            item = SalaryItem(
+                report_id=report.id,
+                report_unit_id=None,
+                user_id=report.report_user_id,
+                sku_id=wo.sku_id,
+                process_id=task.process_id,
+                unit_price=unit_price,
+                good_qty=report.good_qty,
+                amount=amount,
+                month=month,
+            )
+            db.add(item)
+            created += 1
+
+        db.commit()
+        return {
+            "ok": True,
+            "month": month,
+            "created": created,
+            "skipped": skipped,
+            "total_reports": len(reports),
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error("计件工资计算失败: %s", e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+    finally:
+        db.close()
 
 
 def generate_salary_slips(month: str | None = None) -> dict:
-    return {"ok": True, "msg": "stub"}
+    """批量生成工资条：汇总当月所有工资明细生成 SalarySlip
+
+    按员工汇总计件工资 + 计时工资 + 奖金/扣款 = 实发工资
+    """
+    if not month:
+        month = datetime.now().strftime("%Y-%m")
+
+    db = SessionLocal()
+    try:
+        # 查找当月有工资明细的员工
+        user_ids = set()
+        for row in db.execute(
+            select(SalaryItem.user_id).where(
+                SalaryItem.month == month,
+            ).distinct()
+        ):
+            user_ids.add(row[0])
+
+        # 也包含有计时/考勤的员工
+        from app.models.salary_allowance import SalaryAllowance
+        for row in db.execute(
+            select(SalaryAllowance.user_id).where(
+                SalaryAllowance.month == month,
+            ).distinct()
+        ):
+            user_ids.add(row[0])
+
+        if not user_ids:
+            return {"ok": True, "month": month, "slips_updated": 0, "msg": "当月无工资数据"}
+
+        updated = 0
+        for uid in sorted(user_ids):
+            ensure_salary_slip(db, user_id=uid, month=month)
+            updated += 1
+
+        db.commit()
+        return {"ok": True, "month": month, "slips_updated": updated}
+    except Exception as e:
+        db.rollback()
+        logger.error("工资条生成失败: %s", e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def _next_month(month: str) -> str:
+    """返回 YYYY-MM 的下个月第一天"""
+    y, m = month.split("-")
+    y, m = int(y), int(m)
+    if m == 12:
+        return f"{y + 1}-01-01"
+    return f"{y}-{m + 1:02d}-01"
 
 
 @shared_task(name="salary.export_excel")
@@ -159,7 +301,7 @@ def daily_hourly_calc() -> dict:
 
 @shared_task(name="salary.monthly_summary")
 def monthly_salary_summary() -> dict:
-    """每月初汇总上月的工资条（含计时）"""
+    """每月初汇总上月的工资条（含计件 + 计时 + 奖扣款）"""
     from app.crud.salary_slip import ensure_salary_slip
 
     db = SessionLocal()
@@ -168,17 +310,30 @@ def monthly_salary_summary() -> dict:
         first_of_month = today.replace(day=1)
         last_month = (first_of_month - timedelta(days=1)).strftime("%Y-%m")
 
-        user_ids = [
-            r[0]
-            for r in db.execute(
-                select(User.id).where(
-                    User.is_active.is_(True),
-                    User.salary_type.in_(["hourly", "mixed"]),
-                )
-            ).all()
-        ]
+        # 收集所有当月有工资数据的员工（计件 + 计时 + 奖扣款）
+        user_ids = set()
+        for row in db.execute(
+            select(SalaryItem.user_id).where(SalaryItem.month == last_month).distinct()
+        ):
+            user_ids.add(row[0])
+
+        from app.models.salary_allowance import SalaryAllowance
+        for row in db.execute(
+            select(SalaryAllowance.user_id).where(SalaryAllowance.month == last_month).distinct()
+        ):
+            user_ids.add(row[0])
+
+        # 也包含 hourly/mixed 但可能无数据的员工
+        for row in db.execute(
+            select(User.id).where(
+                User.is_active.is_(True),
+                User.salary_type.in_(["hourly", "mixed"]),
+            )
+        ):
+            user_ids.add(row[0])
+
         total = 0
-        for uid in user_ids:
+        for uid in sorted(user_ids):
             ensure_salary_slip(db, user_id=uid, month=last_month)
             total += 1
         db.commit()

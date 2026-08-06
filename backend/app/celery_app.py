@@ -24,11 +24,11 @@ celery.autodiscover_tasks(["app"])
 
 celery.conf.beat_schedule = {
     "salary-daily-hourly-calc": {
-        "task": "task_calculate_salary",
+        "task": "salary.daily_hourly_calc",
         "schedule": crontab(hour=1, minute=0),
     },
     "salary-monthly-summary": {
-        "task": "task_generate_salary_slips",
+        "task": "salary.monthly_summary",
         "schedule": crontab(day_of_month=1, hour=2, minute=0),
     },
 }

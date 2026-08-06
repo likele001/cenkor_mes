@@ -180,6 +180,9 @@ const productionAll: MenuItem[] = [
   { path: '/production/salary-slips', i18nKey: 'menu.salarySlips', permissions: ['salary.manage'], icon: EditPen },
   { path: '/production/equipment', i18nKey: 'menu.equipment', permissions: ['equipment.manage'], icon: Monitor },
   { path: '/production/trace', i18nKey: 'menu.trace', permissions: ['trace.query'], icon: Search },
+  { path: '/production/trace-tree', i18nKey: 'menu.traceTree', permissions: ['trace.query'], icon: Share },
+  { path: '/production/mrp', i18nKey: 'menu.mrp', permissions: ['work.manage'], icon: DataLine },
+  { path: '/purchase/subcontract', i18nKey: 'menu.subcontractOrders', permissions: ['purchase.manage'], icon: Van },
 ]
 
 const systemItems = computed(() => systemAll.filter((x) => auth.hasAnyPermission(x.permissions)))

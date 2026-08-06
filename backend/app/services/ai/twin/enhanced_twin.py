@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def workshop_twin_enhanced(db: Session, tenant_id: int, *, days: int = 7) -> dict:
+def workshop_twin_enhanced(db: Session, *, days: int = 7) -> dict:
     """Enhanced workshop snapshot with trend data and bottleneck identification."""
     from app.models.process import Process
     from app.models.task import Task
@@ -25,7 +25,6 @@ def workshop_twin_enhanced(db: Session, tenant_id: int, *, days: int = 7) -> dic
         .join(Task, Task.work_order_id == WorkOrder.id)
         .join(Process, Process.id == Task.process_id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Task.status.in_(("pending", "working")),
         )
         .group_by(Process.workshop, Task.status)
@@ -45,7 +44,6 @@ def workshop_twin_enhanced(db: Session, tenant_id: int, *, days: int = 7) -> dic
         .join(Task, Task.work_order_id == WorkOrder.id)
         .join(Process, Process.id == Task.process_id)
         .where(
-            WorkOrder.tenant_id == tenant_id,
             Task.status.in_(("pending", "working")),
         )
         .group_by(Process.id, Process.workshop, Task.status)
@@ -78,7 +76,7 @@ def workshop_twin_enhanced(db: Session, tenant_id: int, *, days: int = 7) -> dic
         .select_from(WorkOrder)
         .join(Task, Task.work_order_id == WorkOrder.id)
         .join(Process, Process.id == Task.process_id)
-        .where(WorkOrder.tenant_id == tenant_id, func.date(Task.created_at) >= since)
+        .where(func.date(Task.created_at) >= since)
         .group_by(Process.workshop, func.date(Task.created_at))
     ).all()
 
@@ -97,7 +95,7 @@ def workshop_twin_enhanced(db: Session, tenant_id: int, *, days: int = 7) -> dic
     }
 
 
-def identify_bottleneck(db: Session, tenant_id: int, *, threshold: int = 5) -> dict:
+def identify_bottleneck(db: Session, *, threshold: int = 5) -> dict:
     """Identify workshop bottlenecks by pending task volume."""
     from app.models.process import Process
     from app.models.task import Task
@@ -108,7 +106,7 @@ def identify_bottleneck(db: Session, tenant_id: int, *, threshold: int = 5) -> d
         .select_from(WorkOrder)
         .join(Task, Task.work_order_id == WorkOrder.id)
         .join(Process, Process.id == Task.process_id)
-        .where(WorkOrder.tenant_id == tenant_id, Task.status == "pending")
+        .where(Task.status == "pending")
         .group_by(Process.id, Process.workshop, Process.name)
     ).all()
 
@@ -121,7 +119,7 @@ def identify_bottleneck(db: Session, tenant_id: int, *, threshold: int = 5) -> d
     return {"ok": True, "bottlenecks": top[:5], "threshold": threshold, "full_ranking": ranked[:10]}
 
 
-def predict_workload(db: Session, tenant_id: int, *, days: int = 7) -> dict:
+def predict_workload(db: Session, *, days: int = 7) -> dict:
     """Predict future workshop workload using simple historical extrapolation."""
     from app.models.process import Process
     from app.models.task import Task
@@ -133,7 +131,7 @@ def predict_workload(db: Session, tenant_id: int, *, days: int = 7) -> dict:
         .select_from(WorkOrder)
         .join(Task, Task.work_order_id == WorkOrder.id)
         .join(Process, Process.id == Task.process_id)
-        .where(WorkOrder.tenant_id == tenant_id, func.date(Task.created_at) >= since)
+        .where(func.date(Task.created_at) >= since)
         .group_by(Process.workshop)
     ).all()
 

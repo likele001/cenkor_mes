@@ -19,7 +19,7 @@ _KEYWORDS = [
 ]
 
 
-def extract_quality_patterns(db: Session, tenant_id: int, *, limit: int = 500) -> dict:
+def extract_quality_patterns(db: Session, *, limit: int = 500) -> dict:
     """Extract defect patterns from bad item remarks using keyword + LLM semantic grouping."""
     from app.models.report_unit import ReportUnit
     from app.models.task import Task
@@ -27,7 +27,6 @@ def extract_quality_patterns(db: Session, tenant_id: int, *, limit: int = 500) -
     rows = db.scalars(
         select(ReportUnit)
         .where(
-            ReportUnit.tenant_id == tenant_id,
             ReportUnit.status == "qc_approved",
             ReportUnit.result_type == "bad",
             ReportUnit.remark.isnot(None),
@@ -72,7 +71,7 @@ def extract_quality_patterns(db: Session, tenant_id: int, *, limit: int = 500) -
 
         if unclassified:
             try:
-                llm_patterns = _analyze_with_llm(db, tenant_id, unclassified)
+                llm_patterns = _analyze_with_llm(db, unclassified)
                 for pattern, info in llm_patterns.items():
                     if pattern not in patterns:
                         patterns[pattern] = {"count": 0, "samples": [], "process_ids": set()}
@@ -100,11 +99,11 @@ def extract_quality_patterns(db: Session, tenant_id: int, *, limit: int = 500) -
     }
 
 
-def _analyze_with_llm(db: Session, tenant_id: int, remarks: list) -> dict:
+def _analyze_with_llm(db: Session, remarks: list) -> dict:
     """Use LLM to extract defect patterns from unclassified remarks."""
     from app.services.ai.client import chat_completion, resolve_runtime
 
-    cfg = resolve_runtime(db, tenant_id=tenant_id)
+    cfg = resolve_runtime(db)
     if not cfg or not cfg.api_key:
         return {}
 
@@ -116,7 +115,7 @@ def _analyze_with_llm(db: Session, tenant_id: int, remarks: list) -> dict:
 
     try:
         content, _, _ = chat_completion(
-            db, tenant_id=tenant_id, messages=[{"role": "user", "content": prompt}],
+            db, messages=[{"role": "user", "content": prompt}],
             temperature=0.1, max_tokens=1000, response_format="json_object",
         )
         import json
@@ -135,7 +134,7 @@ def _analyze_with_llm(db: Session, tenant_id: int, remarks: list) -> dict:
         return {}
 
 
-def quality_pattern_trend(db: Session, tenant_id: int, pattern_tag: str, *, days: int = 30) -> dict:
+def quality_pattern_trend(db: Session, pattern_tag: str, *, days: int = 30) -> dict:
     """Analyze trend for a specific quality pattern over time."""
     from app.models.report_unit import ReportUnit
 
@@ -143,7 +142,6 @@ def quality_pattern_trend(db: Session, tenant_id: int, pattern_tag: str, *, days
     rows = db.execute(
         select(func.date(ReportUnit.created_at), func.count(ReportUnit.id))
         .where(
-            ReportUnit.tenant_id == tenant_id,
             ReportUnit.status == "qc_approved",
             ReportUnit.result_type == "bad",
             ReportUnit.remark.contains(pattern_tag),
@@ -157,9 +155,9 @@ def quality_pattern_trend(db: Session, tenant_id: int, pattern_tag: str, *, days
     return {"ok": True, "pattern": pattern_tag, "days": days, "total_count": total, "daily": daily}
 
 
-def auto_defect_dictionary(db: Session, tenant_id: int, *, limit: int = 100) -> dict:
+def auto_defect_dictionary(db: Session, *, limit: int = 100) -> dict:
     """Auto-generate defect code dictionary from recent remarks."""
-    patterns = extract_quality_patterns(db, tenant_id, limit=limit)
+    patterns = extract_quality_patterns(db, limit=limit)
     dict_items = []
     for p in patterns.get("patterns", []):
         dict_items.append({

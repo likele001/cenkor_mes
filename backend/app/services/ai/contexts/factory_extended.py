@@ -15,11 +15,10 @@ from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.services.ai.equipment_health import equipment_health_scores
 
 
-def _ledger_profit(db: Session, tenant_id: int, start: date, end: date) -> dict:
+def _ledger_profit(db: Session, start: date, end: date) -> dict:
     """流水账口径：收入(receipt) - 支出(payment)。"""
     revenue = db.scalar(
         select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
-            FinanceLedger.tenant_id == tenant_id,
             FinanceLedger.direction == "in",
             FinanceLedger.category == "receipt",
             FinanceLedger.biz_date >= start,
@@ -28,7 +27,6 @@ def _ledger_profit(db: Session, tenant_id: int, start: date, end: date) -> dict:
     )
     cost = db.scalar(
         select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
-            FinanceLedger.tenant_id == tenant_id,
             FinanceLedger.direction == "out",
             FinanceLedger.category == "payment",
             FinanceLedger.biz_date >= start,
@@ -48,7 +46,7 @@ def _ledger_profit(db: Session, tenant_id: int, start: date, end: date) -> dict:
     }
 
 
-def build_cost_context(db: Session, tenant_id: int, *, dashboard: dict) -> dict:
+def build_cost_context(db: Session, *, dashboard: dict) -> dict:
     today = date.today()
     tomorrow = today + timedelta(days=1)
     month_start = today.replace(day=1)
@@ -57,8 +55,8 @@ def build_cost_context(db: Session, tenant_id: int, *, dashboard: dict) -> dict:
     else:
         next_month = date(today.year, today.month + 1, 1)
 
-    today_ledger = _ledger_profit(db, tenant_id, today, tomorrow)
-    month_ledger = _ledger_profit(db, tenant_id, month_start, next_month)
+    today_ledger = _ledger_profit(db, today, tomorrow)
+    month_ledger = _ledger_profit(db, month_start, next_month)
 
     labor_today = float((dashboard.get("today") or {}).get("salary_amount") or 0)
     labor_note = "今日计件工资（已审核报工），可作为人工成本参考"
@@ -68,7 +66,6 @@ def build_cost_context(db: Session, tenant_id: int, *, dashboard: dict) -> dict:
         .select_from(FinanceLedger)
         .join(Customer, Customer.id == FinanceLedger.party_id)
         .where(
-            FinanceLedger.tenant_id == tenant_id,
             FinanceLedger.party_type == "customer",
             FinanceLedger.direction == "in",
             FinanceLedger.category == "receipt",
@@ -101,11 +98,10 @@ def build_cost_context(db: Session, tenant_id: int, *, dashboard: dict) -> dict:
     }
 
 
-def build_crm_context(db: Session, tenant_id: int) -> dict:
+def build_crm_context(db: Session) -> dict:
     open_count = int(
         db.scalar(
             select(func.count(CrmOpportunity.id)).where(
-                CrmOpportunity.tenant_id == tenant_id,
                 CrmOpportunity.is_active.is_(True),
                 CrmOpportunity.status == "open",
             )
@@ -115,7 +111,6 @@ def build_crm_context(db: Session, tenant_id: int) -> dict:
     pool_count = int(
         db.scalar(
             select(func.count(CrmOpportunity.id)).where(
-                CrmOpportunity.tenant_id == tenant_id,
                 CrmOpportunity.owner_user_id.is_(None),
                 CrmOpportunity.is_active.is_(True),
                 CrmOpportunity.status == "open",
@@ -129,7 +124,6 @@ def build_crm_context(db: Session, tenant_id: int) -> dict:
             select(func.count(CrmOpportunityActivity.id))
             .join(CrmOpportunity, CrmOpportunity.id == CrmOpportunityActivity.opportunity_id)
             .where(
-                CrmOpportunityActivity.tenant_id == tenant_id,
                 CrmOpportunityActivity.next_follow_up_at.is_not(None),
                 CrmOpportunityActivity.next_follow_up_at <= now,
                 CrmOpportunity.is_active.is_(True),
@@ -142,7 +136,6 @@ def build_crm_context(db: Session, tenant_id: int) -> dict:
     opps = db.scalars(
         select(CrmOpportunity)
         .where(
-            CrmOpportunity.tenant_id == tenant_id,
             CrmOpportunity.is_active.is_(True),
             CrmOpportunity.status == "open",
         )
@@ -154,7 +147,6 @@ def build_crm_context(db: Session, tenant_id: int) -> dict:
     stage_rows = db.execute(
         select(CrmOpportunity.stage, func.count(CrmOpportunity.id), func.coalesce(func.sum(CrmOpportunity.amount), 0))
         .where(
-            CrmOpportunity.tenant_id == tenant_id,
             CrmOpportunity.is_active.is_(True),
             CrmOpportunity.status == "open",
         )
@@ -190,20 +182,18 @@ def _purchase_order_amount(po: PurchaseOrder) -> float:
     return float(total)
 
 
-def build_purchase_context(db: Session, tenant_id: int) -> dict:
+def build_purchase_context(db: Session) -> dict:
     today = date.today()
     month = today.strftime("%Y-%m")
 
     status_rows = db.execute(
         select(PurchaseOrder.status, func.count(PurchaseOrder.id))
-        .where(PurchaseOrder.tenant_id == tenant_id)
         .group_by(PurchaseOrder.status)
     ).all()
     by_status = {str(s): int(c) for s, c in status_rows}
 
     recent = db.scalars(
         select(PurchaseOrder)
-        .where(PurchaseOrder.tenant_id == tenant_id)
         .options(selectinload(PurchaseOrder.supplier), selectinload(PurchaseOrder.items))
         .order_by(PurchaseOrder.id.desc())
         .limit(10)
@@ -235,7 +225,6 @@ def build_purchase_context(db: Session, tenant_id: int) -> dict:
         .select_from(PurchaseOrderItem)
         .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderItem.order_id)
         .where(
-            PurchaseOrder.tenant_id == tenant_id,
             PurchaseOrder.status.not_in(["draft", "canceled"]),
             func.date_format(PurchaseOrder.confirmed_at, "%Y-%m") == month,
         )
@@ -244,7 +233,6 @@ def build_purchase_context(db: Session, tenant_id: int) -> dict:
     pending_receive = int(
         db.scalar(
             select(func.count(PurchaseOrder.id)).where(
-                PurchaseOrder.tenant_id == tenant_id,
                 PurchaseOrder.status.in_(["confirmed", "partial_received"]),
             )
         )
@@ -260,9 +248,9 @@ def build_purchase_context(db: Session, tenant_id: int) -> dict:
     }
 
 
-def build_equipment_context(db: Session, tenant_id: int) -> dict:
+def build_equipment_context(db: Session) -> dict:
     today = date.today()
-    eqs = db.scalars(select(Equipment).where(Equipment.tenant_id == tenant_id).order_by(Equipment.id)).all()
+    eqs = db.scalars(select(Equipment).order_by(Equipment.id)).all()
     by_status: dict[str, int] = {}
     overdue_maintenance: list[dict] = []
     for eq in eqs:
@@ -278,7 +266,7 @@ def build_equipment_context(db: Session, tenant_id: int) -> dict:
                 }
             )
 
-    health = equipment_health_scores(db, tenant_id, days=90)
+    health = equipment_health_scores(db, days=90)
     at_risk = [x for x in health.get("items") or [] if x.get("level") == "risk"][:8]
 
     return {

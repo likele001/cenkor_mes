@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.crud.process_flow import build_flow_chain_rows, get_piece_by_product_code
 from app.crud.trace import get_trace_by_code, list_trace_codes
+from app.crud.trace_tree import build_trace_tree
 from app.models.salary import SalaryItem
 from app.models.user import User
 from app.services.trace_public import build_trace_public_url, trace_qr_payload, _collect_media_for_piece
@@ -158,3 +159,15 @@ def trace_api(
         "media": _collect_media_for_piece(db, piece.id, product_code=public_code) if piece else [],
         "qr": trace_qr_payload(public_code),
     })
+
+
+@router.get("/tree/{product_code}")
+def trace_tree_api(
+    product_code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    tree = build_trace_tree(db, product_code)
+    if not tree:
+        raise HTTPException(status_code=400, detail="未找到该成品码的追溯记录")
+    return ok(tree)

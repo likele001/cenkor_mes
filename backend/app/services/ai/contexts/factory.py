@@ -70,10 +70,10 @@ def _shortage_rows(kitting: dict, *, limit: int = 5) -> list[dict]:
     return rows[:limit]
 
 
-def _plan_readiness_snapshot(db: Session, tenant_id: int, *, order_id: int, plan_id: int, order_status: str) -> dict:
+def _plan_readiness_snapshot(db: Session, *, order_id: int, plan_id: int, order_status: str) -> dict:
     if order_status == "confirmed":
         try:
-            r = build_plan_readiness(db, tenant_id=tenant_id, order_id=order_id, plan_id=plan_id)
+            r = build_plan_readiness(db, order_id=order_id, plan_id=plan_id)
             kitting = r.get("kitting") or {}
             process = r.get("process") or {}
             return {
@@ -88,7 +88,7 @@ def _plan_readiness_snapshot(db: Session, tenant_id: int, *, order_id: int, plan
             }
         except ValueError as e:
             return {"ready": False, "blockers": [str(e)], "shortages": []}
-    kitting = build_order_kitting_preview(db, tenant_id, order_id)
+    kitting = build_order_kitting_preview(db, order_id)
     if not kitting:
         return {"ready": None, "blockers": ["订单无明细"], "shortages": []}
     blockers = []
@@ -107,23 +107,22 @@ def _plan_readiness_snapshot(db: Session, tenant_id: int, *, order_id: int, plan
     }
 
 
-def build_factory_context(db: Session, tenant_id: int, *, plan_id: int | None = None) -> dict:
-    dashboard = get_dashboard_summary(db, tenant_id=tenant_id)
+def build_factory_context(db: Session, *, plan_id: int | None = None) -> dict:
+    dashboard = get_dashboard_summary(db)
 
     status_rows = db.execute(
         select(Order.status, func.count(Order.id))
-        .where(Order.tenant_id == tenant_id)
         .group_by(Order.status)
     ).all()
     orders_by_status = {str(s): int(c) for s, c in status_rows}
 
     pending_review: list[dict] = []
-    recent_orders = list_orders(db, tenant_id=tenant_id, limit=30)
+    recent_orders = list_orders(db, limit=30)
     for o in recent_orders:
         if o.status != "pending_confirm":
             continue
         cust = o.customer
-        kitting = build_order_kitting_preview(db, tenant_id, o.id)
+        kitting = build_order_kitting_preview(db, o.id)
         pending_review.append(
             {
                 "id": o.id,
@@ -145,16 +144,14 @@ def build_factory_context(db: Session, tenant_id: int, *, plan_id: int | None = 
 
     progress_orders = list_kanban_orders(
         db,
-        tenant_id=tenant_id,
         status="producing",
         limit=10,
     )
     if not progress_orders:
-        progress_orders = list_kanban_orders(db, tenant_id=tenant_id, status="confirmed", limit=8)
+        progress_orders = list_kanban_orders(db, status="confirmed", limit=8)
 
     plan_rows = list_plans_with_order_info(
         db,
-        tenant_id=tenant_id,
         limit=15,
     )
     production_plans: list[dict] = []
@@ -163,7 +160,7 @@ def build_factory_context(db: Session, tenant_id: int, *, plan_id: int | None = 
         if plan.status not in ("planned", "in_progress"):
             continue
         readiness = _plan_readiness_snapshot(
-            db, tenant_id, order_id=plan.order_id, plan_id=plan.id, order_status=str(order_status or "")
+            db, order_id=plan.order_id, plan_id=plan.id, order_status=str(order_status or "")
         )
         for s in readiness.get("shortages") or []:
             all_shortages.append({**s, "plan_code": plan.code, "order_code": order_code})
@@ -188,14 +185,13 @@ def build_factory_context(db: Session, tenant_id: int, *, plan_id: int | None = 
     unassigned = int(
         db.scalar(
             select(func.count(Task.id)).where(
-                Task.tenant_id == tenant_id,
                 Task.status == "pending",
             )
         )
         or 0
     )
 
-    alerts = list_recent_alerts(db, tenant_id, limit=6)
+    alerts = list_recent_alerts(db, limit=6)
 
     ctx: dict = {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -219,20 +215,20 @@ def build_factory_context(db: Session, tenant_id: int, *, plan_id: int | None = 
             "done": dashboard.get("tasks", {}).get("done"),
         },
         "alerts": alerts,
-        "cost_profit": build_cost_context(db, tenant_id, dashboard=dashboard),
-        "crm": build_crm_context(db, tenant_id),
-        "purchase": build_purchase_context(db, tenant_id),
-        "equipment": build_equipment_context(db, tenant_id),
+        "cost_profit": build_cost_context(db, dashboard=dashboard),
+        "crm": build_crm_context(db),
+        "purchase": build_purchase_context(db),
+        "equipment": build_equipment_context(db),
     }
 
     if plan_id:
         from app.services.ai.contexts.plan import build_plan_context
 
-        focus = build_plan_context(db, tenant_id, plan_id)
+        focus = build_plan_context(db, plan_id)
         if focus:
             order_id = focus.get("order", {}).get("id")
             if order_id:
-                kitting = build_order_kitting_preview(db, tenant_id, int(order_id))
+                kitting = build_order_kitting_preview(db, int(order_id))
                 if kitting:
                     focus["kitting_detail"] = {
                         "shortage_count": kitting.get("shortage_count"),
