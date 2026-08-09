@@ -55,7 +55,6 @@ def ai_chat_api(payload: AiChatIn, db: Session = Depends(get_db), user: User = D
             raise HTTPException(status_code=400, detail="暂仅支持 scene=boss_qa")
         data = boss_qa(
             db,
-            user.tenant_id,
             user.id,
             payload.message,
             payload.conversation_id,
@@ -80,7 +79,6 @@ def ai_chat_stream_api(payload: AiChatIn, db: Session = Depends(get_db), user: U
         try:
             for kind, data in boss_qa_stream_chunks(
                 db,
-                user.tenant_id,
                 user.id,
                 payload.message,
                 payload.conversation_id,
@@ -146,7 +144,7 @@ def save_gateway_settings_api(
 @router.post("/plan/{plan_id}/analyze", dependencies=[Depends(require_permissions(["ai.use", "plan.manage"]))])
 def plan_analyze_api(plan_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        data = plan_risk(db, user.tenant_id, user.id, plan_id)
+        data = plan_risk(db, user.id, plan_id)
         db.commit()
         return ok(data)
     except (AiNotConfiguredError, AiCallError) as e:
@@ -157,7 +155,7 @@ def plan_analyze_api(plan_id: int, db: Session = Depends(get_db), user: User = D
 @router.post("/plan/{plan_id}/schedule-suggest", dependencies=[Depends(require_permissions(["ai.use", "plan.manage"]))])
 def plan_schedule_suggest_api(plan_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        data = plan_schedule(db, user.tenant_id, user.id, plan_id)
+        data = plan_schedule(db, user.id, plan_id)
         db.commit()
         return ok(data)
     except (AiNotConfiguredError, AiCallError) as e:
@@ -167,7 +165,7 @@ def plan_schedule_suggest_api(plan_id: int, db: Session = Depends(get_db), user:
 
 @router.post("/plan/{plan_id}/schedule-optimize", dependencies=[Depends(require_permissions(["ai.use", "plan.manage"]))])
 def plan_schedule_optimize_api(plan_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    data = optimize_plan_schedule(db, user.tenant_id, plan_id)
+    data = optimize_plan_schedule(db, plan_id)
     return ok(data)
 
 
@@ -197,7 +195,7 @@ def plan_schedule_apply_api(
 
     mode = payload.mode if payload.mode in ("backward", "forward") else "backward"
     if payload.start_date and payload.end_date:
-        plan = get_plan_by_id(db, tenant_id=user.tenant_id, plan_id=plan_id)
+        plan = get_plan_by_id(db, plan_id)
         if not plan:
             raise HTTPException(status_code=400, detail="生产计划不存在")
         try:
@@ -231,16 +229,16 @@ def plan_schedule_apply_api(
 
 @router.get("/alerts", dependencies=[Depends(require_permissions(["ai.alert.view"]))])
 def list_alerts_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok({"items": list_recent_alerts(db, user.tenant_id)})
+    return ok({"items": list_recent_alerts(db)})
 
 
 @router.post("/alerts/run", dependencies=[Depends(require_permissions(["ai.use"]))])
 def run_alerts_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     from app.services.production_automation_settings import get_automation_settings
 
-    events = scan_tenant_alerts(db, user.tenant_id)
+    events = scan_tenant_alerts(db)
     alert_prefs = get_automation_settings(db, user.tenant_id).get("alerts") or {}
-    n = notify_pending_alerts(db, user.tenant_id, alert_prefs=alert_prefs)
+    n = notify_pending_alerts(db, alert_prefs=alert_prefs)
     db.commit()
     return ok({"events": len(events), "notified": n})
 
@@ -268,7 +266,7 @@ def audit_summary_api(
     user: User = Depends(get_current_user),
 ):
     try:
-        data = audit_batch_summary(db, user.tenant_id, user.id, status=status)
+        data = audit_batch_summary(db, user.id, status=status)
         db.commit()
         return ok(data)
     except (AiNotConfiguredError, AiCallError) as e:
@@ -279,7 +277,7 @@ def audit_summary_api(
 @router.post("/report-units/{unit_id}/vision", dependencies=[Depends(require_permissions(["ai.use", "report.audit"]))])
 def report_vision_api(unit_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        data = report_vision_audit(db, user.tenant_id, user.id, unit_id)
+        data = report_vision_audit(db, user.id, unit_id)
         return ok(data)
     except (AiNotConfiguredError, AiCallError) as e:
         _ai_error(e)
@@ -289,43 +287,43 @@ def report_vision_api(unit_id: int, db: Session = Depends(get_db), user: User = 
 def deep_overview_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return ok(
         {
-            "causal": analyze_yield_causes(db, user.tenant_id),
-            "quality_genes": list_quality_genes(db, user.tenant_id, limit=20),
-            "pricing": suggest_price_adjustments(db, user.tenant_id),
-            "digital_twin": workshop_twin_snapshot(db, user.tenant_id),
-            "equipment_health": equipment_health_scores(db, user.tenant_id),
+            "causal": analyze_yield_causes(db),
+            "quality_genes": list_quality_genes(db, limit=20),
+            "pricing": suggest_price_adjustments(db),
+            "digital_twin": workshop_twin_snapshot(db),
+            "equipment_health": equipment_health_scores(db),
         }
     )
 
 
 @router.get("/deep/causal", dependencies=[Depends(require_permissions(["ai.use"]))])
 def deep_causal_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(analyze_yield_causes(db, user.tenant_id))
+    return ok(analyze_yield_causes(db))
 
 
 @router.get("/deep/quality-genes", dependencies=[Depends(require_permissions(["ai.use"]))])
 def deep_quality_genes_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(list_quality_genes(db, user.tenant_id))
+    return ok(list_quality_genes(db))
 
 
 @router.get("/deep/pricing", dependencies=[Depends(require_permissions(["ai.use"]))])
 def deep_pricing_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(suggest_price_adjustments(db, user.tenant_id))
+    return ok(suggest_price_adjustments(db))
 
 
 @router.get("/deep/digital-twin", dependencies=[Depends(require_permissions(["ai.use"]))])
 def deep_twin_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(workshop_twin_snapshot(db, user.tenant_id))
+    return ok(workshop_twin_snapshot(db))
 
 
 @router.get("/deep/equipment-health", dependencies=[Depends(require_permissions(["ai.use"]))])
 def deep_equipment_health_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(equipment_health_scores(db, user.tenant_id))
+    return ok(equipment_health_scores(db))
 
 
 @router.get("/stats", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_stats_api(days: int = Query(default=30, ge=1, le=365), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return ok(ai_usage_stats(db, user.tenant_id, days=days))
+    return ok(ai_usage_stats(db, days=days))
 
 
 @router.get("/models", dependencies=[Depends(require_permissions(["ai.use"]))])
@@ -405,7 +403,6 @@ def ai_brief_latest_api(db: Session = Depends(get_db), user: User = Depends(get_
 
     rows = list_my_notifications(
         db,
-        tenant_id=user.tenant_id,
         user_id=user.id,
         biz_type="daily_brief",
         limit=1,
@@ -420,24 +417,24 @@ def ai_brief_latest_api(db: Session = Depends(get_db), user: User = Depends(get_
 
 @router.post("/deep/equipment/{equipment_id}/train", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_train_equipment_api(equipment_id: int, db: Session = Depends(get_db), user = Depends(get_current_user)):
-    result = train_equipment_model(db, user.tenant_id, equipment_id)
+    result = train_equipment_model(db, equipment_id)
     return ok(result)
 
 
 @router.get("/deep/yield/anomalies", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_yield_anomalies_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
-    return ok(detect_factory_anomalies(db, user.tenant_id))
+    return ok(detect_factory_anomalies(db))
 
 
 @router.get("/deep/yield/predictions", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_yield_predictions_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
-    return ok(list_all_yield_predictions(db, user.tenant_id))
+    return ok(list_all_yield_predictions(db))
 
 
 @router.get("/deep/equipment-health-enhanced", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_equipment_health_enhanced_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.predict.equipment_predictor import equipment_health_scores_enhanced as ehse
-    return ok(ehse(db, user.tenant_id))
+    return ok(ehse(db))
 
 
 # === Phase 3: Feedback & Proactive Recommendations ===
@@ -478,7 +475,7 @@ def ai_feedback_recent_api(db: Session = Depends(get_db), user = Depends(get_cur
 
 @router.get("/recommendations", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_recommendations_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
-    return ok(get_recommendations(db, user.tenant_id))
+    return ok(get_recommendations(db))
 
 
 # === Phase 4: Enhanced L3+ Modules ===
@@ -486,40 +483,40 @@ def ai_recommendations_api(db: Session = Depends(get_db), user = Depends(get_cur
 @router.get("/deep/twin-enhanced", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_twin_enhanced_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.twin.enhanced_twin import workshop_twin_enhanced
-    return ok(workshop_twin_enhanced(db, user.tenant_id))
+    return ok(workshop_twin_enhanced(db))
 
 
 @router.get("/deep/bottleneck", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_bottleneck_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.twin.enhanced_twin import identify_bottleneck
-    return ok(identify_bottleneck(db, user.tenant_id))
+    return ok(identify_bottleneck(db))
 
 
 @router.get("/deep/causal-enhanced", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_causal_enhanced_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.causal.enhanced_causal import analyze_yield_causes_enhanced
-    return ok(analyze_yield_causes_enhanced(db, user.tenant_id))
+    return ok(analyze_yield_causes_enhanced(db))
 
 
 @router.get("/deep/causal/correlation", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_causal_correlation_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.causal.enhanced_causal import correlation_matrix
-    return ok(correlation_matrix(db, user.tenant_id))
+    return ok(correlation_matrix(db))
 
 
 @router.get("/deep/quality-patterns", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_quality_patterns_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.quality.enhanced_quality import extract_quality_patterns
-    return ok(extract_quality_patterns(db, user.tenant_id))
+    return ok(extract_quality_patterns(db))
 
 
 @router.get("/deep/quality-dictionary", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_quality_dictionary_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.quality.enhanced_quality import auto_defect_dictionary
-    return ok(auto_defect_dictionary(db, user.tenant_id))
+    return ok(auto_defect_dictionary(db))
 
 
 @router.get("/deep/pricing-enhanced", dependencies=[Depends(require_permissions(["ai.use"]))])
 def ai_pricing_enhanced_api(db: Session = Depends(get_db), user = Depends(get_current_user)):
     from app.services.ai.pricing.enhanced_pricing import suggest_prices_enhanced
-    return ok(suggest_prices_enhanced(db, user.tenant_id))
+    return ok(suggest_prices_enhanced(db))

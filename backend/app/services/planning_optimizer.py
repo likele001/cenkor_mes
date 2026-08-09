@@ -15,11 +15,11 @@ from app.models.task import Task
 from app.models.work_order import WorkOrder
 
 
-def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
+def _get_workdays_setting(db: Session) -> list[int]:
     from app.crud.tenant_setting import get_setting
     import json
 
-    row = get_setting(db, tenant_id, "plan.workdays")
+    row = get_setting(db, "plan.workdays")
     if row and row.value:
         try:
             data = json.loads(row.value)
@@ -30,14 +30,14 @@ def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
     return [1, 2, 3, 4, 5]
 
 
-def _is_workday(db: Session, tenant_id: int, d: date, workdays: list[int]) -> bool:
-    it = get_calendar_day(db, tenant_id=tenant_id, day=d)
+def _is_workday(db: Session, d: date, workdays: list[int]) -> bool:
+    it = get_calendar_day(db, day=d)
     if it is not None:
         return bool(it.is_workday)
     return int(d.isoweekday()) in workdays
 
 
-def _shift_workdays(db: Session, tenant_id: int, d: date, delta: int, workdays: list[int]) -> date:
+def _shift_workdays(db: Session, d: date, delta: int, workdays: list[int]) -> date:
     if delta == 0:
         return d
     step = 1 if delta > 0 else -1
@@ -46,26 +46,26 @@ def _shift_workdays(db: Session, tenant_id: int, d: date, delta: int, workdays: 
     while remain > 0:
         cur = cur + timedelta(days=step)
         for _ in range(400):
-            if _is_workday(db, tenant_id, cur, workdays):
+            if _is_workday(db, cur, workdays):
                 break
             cur = cur + timedelta(days=step)
         remain -= 1
     return cur
 
 
-def _total_minutes(db: Session, tenant_id: int, order_id: int) -> int:
+def _total_minutes(db: Session, order_id: int) -> int:
     row = db.execute(
         select(func.coalesce(func.sum(Task.planned_qty * func.coalesce(Process.std_minutes, 1)), 0))
         .select_from(WorkOrder)
-        .join(Task, and_(Task.tenant_id == WorkOrder.tenant_id, Task.work_order_id == WorkOrder.id))
-        .join(Process, and_(Process.tenant_id == Task.tenant_id, Process.id == Task.process_id))
-        .where(WorkOrder.tenant_id == tenant_id, WorkOrder.order_id == order_id, Task.status != "done")
+        .join(Task, Task.work_order_id == WorkOrder.id)
+        .join(Process, Process.id == Task.process_id)
+        .where(WorkOrder.order_id == order_id, Task.status != "done")
     ).scalar()
     return int(row or 0)
 
 
-def _daily_capacity(db: Session, tenant_id: int, d: date, default_cap: int = 480) -> int:
-    it = get_calendar_day(db, tenant_id=tenant_id, day=d)
+def _daily_capacity(db: Session, d: date, default_cap: int = 480) -> int:
+    it = get_calendar_day(db, day=d)
     if it is not None and it.capacity_minutes:
         return int(it.capacity_minutes)
     return default_cap
@@ -73,7 +73,6 @@ def _daily_capacity(db: Session, tenant_id: int, d: date, default_cap: int = 480
 
 def _forward_schedule_fallback(
     db: Session,
-    tenant_id: int,
     *,
     workdays: list[int],
     work_day_count: int,
@@ -84,10 +83,10 @@ def _forward_schedule_fallback(
     wdc = max(1, int(work_day_count))
     start = date.today()
     for _ in range(400):
-        if _is_workday(db, tenant_id, start, workdays):
+        if _is_workday(db, start, workdays):
             break
         start += timedelta(days=1)
-    end = _shift_workdays(db, tenant_id, start, wdc - 1, workdays)
+    end = _shift_workdays(db, start, wdc - 1, workdays)
     return {
         "ok": True,
         "solver": "fallback_forward",
@@ -100,22 +99,22 @@ def _forward_schedule_fallback(
     }
 
 
-def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
+def optimize_plan_schedule(db: Session, plan_id: int) -> dict:
     """
     基于总工时与日历产能，倒排求可行 start/end。
     优先 OR-Tools CP-SAT；未安装时规则倒排。
     """
-    plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+    plan = get_plan_by_id(db, plan_id)
     if not plan:
         return {"ok": False, "error": "计划不存在"}
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=plan.order_id, with_items=False)
+    order = get_order_by_id(db, plan.order_id, with_items=False)
     if not order:
         return {"ok": False, "error": "订单不存在"}
 
     due = order.due_date or plan.end_date
 
-    workdays = _get_workdays_setting(db, tenant_id)
-    total_mins = _total_minutes(db, tenant_id, plan.order_id)
+    workdays = _get_workdays_setting(db)
+    total_mins = _total_minutes(db, plan.order_id)
     if total_mins <= 0:
         total_mins = int(plan.work_days or 1) * 480
 
@@ -126,7 +125,6 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
     if not due:
         return _forward_schedule_fallback(
             db,
-            tenant_id,
             workdays=workdays,
             work_day_count=work_day_count,
             total_mins=total_mins,
@@ -137,7 +135,7 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
     from app.crud.tenant_setting import get_setting
     import json
 
-    cap_row = get_setting(db, tenant_id, "plan.default_capacity_minutes")
+    cap_row = get_setting(db, "plan.default_capacity_minutes")
     if cap_row and cap_row.value:
         try:
             default_cap = int(json.loads(cap_row.value) if cap_row.value.startswith("[") else cap_row.value)
@@ -151,7 +149,7 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
     days: list[date] = []
     cur = due
     for _ in range(120):
-        if _is_workday(db, tenant_id, cur, workdays):
+        if _is_workday(db, cur, workdays):
             days.append(cur)
         cur -= timedelta(days=1)
         if len(days) >= 60:
@@ -160,7 +158,7 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
     if not days:
         days = [due]
 
-    caps = [_daily_capacity(db, tenant_id, d, default_cap) for d in days]
+    caps = [_daily_capacity(db, d, default_cap) for d in days]
     n = len(days)
 
     solver_used = "rule"
@@ -203,7 +201,7 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
             "ok": True,
             "solver": "rule",
             "suggest_mode": "backward",
-            "suggest_start_date": _shift_workdays(db, tenant_id, due, -(work_day_count - 1), workdays).isoformat(),
+            "suggest_start_date": _shift_workdays(db, due, -(work_day_count - 1), workdays).isoformat(),
             "suggest_end_date": due.isoformat(),
             "suggest_work_days": work_day_count,
             "total_minutes": total_mins,
@@ -212,10 +210,10 @@ def optimize_plan_schedule(db: Session, tenant_id: int, plan_id: int) -> dict:
 
     end = due
     for _ in range(400):
-        if _is_workday(db, tenant_id, end, workdays):
+        if _is_workday(db, end, workdays):
             break
         end -= timedelta(days=1)
-    start = _shift_workdays(db, tenant_id, end, -(work_day_count - 1), workdays)
+    start = _shift_workdays(db, end, -(work_day_count - 1), workdays)
     return {
         "ok": True,
         "solver": solver_used,

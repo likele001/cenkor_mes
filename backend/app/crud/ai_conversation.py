@@ -25,7 +25,7 @@ def create_conversation(
     return conv
 
 
-def get_conversation(db: Session, tenant_id: int, conversation_id: int) -> AiConversation | None:
+def get_conversation(db: Session, tenant_id: int = 1, conversation_id: int = 0) -> AiConversation | None:
     row = db.get(AiConversation, conversation_id)
     if not row or row.tenant_id != tenant_id:
         return None

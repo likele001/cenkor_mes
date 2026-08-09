@@ -15,13 +15,13 @@ from app.services.display_label import process_display_name, product_display_nam
 from app.services.entity_refs import missing_bom_dict
 
 
-def _kitting_section(db: Session, tenant_id: int, order) -> dict:
+def _kitting_section(db: Session, order) -> dict:
     sku_qty: dict[int, int] = {}
     for it in order.items:
         sku_qty[it.sku_id] = sku_qty.get(it.sku_id, 0) + it.qty
     sku_ids = list(sku_qty.keys())
 
-    bom_by_sku = get_effective_bom_map_by_sku_ids(db, tenant_id=tenant_id, sku_ids=sku_ids)
+    bom_by_sku = get_effective_bom_map_by_sku_ids(db, sku_ids=sku_ids)
     missing_boms = []
     for it in order.items:
         if it.sku and it.sku_id not in bom_by_sku:
@@ -51,7 +51,7 @@ def _kitting_section(db: Session, tenant_id: int, order) -> dict:
             }
 
     stock_map = sum_stock_qty_by_sku_ids(
-        db, tenant_id=tenant_id, sku_ids=[v["sku_id"] for v in material_meta.values() if v.get("sku_id")]
+        db, sku_ids=[v["sku_id"] for v in material_meta.values() if v.get("sku_id")]
     )
     items = []
     shortage_count = 0
@@ -73,7 +73,7 @@ def _kitting_section(db: Session, tenant_id: int, order) -> dict:
     }
 
 
-def _process_section(db: Session, tenant_id: int, order) -> dict:
+def _process_section(db: Session, order) -> dict:
     product_ids: set[int] = set()
     for it in order.items:
         if it.sku:
@@ -91,7 +91,6 @@ def _process_section(db: Session, tenant_id: int, order) -> dict:
     routes = db.scalars(
         select(ProcessRoute)
         .where(
-            ProcessRoute.tenant_id == tenant_id,
             ProcessRoute.product_id.in_(product_ids),
             ProcessRoute.is_default.is_(True),
             ProcessRoute.is_active.is_(True),
@@ -128,7 +127,7 @@ def _process_section(db: Session, tenant_id: int, order) -> dict:
             proc = step.process
             if not proc:
                 continue
-            price = get_price_by_sku_process(db, tenant_id, it.sku_id, proc.id)
+            price = get_price_by_sku_process(db, it.sku_id, proc.id)
             if not price or not price.is_active:
                 product = getattr(it.sku, "product", None)
                 pn = product_display_name(
@@ -164,22 +163,21 @@ def _process_section(db: Session, tenant_id: int, order) -> dict:
     }
 
 
-def build_order_kitting_preview(db: Session, tenant_id: int, order_id: int) -> dict | None:
+def build_order_kitting_preview(db: Session, order_id: int) -> dict | None:
     """任意状态订单的物料齐套预览（不要求已审核）。"""
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=order_id, with_items=True)
+    order = get_order_by_id(db, order_id, with_items=True)
     if not order or not order.items:
         return None
-    return _kitting_section(db, tenant_id, order)
+    return _kitting_section(db, order)
 
 
 def build_plan_readiness(
     db: Session,
-    tenant_id: int,
     *,
     order_id: int,
     plan_id: int | None = None,
 ) -> dict:
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=order_id, with_items=True)
+    order = get_order_by_id(db, order_id, with_items=True)
     if not order:
         raise ValueError("订单不存在")
     if order.status != "confirmed":
@@ -187,12 +185,12 @@ def build_plan_readiness(
 
     plan_code = None
     if plan_id:
-        plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+        plan = get_plan_by_id(db, plan_id)
         if plan and plan.order_id == order_id:
             plan_code = plan.code
 
-    kitting = _kitting_section(db, tenant_id, order)
-    process = _process_section(db, tenant_id, order)
+    kitting = _kitting_section(db, order)
+    process = _process_section(db, order)
 
     blockers = []
     if kitting["missing_bom_count"]:

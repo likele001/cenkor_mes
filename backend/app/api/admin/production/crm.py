@@ -141,9 +141,7 @@ def _notify_recycled(db: Session, tenant_id: int, recycled: list[tuple[int, int 
         if not prev_owner:
             continue
         create_notification(
-            db,
-            tenant_id=tenant_id,
-            user_id=prev_owner,
+            db,            user_id=prev_owner,
             title="销售机会已回收至公海",
             content=f"销售机会 #{opp_id} 因长期未跟进已回收至公海池",
             level="warning",
@@ -329,9 +327,7 @@ def claim_opportunity_api(
         raise HTTPException(status_code=400, detail="该机会已被领取")
     opp.owner_user_id = user.id
     create_notification(
-        db,
-        tenant_id=user.tenant_id,
-        user_id=user.id,
+        db,        user_id=user.id,
         title="已领取销售机会",
         content=f"您已领取销售机会 {opp.code}：{opp.title}",
         level="info",
@@ -530,7 +526,7 @@ def list_after_sales_api(
 ):
     from app.crud.after_sale import list_after_sales
 
-    items = list_after_sales(db, tenant_id=user.tenant_id, order_id=order_id, status=status, offset=offset, limit=limit)
+    items = list_after_sales(db, order_id=order_id, status=status, offset=offset, limit=limit)
     return ok(
         {
             "items": [
@@ -564,7 +560,7 @@ def update_after_sale_api(
     from app.crud.crm import create_opportunity_activity
     from app.crud.order import get_order_by_id
 
-    item = get_after_sale_by_id(db, tenant_id=user.tenant_id, after_sale_id=after_sale_id)
+    item = get_after_sale_by_id(db, after_sale_id=after_sale_id)
     if not item:
         raise HTTPException(status_code=400, detail="售后单不存在")
     if payload.status and payload.status not in ("pending", "processing", "done", "rejected"):
@@ -572,7 +568,7 @@ def update_after_sale_api(
     prev_status = item.status
     update_after_sale(db, item, status=payload.status, solution=payload.solution)
     if payload.status == "done" and prev_status != "done":
-        order = get_order_by_id(db, tenant_id=user.tenant_id, order_id=item.order_id, with_items=False)
+        order = get_order_by_id(db, order_id=item.order_id, with_items=False)
         if order:
             if getattr(order, "opportunity_id", None):
                 note = f"售后单 {item.code} 已完结"
@@ -588,9 +584,7 @@ def update_after_sale_api(
                 )
             if order.customer and order.customer.owner_user_id:
                 create_notification(
-                    db,
-                    tenant_id=user.tenant_id,
-                    user_id=order.customer.owner_user_id,
+                    db,                    user_id=order.customer.owner_user_id,
                     title="售后已完结",
                     content=f"售后单 {item.code} 已处理完成",
                     level="info",
@@ -749,7 +743,7 @@ def convert_lead_api(
     if not can_access_lead(db, user, lead, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该线索")
     data = _payload_dict(payload) if payload else {}
-    result = conv_fn(db, lead=lead, tenant_id=user.tenant_id, user_id=user.id, **data)
+    result = conv_fn(db, user.tenant_id, lead.id, user.id, **data)
     db.commit()
     return ok(_item_to_dict(result) if result is not None else {"converted": True, "lead_id": lead_id})
 
@@ -771,9 +765,7 @@ def claim_lead_api(
         raise HTTPException(status_code=400, detail="该线索已被认领")
     lead.owner_user_id = user.id
     create_notification(
-        db,
-        tenant_id=user.tenant_id,
-        user_id=user.id,
+        db,        user_id=user.id,
         title="已认领线索",
         content=f"您已认领线索 {getattr(lead, 'code', lead_id)}",
         level="info",
@@ -875,7 +867,7 @@ def lead_summary_api(
     if not callable(fn):
         _not_implemented()
     owner_user_id = user.id if not crm_has_full_access(user, permission_codes) else None
-    result = fn(db, tenant_id=user.tenant_id, owner_user_id=owner_user_id)
+    result = fn(db, tenant_id=user.tenant_id)
     return ok(_item_to_dict(result) if result is not None else {})
 
 
@@ -1071,7 +1063,7 @@ def convert_quotation_to_order_api(
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该报价单")
     data = _payload_dict(payload) if payload else {}
-    result = conv_fn(db, q, tenant_id=user.tenant_id, user_id=user.id, **data)
+    result = conv_fn(db, user.tenant_id, q.id, user.id, **data)
     db.commit()
     if isinstance(result, dict):
         return ok(result)
@@ -1198,7 +1190,7 @@ def renew_contract_api(
     if not can_access_contract(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该合同")
     data = _payload_dict(payload) if payload else {}
-    new_c = renew_fn(db, c, tenant_id=user.tenant_id, user_id=user.id, **data)
+    new_c = renew_fn(db, user.tenant_id, c.id, user.id, **data)
     db.commit()
     return ok({"id": getattr(new_c, "id", None), "code": getattr(new_c, "code", None)})
 

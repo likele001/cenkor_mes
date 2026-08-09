@@ -43,8 +43,7 @@ def log_automation(
 ):
     return create_automation_log(
         db,
-        tenant_id=tenant_id,
-        trigger=trigger,
+                trigger=trigger,
         action=action,
         status=status,
         biz_type=biz_type,
@@ -62,16 +61,16 @@ def precheck_order_for_automation(
     *,
     allow_shortage: bool = False,
 ) -> dict:
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=order_id, with_items=False)
+    order = get_order_by_id(db, order_id, with_items=False)
     if not order:
         return {"ok": False, "checks": [{"level": "error", "message": "订单不存在"}]}
     checks: list[dict] = []
     if order.status != "confirmed":
         checks.append({"level": "error", "message": f"订单状态为 {order.status}，需先审核通过"})
-    if order_has_work_orders(db, tenant_id, order_id):
+    if order_has_work_orders(db, order_id):
         checks.append({"level": "warn", "message": "订单已下发投产，无需重复自动化"})
     try:
-        readiness = build_plan_readiness(db, tenant_id=tenant_id, order_id=order_id)
+        readiness = build_plan_readiness(db, order_id=order_id)
     except ValueError as e:
         checks.append({"level": "error", "message": str(e)})
         readiness = None
@@ -91,7 +90,7 @@ def precheck_order_for_automation(
 
 
 def precheck_plan_for_automation(db: Session, tenant_id: int, plan_id: int) -> dict:
-    plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+    plan = get_plan_by_id(db, plan_id)
     if not plan:
         return {"ok": False, "checks": [{"level": "error", "message": "计划不存在"}]}
     checks: list[dict] = []
@@ -101,7 +100,7 @@ def precheck_plan_for_automation(db: Session, tenant_id: int, plan_id: int) -> d
 
 
 def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
-    it = get_setting(db, tenant_id=tenant_id, key="plan.calendar.workdays")
+    it = get_setting(db, "plan.calendar.workdays")
     if not it or not it.value:
         return [1, 2, 3, 4, 5, 6]
     try:
@@ -115,7 +114,7 @@ def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
 
 
 def _is_workday_db(db: Session, tenant_id: int, d: date, workdays: list[int]) -> bool:
-    it = get_calendar_day(db, tenant_id=tenant_id, day=d)
+    it = get_calendar_day(db, day=d)
     if it is not None:
         return bool(it.is_workday)
     return int(d.isoweekday()) in workdays
@@ -144,11 +143,11 @@ def _shift_workdays(db: Session, tenant_id: int, d: date, delta: int, workdays: 
 
 
 def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "backward") -> dict:
-    row = get_plan_with_order_info(db, tenant_id=tenant_id, plan_id=plan_id)
+    row = get_plan_with_order_info(db, plan_id)
     if not row:
         raise ValueError("生产计划不存在")
     plan, _, _, _, _ = row
-    order = get_order_by_id(db, tenant_id=tenant_id, order_id=plan.order_id, with_items=False)
+    order = get_order_by_id(db, plan.order_id, with_items=False)
     if not order:
         raise ValueError("订单不存在")
     if mode not in ("backward", "forward"):
@@ -192,10 +191,10 @@ def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "ba
 
 
 def apply_optimizer_dates(db: Session, tenant_id: int, plan_id: int) -> dict:
-    opt = optimize_plan_schedule(db, tenant_id, plan_id)
+    opt = optimize_plan_schedule(db, plan_id)
     if not opt.get("ok"):
         raise ValueError(opt.get("error") or "排产优化失败")
-    plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+    plan = get_plan_by_id(db, plan_id)
     if not plan:
         raise ValueError("生产计划不存在")
     sd = date.fromisoformat(str(opt["suggest_start_date"])[:10])
@@ -206,12 +205,11 @@ def apply_optimizer_dates(db: Session, tenant_id: int, plan_id: int) -> dict:
 
 
 def run_auto_release(db: Session, tenant_id: int, plan_id: int, user_id: int, allow_shortage: bool) -> dict:
-    plan = get_plan_by_id(db, tenant_id=tenant_id, plan_id=plan_id)
+    plan = get_plan_by_id(db, plan_id)
     if not plan:
         raise ValueError("生产计划不存在")
     return release_plan(
-        db,
-        tenant_id=tenant_id,
+    db,
         plan=plan,
         releaser_user_id=user_id,
         allow_shortage=allow_shortage,
@@ -321,8 +319,7 @@ def run_schedule_pipeline(
         )
         notify_users_with_permission(
             db,
-            tenant_id=tenant_id,
-            permission_code="plan.manage",
+                        permission_code="plan.manage",
             title="生产自动化失败",
             content=str(e)[:500],
             level="warning",
@@ -381,8 +378,7 @@ def auto_create_plan_for_order(
         )
         notify_users_with_permission(
             db,
-            tenant_id=tenant_id,
-            permission_code="plan.manage",
+                        permission_code="plan.manage",
             title="订单确认后自动建计划失败",
             content=pre["checks"][0]["message"] if pre["checks"] else "检查未通过",
             level="warning",
@@ -408,7 +404,6 @@ def auto_create_plan_for_order(
 
     existing = db.scalar(
         select(ProductionPlan).where(
-            ProductionPlan.tenant_id == tenant_id,
             ProductionPlan.order_id == order_id,
             ProductionPlan.status == "planned",
         )
@@ -419,13 +414,12 @@ def auto_create_plan_for_order(
         from app.services.code_generator import BizType, resolve_code
         from app.crud.production_plan import get_plan_by_code
 
-        order = get_order_by_id(db, tenant_id=tenant_id, order_id=order_id, with_items=False)
+        order = get_order_by_id(db, order_id, with_items=False)
         plan_code = resolve_code(
             db,
-            tenant_id=tenant_id,
             biz_type=BizType.PRODUCTION_PLAN,
             code=None,
-            exists=lambda c: get_plan_by_code(db, tenant_id, c) is not None,
+            exists=lambda c: get_plan_by_code(db, c) is not None,
             duplicate_msg="计划编号已存在",
         )
         start_date = None
@@ -433,8 +427,7 @@ def auto_create_plan_for_order(
         if end_date and start_offset_days:
             end_date = end_date  # keep due as end; offset applied in pipeline
         plan = create_plan(
-            db,
-            tenant_id=tenant_id,
+    db,
             order_id=order_id,
             code=plan_code,
             status="planned",

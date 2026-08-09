@@ -58,7 +58,6 @@ def list_logs_api(
 ):
     items = list_automation_logs(
         db,
-        user.tenant_id,
         trigger=trigger,
         status=status,
         biz_type=biz_type,
