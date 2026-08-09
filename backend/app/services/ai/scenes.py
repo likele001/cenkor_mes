@@ -88,11 +88,11 @@ def _prepare_boss_qa(
 ) -> tuple[object, list[dict[str, str]]]:
     ctx = build_boss_context(db, plan_id=context_id)
     if conversation_id:
-        conv = get_conversation(db, conversation_id)
+        conv = get_conversation(db, 1, conversation_id)
         if not conv:
-            conv = create_conversation(db,user_id=user_id, scene="boss_qa")
+            conv = create_conversation(db, user_id=user_id, scene="boss_qa")
     else:
-        conv = create_conversation(db,user_id=user_id, scene="boss_qa")
+        conv = create_conversation(db, user_id=user_id, scene="boss_qa")
 
     history = list_messages(db, conv.id, limit=10)
     messages: list[dict[str, str]] = [

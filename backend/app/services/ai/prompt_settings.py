@@ -10,7 +10,7 @@ KEY = "ai.boss_system_prompt"
 MAX_LEN = 2000
 
 
-def get_boss_prompt(db: Session, tenant_id: int) -> str:
+def get_boss_prompt(db: Session, tenant_id: int = 1) -> str:
     row = get_setting(db, tenant_id, KEY)
     if not row or not row.value:
         return ""

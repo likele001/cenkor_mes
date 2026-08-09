@@ -1851,7 +1851,7 @@ def calculate_target_achievement(db: Session, tenant_id: int, target_id: int) ->
 # ============================
 def recalculate_customer_profile(db: Session, tenant_id: int, customer_id: int):
     customer = db.scalar(
-        select(Customer).where(Customer.tenant_id == tenant_id, Customer.id == customer_id)
+        select(Customer).where(Customer.id == customer_id)
     )
     if customer is None:
         return None
@@ -1901,7 +1901,7 @@ def recalculate_customer_profile(db: Session, tenant_id: int, customer_id: int):
 
 def get_customer_360(db: Session, tenant_id: int, customer_id: int) -> dict:
     customer = db.scalar(
-        select(Customer).where(Customer.tenant_id == tenant_id, Customer.id == customer_id)
+        select(Customer).where(Customer.id == customer_id)
     )
     if customer is None:
         return {}
