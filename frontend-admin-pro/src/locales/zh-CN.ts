@@ -338,6 +338,7 @@ export default {
     dictionary: '字典管理',
     attachments: '附件',
     operationLogs: '操作日志',
+    systemAbout: '系统版本',
     industryPacks: '行业包管理',
     master: '主数据',
     products: '产品',
@@ -2622,7 +2623,14 @@ skuBatch: {
       dateRange: '日期范围',
       filterUser: '筛选员工',
     },
-  },
+      about: {
+      currentVersion: '当前系统版本',
+      releaseDate: '发布日期',
+      buildInfo: '构建信息',
+      changelog: '开发日志',
+      totalVersions: '共 {count} 个版本',
+      noChangelog: '暂无开发日志',
+    },},
   messageCenter: {
     title: '消息中心',
     subtitle: '统一管理飞书、企业微信等多通道消息推送。',
@@ -3430,3 +3438,4 @@ skuBatch: {
     saved: '保存成功，10秒内生效',
   },
 }
+

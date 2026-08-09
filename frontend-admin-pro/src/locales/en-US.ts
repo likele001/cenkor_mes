@@ -254,6 +254,7 @@ export default {
     dictionary: 'Dictionary',
     attachments: 'Attachments',
     operationLogs: 'Operation Logs',
+    systemAbout: 'System Version',
     industryPacks: 'Industry Packs',
     master: 'Master Data',
     products: 'Products',
@@ -1825,7 +1826,14 @@ export default {
       dryRunFailed: 'Dry run failed',
       cancel: 'Cancel',
     },
-  },
+      about: {
+      currentVersion: 'Current system version',
+      releaseDate: 'Release date',
+      buildInfo: 'Build info',
+      changelog: 'Changelog',
+      totalVersions: 'Total {count} variants',
+      noChangelog: 'No changelog yet',
+    },},
   purchase: {
     orders: {
       title: 'Purchase Orders',
@@ -2634,3 +2642,4 @@ export default {
     },
   },
 }
+

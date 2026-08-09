@@ -97,6 +97,7 @@ import {
   CollectionTag,
   FolderOpened,
   Notebook,
+  InfoFilled,
   Goods,
   Grid,
   Van,
@@ -150,6 +151,7 @@ const systemAll: MenuItem[] = [
   { path: '/system/dictionary', i18nKey: 'menu.dictionary', permissions: ['dict.manage'], icon: CollectionTag },
   { path: '/system/attachments', i18nKey: 'menu.attachments', permissions: ['attachment.view'], icon: FolderOpened },
   { path: '/system/operation-logs', i18nKey: 'menu.operationLogs', permissions: ['operation_log.view'], icon: Notebook },
+{ path: '/system/about', i18nKey: 'menu.systemAbout', permissions: ['setting.manage'], icon: InfoFilled },
 ]
 
 const masterAll: MenuItem[] = [

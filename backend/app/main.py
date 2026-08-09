@@ -81,3 +81,19 @@ def on_startup():
             db.commit()
         finally:
             db.close()
+
+    # 系统版本表种子（幂等，从 CHANGELOG.json 同步，仅在版本号不存在时插入）
+    try:
+        from pathlib import Path
+        from app.crud.system_version import sync_changelog_from_file
+        db = SessionLocal()
+        try:
+            changelog_path = Path(__file__).resolve().parents[1] / "CHANGELOG.json"
+            added = sync_changelog_from_file(db, changelog_path)
+            if added:
+                logger.info("synced %d system versions from CHANGELOG.json", added)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("seed system versions failed: %s", e)
+

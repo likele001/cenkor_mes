@@ -46,6 +46,7 @@ from app.models.crm import CustomerContact, CrmOpportunity, CrmOpportunityActivi
 
 from app.models.mrp import MrpPlan, MrpItem
 from app.models.subcontract import SubcontractOrder, SubcontractOrderItem, SubcontractSendLog, SubcontractReceiveLog
+from app.models.system_version import SystemVersion
 
 __all__ = [
     "Base",
@@ -124,4 +125,5 @@ __all__ = [
     "CrmDataImportJob",
     "CrmDataImportError",
     "TaskAssignment",
+    "SystemVersion",
 ]

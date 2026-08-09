@@ -309,6 +309,28 @@ export const systemApi = {
     return http.downloadBlob({ url: '/admin/system/roles/export', method: 'GET', params })
   },
   /** 预览下一业务编号（不占用序号） */
+  /** 获取当前系统版本信息 */
+  getVersionInfo() {
+    return http.request<{
+      version: {
+        id: number
+        version: string
+        release_date: string
+        description: string
+      } | null
+      edition: string
+    }>({ url: '/admin/system/version', method: 'GET' })
+  },
+  /** 获取系统版本历史（开发日志） */
+  listChangelog(params?: { offset?: number; limit?: number }) {
+    return http.request<ListResp<{
+      id: number
+      version: string
+      release_date: string
+      description: string
+    }>>({ url: '/admin/system/version/history', method: 'GET', params })
+  },
+
   nextCode(bizType: string) {
     return http.request<{ code: string; biz_type: string }>({
       url: '/admin/system/codes/next',

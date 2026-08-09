@@ -1,0 +1,127 @@
+[
+  {
+    "version": "v0.1.0",
+    "release_date": "2026-05-22",
+    "description": "项目初始化：创建项目结构、完善 H5 员工端与客户端使用指南、编写完整用户手册与 ThinkMes 对比文档、新增打包部署脚本（run.bat / start.sh）、提供数据库初始化 SQL、更新 README。"
+  },
+  {
+    "version": "v0.2.0",
+    "release_date": "2026-05-23",
+    "description": "后端 API 与前端 UI 重构：新增 H5 公共基础地址与微信小程序配置项、小程序认证路由；重构 admin plans/BOM API 并支持产品与 SKU 关联；完善工价、任务、工单、报表 API；优化各 admin 页面加载状态与 UI 元素、统一权限处理。"
+  },
+  {
+    "version": "v0.3.0",
+    "release_date": "2026-05-24",
+    "description": "更新后端配置与应用程序接口功能，优化存储设置与云存储功能。"
+  },
+  {
+    "version": "v0.4.0",
+    "release_date": "2026-05-25",
+    "description": "实现 AI 助手功能与相关 API 集成，支持智能问答、数据分析辅助；完成云存储功能验证。"
+  },
+  {
+    "version": "v0.5.0",
+    "release_date": "2026-05-29",
+    "description": "更新后端与前端配置，增强用户信息输出；完善质检功能与缺陷分析模块；新增 AI 助手功能。"
+  },
+  {
+    "version": "v0.6.0",
+    "release_date": "2026-05-30",
+    "description": "更新设备管理与生产计划功能；增强国际化（多语言）支持与界面功能优化。"
+  },
+  {
+    "version": "v0.7.0",
+    "release_date": "2026-06-02",
+    "description": "新增飞书消息推送功能与相关调度，支持报工、审核等事件实时推送通知。"
+  },
+  {
+    "version": "v0.8.0",
+    "release_date": "2026-06-08",
+    "description": "更新全集源码：打通 CRM-MES 业务闭环，增强通知能力，新增 Open Core 双包拆分发布工具。"
+  },
+  {
+    "version": "v0.9.0",
+    "release_date": "2026-06-09",
+    "description": "AI 对话接口新增 context_id 参数优化上下文处理；新增订单删除接口并支持草稿订单合法性校验；生产计划接口升级进度追踪与订单详情字段；新增钉钉消息推送功能与相关调度；优化自动化流程异常处理。"
+  },
+  {
+    "version": "v0.10.0",
+    "release_date": "2026-06-12",
+    "description": "班次管理：班次定义与排班计划，溯源码生成二维码与打印。"
+  },
+  {
+    "version": "v0.11.0",
+    "release_date": "2026-06-13",
+    "description": "实现班次管理与排班计划功能；实现计时工资功能及相关接口和界面。"
+  },
+  {
+    "version": "v0.12.0",
+    "release_date": "2026-06-14",
+    "description": "新增生产计划与外协模块 API 及定时任务管理接口；优化 CI 流程并完善推送监控接口。"
+  },
+  {
+    "version": "v0.13.0",
+    "release_date": "2026-06-15",
+    "description": "新增模具管理、审批流和 SPC 统计模块及导出作业支持；添加 AI 员工模块及相关接口支持。"
+  },
+  {
+    "version": "v0.14.0",
+    "release_date": "2026-06-16",
+    "description": "增强报工审核流程支持多步骤审批；H5 员工端新增高级功能模块与 AI 智能报工能力；新增老板看板（Executive Dashboard）5 大经营指标；小程序端新增老板看板；更新 Pro 版本功能菜单和模块结构。"
+  },
+  {
+    "version": "v0.15.0",
+    "release_date": "2026-06-19",
+    "description": "AI 语音报工全面修复：prompt 结构化、文字降级、回调修复；新增导出 Excel 功能及订单和客户打印支持；更新 README 功能说明。"
+  },
+  {
+    "version": "v0.16.0",
+    "release_date": "2026-06-20",
+    "description": "添加 AI 反馈环和预测模型支持，提升报工质检智能化水平。"
+  },
+  {
+    "version": "v0.17.0",
+    "release_date": "2026-06-21",
+    "description": "新增 CRM 核心模块及客户画像等功能；修复多语言失效问题；添加默认定时任务及部分新页面菜单和路由；重写宝塔部署文档数据库升级章节，增加完整版本历史和常用命令。"
+  },
+  {
+    "version": "v0.18.0",
+    "release_date": "2026-06-23",
+    "description": "新增行业包管理及微信小程序订阅消息功能；Pro manifest 补全 AI 页面目录，防止泄漏到社区版。"
+  },
+  {
+    "version": "v0.19.0",
+    "release_date": "2026-06-24",
+    "description": "新增行业包管理使用文档与相关说明。"
+  },
+  {
+    "version": "v0.20.0",
+    "release_date": "2026-06-25",
+    "description": "平台支持套餐层级、交付方式及行业包权限控制；优化 release-all.sh 发布脚本提交消息处理逻辑。"
+  },
+  {
+    "version": "v0.21.0",
+    "release_date": "2026-06-26",
+    "description": "修复 Report.submitted_at 报错；添加图片预览；支持本地备份；平台设置优化。"
+  },
+  {
+    "version": "v0.22.0",
+    "release_date": "2026-07-05",
+    "description": "平台新增 portal 站点地址配置与登录页注册链接；celerybeat 调度文件加入 .gitignore。"
+  },
+  {
+    "version": "v0.23.0",
+    "release_date": "2026-07-16",
+    "description": "补充并完善 Celery 服务部署与使用说明文档（运维指南）。"
+  },
+  {
+    "version": "v0.24.0",
+    "release_date": "2026-07-18",
+    "description": "统一消息推送调度，修复事务内推送日志未提交的问题。"
+  },
+  {
+    "version": "v1.0.0",
+    "release_date": "2026-08-06",
+    "description": "正式版发布：全站替换硬编码色值为设计令牌并新增通用组件与主题配置；更新七牛 SDK host 缓存过期时间；完成系统全面优化与功能迭代；完成社区版拆分与官网配置更新。"
+  }
+]

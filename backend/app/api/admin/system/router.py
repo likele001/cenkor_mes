@@ -21,6 +21,7 @@ from app.api.admin.system.wechat_mp import router as wechat_mp_router
 from app.api.admin.system.users import router as users_router
 from app.api.admin.system.invites import router as invites_router
 from app.api.admin.system.codes import router as codes_router
+from app.api.admin.system.version import router as version_router
 
 
 router = APIRouter()
@@ -45,3 +46,4 @@ router.include_router(attendance_records_router, prefix="/attendance-records", t
 router.include_router(skills_router, prefix="/skills", tags=["admin-system-skills"])
 router.include_router(attachments_router, prefix="/attachments", tags=["admin-system-attachments"])
 router.include_router(operation_logs_router, prefix="/operation-logs", tags=["admin-system-operation-logs"])
+router.include_router(version_router, prefix="/version", tags=["admin-system-version"])
