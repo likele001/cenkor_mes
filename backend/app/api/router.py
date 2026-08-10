@@ -59,6 +59,22 @@ api_router.include_router(admin_subcontract_router, prefix="/admin/subcontract",
 api_router.include_router(h5_router, prefix="/h5", tags=["h5"])
 api_router.include_router(ws_dashboard_router, prefix="/ws", tags=["websocket"])
 
+from app.api.feishu.router import router as feishu_open_router
+
+api_router.include_router(feishu_open_router, prefix="/feishu", tags=["feishu-open"])
+
+from app.api.wecom.router import router as wecom_open_router
+
+api_router.include_router(wecom_open_router, prefix="/wecom", tags=["wecom-open"])
+
+from app.api.dingtalk.router import router as dingtalk_open_router
+
+api_router.include_router(dingtalk_open_router, prefix="/dingtalk", tags=["dingtalk-open"])
+
+from app.api.v1.push_monitor import router as push_monitor_router
+
+api_router.include_router(push_monitor_router, prefix="/admin/push-monitor", tags=["admin-push-monitor"], dependencies=_admin_deps)
+
 from app.api.miniapp.auth import router as miniapp_auth_router
 
 api_router.include_router(miniapp_auth_router, prefix="/miniapp/auth", tags=["miniapp"])

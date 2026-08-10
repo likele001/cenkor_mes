@@ -201,6 +201,7 @@ def _create_log(
     payload = _enrich_payload(payload, target, user=user)
     status = "deferred" if scheduled_at and scheduled_at > datetime.now() else "pending"
     common = dict(
+        tenant_id=1,
         event_code=event_code,
         target_kind=target["kind"],
         target_ref=target["ref"],
