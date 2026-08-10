@@ -331,7 +331,6 @@ def run_schedule_pipeline(
 
             emit_feishu_event(
                 db,
-                tenant_id,
                 "plan.automation_failed",
                 title="生产自动化失败",
                 content=str(e)[:500],
@@ -390,7 +389,6 @@ def auto_create_plan_for_order(
 
             emit_feishu_event(
                 db,
-                tenant_id,
                 "plan.automation_failed",
                 title="订单确认后自动建计划失败",
                 content=pre["checks"][0]["message"] if pre["checks"] else "检查未通过",
