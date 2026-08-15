@@ -123,5 +123,10 @@
     "version": "v1.0.0",
     "release_date": "2026-08-06",
     "description": "正式版发布：全站替换硬编码色值为设计令牌并新增通用组件与主题配置；更新七牛 SDK host 缓存过期时间；完成系统全面优化与功能迭代；完成社区版拆分与官网配置更新。"
+  },
+  {
+    "version": "v1.0.1",
+    "release_date": "2026-08-15",
+    "description": "接入 release-all.sh 版本发布机制（对齐 lightmes 发布流程）"
   }
 ]
