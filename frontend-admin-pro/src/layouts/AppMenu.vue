@@ -59,6 +59,39 @@
       </el-menu-item>
     </el-sub-menu>
 
+    <el-sub-menu index="purchase" v-if="purchaseItems.length">
+      <template #title>
+        <el-icon><Van /></el-icon>
+        <span>{{ t('menu.purchase') }}</span>
+      </template>
+      <el-menu-item v-for="it in purchaseItems" :key="it.path" :index="it.path">
+        <el-icon><component :is="it.icon" /></el-icon>
+        <span>{{ t(it.i18nKey) }}</span>
+      </el-menu-item>
+    </el-sub-menu>
+
+    <el-sub-menu index="warehouse" v-if="warehouseItems.length">
+      <template #title>
+        <el-icon><Box /></el-icon>
+        <span>{{ t('menu.warehouse') }}</span>
+      </template>
+      <el-menu-item v-for="it in warehouseItems" :key="it.path" :index="it.path">
+        <el-icon><component :is="it.icon" /></el-icon>
+        <span>{{ t(it.i18nKey) }}</span>
+      </el-menu-item>
+    </el-sub-menu>
+
+    <el-sub-menu index="finance" v-if="financeItems.length">
+      <template #title>
+        <el-icon><Money /></el-icon>
+        <span>{{ t('menu.finance') }}</span>
+      </template>
+      <el-menu-item v-for="it in financeItems" :key="it.path" :index="it.path">
+        <el-icon><component :is="it.icon" /></el-icon>
+        <span>{{ t(it.i18nKey) }}</span>
+      </el-menu-item>
+    </el-sub-menu>
+
     <el-menu-item v-if="auth.hasAnyPermission(['report.view'])" index="/reports">
       <el-icon><DataAnalysis /></el-icon>
       <span>{{ t('menu.reportsOverview') }}</span>
@@ -152,6 +185,8 @@ const systemAll: MenuItem[] = [
   { path: '/system/attachments', i18nKey: 'menu.attachments', permissions: ['attachment.view'], icon: FolderOpened },
   { path: '/system/operation-logs', i18nKey: 'menu.operationLogs', permissions: ['operation_log.view'], icon: Notebook },
 { path: '/system/about', i18nKey: 'menu.systemAbout', permissions: ['setting.manage'], icon: InfoFilled },
+  { path: '/system/crm-adapter', i18nKey: 'menu.crmAdapter', permissions: ['setting.manage'], icon: Connection },
+  { path: '/system/crm-orders', i18nKey: 'menu.crmOrders', permissions: ['setting.manage'], icon: List },
 ]
 
 const masterAll: MenuItem[] = [
@@ -187,7 +222,30 @@ const productionAll: MenuItem[] = [
   { path: '/purchase/subcontract', i18nKey: 'menu.subcontractOrders', permissions: ['purchase.manage'], icon: Van },
 ]
 
+const purchaseAll: MenuItem[] = [
+  { path: '/purchase/orders', i18nKey: 'menu.purchaseOrders', permissions: ['purchase.manage'], icon: DocumentCopy },
+  { path: '/purchase/subcontract', i18nKey: 'menu.subcontractOrders', permissions: ['purchase.manage'], icon: Van },
+  { path: '/finance/supplier-statements', i18nKey: 'menu.supplierStatements', permissions: ['finance.manage'], icon: Money },
+]
+
+const warehouseAll: MenuItem[] = [
+  { path: '/warehouse/warehouses', i18nKey: 'menu.warehouses', permissions: ['warehouse.manage'], icon: OfficeBuilding },
+  { path: '/warehouse/stocks', i18nKey: 'menu.stocks', permissions: ['warehouse.manage'], icon: Box },
+  { path: '/warehouse/shipments', i18nKey: 'menu.shipments', permissions: ['order.manage'], icon: Van },
+]
+
+const financeAll: MenuItem[] = [
+  { path: '/finance/supplier-statements', i18nKey: 'menu.supplierStatements', permissions: ['finance.manage'], icon: Money },
+  { path: '/finance/payables', i18nKey: 'menu.payables', permissions: ['finance.manage'], icon: Wallet },
+  { path: '/finance/statements', i18nKey: 'menu.financeStatements', permissions: ['finance.manage'], icon: DocumentCopy },
+  { path: '/finance/ledgers', i18nKey: 'menu.financeLedgers', permissions: ['finance.manage'], icon: List },
+  { path: '/finance/profit', i18nKey: 'menu.financeProfit', permissions: ['finance.manage'], icon: DataLine },
+]
+
 const systemItems = computed(() => systemAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 const masterItems = computed(() => masterAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 const productionItems = computed(() => productionAll.filter((x) => auth.hasAnyPermission(x.permissions)))
+const purchaseItems = computed(() => purchaseAll.filter((x) => auth.hasAnyPermission(x.permissions)))
+const warehouseItems = computed(() => warehouseAll.filter((x) => auth.hasAnyPermission(x.permissions)))
+const financeItems = computed(() => financeAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 </script>
