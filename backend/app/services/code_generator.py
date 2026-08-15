@@ -37,6 +37,9 @@ class BizType:
     MRP_RUN = "mrp_run"
     QUOTATION = "quotation"
     SUBCONTRACT = "subcontract"
+    MATERIAL_ISSUE = "material_issue"
+    MATERIAL_RETURN = "material_return"
+    WAREHOUSE_ENTRY = "warehouse_entry"
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,9 @@ _RULES: dict[str, _Rule] = {
     BizType.MRP_RUN: _Rule("MRP"),
     BizType.QUOTATION: _Rule("QT"),
     BizType.SUBCONTRACT: _Rule("SC"),
+    BizType.MATERIAL_ISSUE: _Rule("LI"),
+    BizType.MATERIAL_RETURN: _Rule("RT"),
+    BizType.WAREHOUSE_ENTRY: _Rule("WE"),
 }
 
 

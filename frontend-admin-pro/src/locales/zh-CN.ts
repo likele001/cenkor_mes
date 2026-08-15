@@ -381,6 +381,9 @@ export default {
     salarySlips: '工资条签名',
     hourlySalary: '计时工资',
     stocks: '库存管理',
+    materialIssues: '领料管理',
+    materialReturns: '退料管理',
+    warehouseEntries: "入库管理",
     warehouses: '仓库管理',
     equipment: '设备管理',
     trace: '溯源查询',
@@ -3533,4 +3536,3 @@ skuBatch: {
     saved: '保存成功，10秒内生效',
   },
 }
-

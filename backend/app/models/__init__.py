@@ -129,3 +129,6 @@ __all__ = [
 ]
 
 from app.models.supplier_statement import SupplierStatement, SupplierStatementItem
+
+from app.models.material_issue import MaterialIssue, MaterialIssueItem, MaterialReturn, MaterialReturnItem
+from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
