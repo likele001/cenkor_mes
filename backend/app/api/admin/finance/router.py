@@ -320,6 +320,10 @@ def mark_paid_api(
     return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
 
 
+
+from app.api.admin.finance.supplier_statements import router as supplier_statements_router
+router.include_router(supplier_statements_router)
+
 @router.get("/{statement_id}")
 def get_api(
     statement_id: int,
@@ -340,3 +344,4 @@ def get_api(
         for si in item.items
     ]
     return ok(data)
+

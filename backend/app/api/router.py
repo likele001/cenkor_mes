@@ -18,6 +18,7 @@ from app.api.v1.files import router as files_router
 from app.api.admin.shift.router import router as admin_shift_router
 from app.api.admin.exec_dashboard.router import router as admin_exec_dashboard_router
 from app.api.ws.dashboard import router as ws_dashboard_router
+from app.integration.crm_adapter.router import inbound_router, admin_router
 from app.api.admin.cron_jobs import router as admin_cron_jobs_router
 from app.api.admin.export_jobs import router as admin_export_jobs_router
 from app.api.admin.automation.router import router as admin_automation_router
@@ -58,6 +59,8 @@ api_router.include_router(admin_mrp_router, prefix="/admin/mrp", tags=["admin-mr
 api_router.include_router(admin_subcontract_router, prefix="/admin/subcontract", tags=["admin-subcontract"], dependencies=_admin_deps)
 api_router.include_router(h5_router, prefix="/h5", tags=["h5"])
 api_router.include_router(ws_dashboard_router, prefix="/ws", tags=["websocket"])
+api_router.include_router(inbound_router, tags=["crm-adapter"])
+api_router.include_router(admin_router, prefix="/crm-adapter", tags=["crm-adapter"])
 
 from app.api.feishu.router import router as feishu_open_router
 

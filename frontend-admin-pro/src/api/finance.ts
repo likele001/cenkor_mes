@@ -53,6 +53,49 @@ export type LedgerCreateIn = {
   remark?: string | null
 }
 
+export type SupplierStatementOut = {
+  id: number
+  supplier_id: number
+  supplier_code: string | null
+  supplier_name: string | null
+  code: string
+  period_start: string | null
+  period_end: string | null
+  total_amount: number
+  status: string
+  remark: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SupplierStatementItemOut = {
+  purchase_order_id: number
+  purchase_order_code: string | null
+  amount: number
+}
+
+export type SupplierStatementDetailOut = SupplierStatementOut & {
+  supplier: { id: number; code: string; name: string } | null
+  items: SupplierStatementItemOut[]
+}
+
+export type SupplierStatementCreateIn = {
+  supplier_id: number
+  order_ids: number[]
+  period_start?: string | null
+  period_end?: string | null
+  remark?: string | null
+}
+
+export type PayableOut = {
+  supplier_id: number
+  supplier_code: string | null
+  supplier_name: string | null
+  total_payable: number
+  paid_amount: number
+  unpaid_amount: number
+}
+
 export type ProfitOut = {
   month: string
   revenue: number
@@ -105,5 +148,24 @@ export const financeApi = {
   },
   exportStatementsExcel(params: { customer_id?: number; status?: string }) {
     return http.request<ExportJobOut>({ url: '/admin/finance/statements/export', method: 'POST', params })
+  },
+
+  listSupplierStatements(params: any) {
+    return http.request<ListResp<SupplierStatementOut>>({ url: '/admin/finance/supplier-statements', method: 'GET', params })
+  },
+  createSupplierStatement(data: SupplierStatementCreateIn) {
+    return http.request<SupplierStatementOut>({ url: '/admin/finance/supplier-statements', method: 'POST', data })
+  },
+  getSupplierStatement(id: number) {
+    return http.request<SupplierStatementDetailOut>({ url: `/admin/finance/supplier-statements/${id}`, method: 'GET' })
+  },
+  confirmSupplierStatement(id: number) {
+    return http.request<{ id: number; status: string }>({ url: `/admin/finance/supplier-statements/${id}/confirm`, method: 'POST' })
+  },
+  markSupplierStatementPaid(id: number) {
+    return http.request<{ id: number; status: string; updated_at: string }>({ url: `/admin/finance/supplier-statements/${id}/mark-paid`, method: 'POST' })
+  },
+  getSupplierPayables() {
+    return http.request<ListResp<PayableOut>>({ url: '/admin/finance/supplier-statements/payables', method: 'GET' })
   },
 }

@@ -17,9 +17,20 @@ PRODUCTION_LOCK_PLAN_STATUSES = ("in_progress", "done")
 
 
 def _next_task_seq(db: Session) -> int:
+    """取现有任务编号中最大的数字序号 +1，避免与已存在编号冲突。
+
+    原实现用 MAX(Task.id)+1：删除任务后 id 回落会导致编号复用并撞唯一约束，
+    改为基于 task_code 的 TK 数字后缀计算（常规无删除时与 MAX(id) 等价）。
+    """
+    max_seq = 0
+    for code in db.scalars(select(Task.task_code)).all():
+        if code and code.startswith("TK") and code[2:].isdigit():
+            n = int(code[2:])
+            if n > max_seq:
+                max_seq = n
     from sqlalchemy import func as sa_func
-    max_id = db.scalar(select(sa_func.max(Task.id)))
-    return (max_id or 0) + 1
+    max_id = db.scalar(select(sa_func.max(Task.id))) or 0
+    return max(max_seq, max_id) + 1
 
 
 def _make_task_code(seq: int) -> str:
