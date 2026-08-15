@@ -10,6 +10,8 @@ from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.services.code_generator import BizType, resolve_code
 from app.api.admin.warehouse.shipments import router as shipments_router
+from app.api.admin.warehouse.material_issues import router as material_issues_router
+from app.api.admin.warehouse.warehouse_entries import router as warehouse_entries_router
 from app.tasks._sync_excel import make_excel_response
 
 
@@ -25,6 +27,8 @@ def _warehouse_code_exists(db: Session, code: str) -> bool:
 
 router = APIRouter(dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 router.include_router(shipments_router)
+router.include_router(material_issues_router)
+router.include_router(warehouse_entries_router)
 
 
 @router.get("/warehouses")

@@ -177,6 +177,9 @@ const routes: RouteRecordRaw[] = [
 
       { path: 'warehouse/warehouses', name: 'warehouse-warehouses', component: () => import('@/pages/warehouse/WarehousesPage.vue'), meta: { title: () => i18n.global.t('menu.warehouses'), permissions: ['warehouse.manage'] } },
       { path: 'warehouse/stocks', name: 'warehouse-stocks', component: () => import('@/pages/warehouse/StocksPage.vue'), meta: { title: () => i18n.global.t('menu.stocks'), permissions: ['warehouse.manage'] } },
+      { path: 'warehouse/material-issues', name: 'warehouse-material-issues', component: () => import('@/pages/warehouse/MaterialIssuesPage.vue'), meta: { title: () => i18n.global.t('menu.materialIssues'), permissions: ['warehouse.manage'] } },
+      { path: 'warehouse/material-returns', name: 'warehouse-material-returns', component: () => import('@/pages/warehouse/MaterialReturnsPage.vue'), meta: { title: () => i18n.global.t('menu.materialReturns'), permissions: ['warehouse.manage'] } },
+      { path: 'warehouse/entries', name: 'warehouse-entries', component: () => import('@/pages/warehouse/WarehouseEntriesPage.vue'), meta: { title: () => i18n.global.t('menu.warehouseEntries'), permissions: ['warehouse.manage'] } },
       { path: 'warehouse/shipments', name: 'warehouse-shipments', component: () => import('@/pages/warehouse/ShipmentsPage.vue'), meta: { title: () => i18n.global.t('menu.shipments'), permissions: ['order.manage'] } },
 
       { path: 'purchase/orders', name: 'purchase-orders', component: () => import('@/pages/purchase/PurchaseOrdersPage.vue'), meta: { title: () => i18n.global.t('menu.purchaseOrders'), permissions: ['purchase.manage'] } },

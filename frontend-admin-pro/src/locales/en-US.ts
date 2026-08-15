@@ -296,6 +296,9 @@ export default {
     salary: 'Payroll',
     salarySlips: 'Payslip Sign-off',
     stocks: 'Inventory',
+    materialIssues: 'Material Issues',
+    materialReturns: 'Material Returns',
+    warehouseEntries: "Warehouse Entries",
     warehouses: 'Warehouses',
     equipment: 'Equipment',
     trace: 'Traceability',
@@ -2737,4 +2740,3 @@ export default {
     },
   },
 }
-

@@ -46,4 +46,4 @@ router.include_router(attendance_records_router, prefix="/attendance-records", t
 router.include_router(skills_router, prefix="/skills", tags=["admin-system-skills"])
 router.include_router(attachments_router, prefix="/attachments", tags=["admin-system-attachments"])
 router.include_router(operation_logs_router, prefix="/operation-logs", tags=["admin-system-operation-logs"])
-router.include_router(version_router, prefix="/version", tags=["admin-system-version"])
+router.include_router(version_router, tags=["admin-system-version"])

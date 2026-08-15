@@ -231,6 +231,9 @@ const purchaseAll: MenuItem[] = [
 const warehouseAll: MenuItem[] = [
   { path: '/warehouse/warehouses', i18nKey: 'menu.warehouses', permissions: ['warehouse.manage'], icon: OfficeBuilding },
   { path: '/warehouse/stocks', i18nKey: 'menu.stocks', permissions: ['warehouse.manage'], icon: Box },
+  { path: '/warehouse/material-issues', i18nKey: 'menu.materialIssues', permissions: ['warehouse.manage'], icon: Box },
+  { path: '/warehouse/material-returns', i18nKey: 'menu.materialReturns', permissions: ['warehouse.manage'], icon: Box },
+  { path: '/warehouse/entries', i18nKey: 'menu.warehouseEntries', permissions: ['warehouse.manage'], icon: Box },
   { path: '/warehouse/shipments', i18nKey: 'menu.shipments', permissions: ['order.manage'], icon: Van },
 ]
 
