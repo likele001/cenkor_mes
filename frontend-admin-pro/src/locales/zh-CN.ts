@@ -3295,6 +3295,19 @@ skuBatch: {
       supplier: '供应商',
       noData: '暂无数据',
     },
+    salary: {
+      hourly: {
+        title: '计时工资',
+        manualGenerate: '手动生成',
+        batchSetRate: '批量设置时薪',
+        employee: '员工',
+        date: '日期',
+        type: '类型',
+        workHours: '工时',
+        hourlyRate: '时薪',
+        month: '月份',
+      },
+    },
   },
   crm: {
     publicPool: {
