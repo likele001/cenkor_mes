@@ -18,6 +18,17 @@
             </el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item :label="t('system.settings.sequencePolicy')">
+          <el-select v-model="modeForm.sequence_policy" class="!w-72">
+            <el-option
+              v-for="s in sequenceOptions"
+              :key="s.value"
+              :label="s.label"
+              :value="s.value"
+            />
+          </el-select>
+          <div class="text-xs text-zinc-500 mt-1 ml-1">{{ sequenceHelp }}</div>
+        </el-form-item>
         <p v-if="modeHelp" class="text-sm text-zinc-600 -mt-2 mb-2 ml-[120px]">{{ modeHelp }}</p>
         <el-form-item>
           <el-button type="primary" :loading="modeSaving" @click="saveModeSettings">{{ t('system.settings.saveMode') }}</el-button>
@@ -200,9 +211,11 @@ const loading = ref(false)
 const items = ref<SettingOut[]>([])
 const modeLoading = ref(false)
 const modeSaving = ref(false)
-const modeForm = reactive({ default_mode: 'batch' })
+const modeForm = reactive({ default_mode: 'batch', sequence_policy: 'soft' })
 const modeOptions = ref<{ value: string; label: string; help: string; enabled: boolean }[]>([])
 const modeHelp = computed(() => modeOptions.value.find((m) => m.value === modeForm.default_mode)?.help || '')
+const sequenceOptions = ref<{ value: string; label: string; help: string }[]>([])
+const sequenceHelp = computed(() => sequenceOptions.value.find((s) => s.value === modeForm.sequence_policy)?.help || '')
 
 const wxLoading = ref(false)
 const wxSaving = ref(false)
@@ -317,6 +330,8 @@ async function loadModeSettings() {
     const cfg = await systemApi.getReportModeSettings()
     modeForm.default_mode = cfg.default_mode || 'batch'
     modeOptions.value = cfg.modes || []
+    modeForm.sequence_policy = cfg.sequence_policy || 'soft'
+    sequenceOptions.value = cfg.sequence_policies || []
   } finally {
     modeLoading.value = false
   }
@@ -325,7 +340,7 @@ async function loadModeSettings() {
 async function saveModeSettings() {
   modeSaving.value = true
   try {
-    await systemApi.saveReportModeSettings({ default_mode: modeForm.default_mode })
+    await systemApi.saveReportModeSettings({ default_mode: modeForm.default_mode, sequence_policy: modeForm.sequence_policy })
     ElMessage.success(t('system.settings.modeSaved'))
     await loadModeSettings()
   } finally {

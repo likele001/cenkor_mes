@@ -14,7 +14,11 @@ from app.models.trace import TraceCode
 from app.crud.trace import TRACE_TASK_SEQ_ORDER
 from app.models.work_order import WorkOrder
 from app.models.work_order_piece import WorkOrderPiece
-from app.services.report_mode_settings import get_default_report_mode, use_unit_report_mode
+from app.services.report_mode_settings import (
+    get_default_report_mode,
+    get_sequence_policy,
+    use_unit_report_mode,
+)
 
 ACTIVE_UNIT_STATUSES = ("submitted", "leader_approved", "qc_approved")
 
@@ -134,6 +138,7 @@ def _is_piece_available_for_task(
     piece: WorkOrderPiece,
     *,
     exclude_unit_id: int = 0,
+    policy: str = "soft",
 ) -> bool:
     if piece.status == "void":
         return False
@@ -142,6 +147,11 @@ def _is_piece_available_for_task(
     if _task_has_qc_approved_good(db, task.id, piece.id):
         return False
 
+    # 柔性/自由：只要没被占、没做完本道，即可报（不再要求上一道良品）
+    if policy in ("soft", "free"):
+        return True
+
+    # strict（旧方案）：非首工序必须上一道已终审良品
     first = is_first_process_task(db, task)
     if first:
         return True
@@ -161,10 +171,11 @@ def count_available_pieces_for_task(db: Session, task: Task) -> int:
     if not wo:
         return 0
     ensure_work_order_piece_pool(db, wo.id, wo.qty)
+    policy = get_sequence_policy(db)
     return sum(
         1
         for piece in list_pieces_for_work_order(db, wo.id)
-        if _is_piece_available_for_task(db, task, piece)
+        if _is_piece_available_for_task(db, task, piece, policy=policy)
     )
 
 
@@ -180,14 +191,14 @@ def claim_next_piece_for_task(
     if unit.piece_id:
         piece = db.get(WorkOrderPiece, unit.piece_id)
         if piece and _is_piece_available_for_task(
-            db, task, piece, exclude_unit_id=unit.id
+            db, task, piece, exclude_unit_id=unit.id, policy=get_sequence_policy(db)
         ):
             return piece
         unit.piece_id = None
         db.flush()
 
     for piece in list_pieces_for_work_order(db, wo.id):
-        if _is_piece_available_for_task(db, task, piece, exclude_unit_id=unit.id):
+        if _is_piece_available_for_task(db, task, piece, exclude_unit_id=unit.id, policy=get_sequence_policy(db)):
             unit.piece_id = piece.id
             db.flush()
             return piece

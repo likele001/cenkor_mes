@@ -12,6 +12,7 @@ router = APIRouter(dependencies=[Depends(require_permissions(["setting.manage"])
 
 class ReportModeSettingsIn(BaseModel):
     default_mode: str = Field(default="batch", pattern="^(batch|unit|lot)$")
+    sequence_policy: str | None = Field(default=None, pattern="^(strict|soft|free)$")
 
 
 @router.get("/report-mode")
@@ -29,6 +30,8 @@ def put_api(
         from fastapi import HTTPException
 
         raise HTTPException(status_code=400, detail="批次流转模式尚未开放，请先使用批量或逐件")
-    data = save_report_mode_settings(db, tenant_id=user.tenant_id, default_mode=payload.default_mode)
+    data = save_report_mode_settings(
+        db, tenant_id=user.tenant_id, default_mode=payload.default_mode, sequence_policy=payload.sequence_policy
+    )
     db.commit()
     return ok(data)

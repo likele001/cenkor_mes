@@ -153,9 +153,11 @@ export const systemApi = {
       default_mode: string
       default_mode_label: string
       modes: { value: string; label: string; help: string; enabled: boolean }[]
+      sequence_policy: string
+      sequence_policies: { value: string; label: string; help: string }[]
     }>({ url: '/admin/system/report-mode', method: 'GET' })
   },
-  saveReportModeSettings(data: { default_mode: string }) {
+  saveReportModeSettings(data: { default_mode: string; sequence_policy: string }) {
     return http.request({ url: '/admin/system/report-mode', method: 'PUT', data })
   },
   saveReportMediaSettings(data: {
