@@ -133,5 +133,10 @@
     "version": "v1.0.2",
     "release_date": "2026-08-15",
     "description": " 新增 VERSION 基线与 scripts/release-all.sh"
+  },
+  {
+    "version": "v1.0.3",
+    "release_date": "2026-08-18",
+    "description": "feat(report_mode): 支持柔性顺序与自由报工策略 - 在报工模式配置中增加 sequence_policy 字段，支持 strict、soft、free 三种策略 - 报工接口增加对 sequence_policy 的保存与读取处理 - 逐件报工时根据 sequence_policy 实现柔性顺序提示功能：soft 策略下，非首工序且上一道工序未完成时软提示确认；free 策略完全不限制顺序，仅做异常预警 - 工序流转相关逻辑新增 policy 参数，调整是否允许报工的判断逻辑 - UI 返回的报工模式设置接口新增顺序策略选项与帮助信息 - 启动脚本端口修改为 8500 以匹配配置调整"
   }
 ]
