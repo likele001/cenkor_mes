@@ -2093,7 +2093,6 @@ skuBatch: {
       reportMode: '报工形态（全厂默认）',
       reportModeHint: '不同车间需求不同，可先选一种默认形态；批次流转预留，后期可按企业单独定制开发。',
       defaultMode: '默认形态',
-      sequencePolicy: '工序流转策略',
       saveMode: '保存报工形态',
       modeSaved: '报工形态已保存，员工端重新打开任务后生效',
       wechatMiniapp: '微信小程序',

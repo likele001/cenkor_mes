@@ -265,41 +265,13 @@ async function submit() {
   if (!attachmentIdsStr()) { uni.showToast({ title: '请现场拍照', icon: 'none' }); return }
   submitting.value = true
   try {
-    const res = await submitReportUnit({
+    await submitReportUnit({
       task_code: taskCode.value,
       unit_seq: poolMode.value ? undefined : selectedSeq.value ?? undefined,
       result_type: resultType.value,
       attachment_ids: attachmentIdsStr(),
       remark: remark.value.trim() || undefined,
     })
-    if ('anomaly_warning' in res) {
-      const confirmed = await new Promise<boolean>((resolve) => {
-        uni.showModal({
-          title: '提示',
-          content: (res.anomaly_reason || '确认继续提交？') + '\n\n确认继续提交还是取消？',
-          confirmText: '确认提交',
-          cancelText: '取消',
-          success: (r) => resolve(!!r.confirm),
-        })
-      })
-      if (!confirmed) {
-        submitting.value = false
-        return
-      }
-      const res2 = await submitReportUnit({
-        task_code: taskCode.value,
-        unit_seq: poolMode.value ? undefined : selectedSeq.value ?? undefined,
-        result_type: resultType.value,
-        attachment_ids: attachmentIdsStr(),
-        remark: remark.value.trim() || undefined,
-        anomaly_confirmed: true,
-      })
-      if ('anomaly_warning' in res2) {
-        uni.showToast({ title: '提交失败', icon: 'none' })
-        submitting.value = false
-        return
-      }
-    }
     clearAttachments()
     uploadCount.value = 0
     remark.value = ''

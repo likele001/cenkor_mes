@@ -36,22 +36,14 @@ export function getTaskUnits(taskCode: string) {
   }>(`/h5/tasks/${encodeURIComponent(taskCode)}/units`)
 }
 
-export interface AnomalyWarning {
-  anomaly_warning: boolean
-  anomaly_level?: string
-  anomaly_reason?: string
-  anomaly_detail?: { type?: string; [k: string]: unknown }
-}
-
 export function submitReportUnit(data: {
   task_code: string
   unit_seq?: number
   result_type: 'good' | 'bad'
   attachment_ids: string
   remark?: string
-  anomaly_confirmed?: boolean
 }) {
-  return apiPost<ReportUnitItem | AnomalyWarning>('/h5/report-units', data)
+  return apiPost<ReportUnitItem>('/h5/report-units', data)
 }
 
 export function getMyReportUnits(params?: { status?: string; offset?: number; limit?: number }) {

@@ -17,14 +17,10 @@ from app.crud.report_unit import (
 from app.crud.process_flow import (
     auto_bind_piece_to_unit,
     get_flow_context_for_task,
-    get_prev_process_task,
-    is_first_process_task,
-    piece_display_label,
-    _prev_process_unit_done,
-)
+    piece_display_label)
 from app.models.task import Task
 from app.models.work_order_piece import WorkOrderPiece
-from app.services.report_mode_settings import get_sequence_policy, use_unit_report_mode
+from app.services.report_mode_settings import use_unit_report_mode
 from app.services.ai.report_anomaly import check_report_anomaly
 from app.services.ai.report_risk_score import apply_auto_pass, calculate_risk_score
 from app.crud.task import get_task_by_code, get_task_by_id
@@ -169,19 +165,6 @@ def submit_report_unit_api(
             auto_bind_piece_to_unit(db, unit, task)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-
-    # ── 柔性顺序：上一道工序未完成时软提示确认（不硬拦）──
-    if not payload.anomaly_confirmed and use_unit_report_mode(db) and unit.piece_id:
-        if get_sequence_policy(db) == "soft":
-            if not is_first_process_task(db, task):
-                prev_task = get_prev_process_task(db, task)
-                if prev_task and not _prev_process_unit_done(db, prev_task, unit.piece_id):
-                    return ok({
-                        "anomaly_warning": True,
-                        "anomaly_level": "suspect",
-                        "anomaly_reason": "上一道工序尚未终审通过，确认继续报工？",
-                        "anomaly_detail": {"type": "sequence_soft"},
-                    })
 
     # ── 异常检测（提交前拦截，仅首次提交时检查）──
     if not payload.anomaly_confirmed:
