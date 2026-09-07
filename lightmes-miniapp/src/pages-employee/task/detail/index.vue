@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="emp-page">
     <view v-if="item" class="emp-card emp-card--striped detail-card" :class="stripClass">

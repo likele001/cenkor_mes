@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书开放平台公开回调（无需登录）"""
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ def feishu_oauth_callback_api(
         bot_link = f"https://applink.feishu.cn/client/bot/open?appId={app_id}" if app_id else ""
         h5_base = (cfg.get("h5_public_base_url") or "").strip().rstrip("/")
         bot_btn = (
-            f'<p style="margin-top:20px;"><a href="{bot_link}" style="display:inline-block;padding:12px 24px;background:#3370ff;color:#fff;text-decoration:none;border-radius:6px;font-size:16px;">打开 LightMes 机器人（必点）</a></p>'
+            f'<p style="margin-top:20px;"><a href="{bot_link}" style="display:inline-block;padding:12px 24px;background:#3370ff;color:#fff;text-decoration:none;border-radius:6px;font-size:16px;">打开 CenkorMES 机器人（必点）</a></p>'
             if bot_link
             else ""
         )

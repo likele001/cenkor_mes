@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """生产计划投产前就绪检查：齐套、工艺路线、工价"""
 
 from __future__ import annotations

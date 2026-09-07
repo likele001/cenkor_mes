@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 从旧系统 scanwork 导出 SQL（参考文件.sql）导入：
   工序 → 产品 → 型号(SKU) → 型号×工序工价 → 产品默认工艺路线

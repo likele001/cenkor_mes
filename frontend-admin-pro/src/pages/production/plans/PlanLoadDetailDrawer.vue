@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-drawer :model-value="open" size="720px" :title="`负荷明细：${day || '-'}`" destroy-on-close @update:model-value="emit('update:open', $event)">
     <div v-loading="loading">

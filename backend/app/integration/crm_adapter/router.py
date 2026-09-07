@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """crm_adapter 接口层。
 
 入站（CRM 主动调用，无需登录，HMAC 验签）：

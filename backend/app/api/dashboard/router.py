@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,10 +10,8 @@ from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.dashboard import get_dashboard_charts, get_dashboard_summary
 from app.crud.kanban import get_kanban_order_detail, list_kanban_orders
-from app.models.dingtalk_push_log import DingtalkPushLog
 from app.models.feishu_push_log import FeishuPushLog
 from app.models.user import User
-from app.models.wecom_push_log import WecomPushLog
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["dashboard.view"]))])
@@ -116,82 +116,10 @@ def push_stats_api(
         or 0
     )
 
-    wecom_total = int(
-        db.scalar(
-            select(func.count(WecomPushLog.id)).where(
-                WecomPushLog.created_at >= today_start,
-            )
-        )
-        or 0
-    )
-    wecom_success = int(
-        db.scalar(
-            select(func.count(WecomPushLog.id)).where(
-                WecomPushLog.created_at >= today_start,
-                WecomPushLog.status == "success",
-            )
-        )
-        or 0
-    )
-    wecom_failed = int(
-        db.scalar(
-            select(func.count(WecomPushLog.id)).where(
-                WecomPushLog.created_at >= today_start,
-                WecomPushLog.status == "failed",
-            )
-        )
-        or 0
-    )
-    wecom_retry = int(
-        db.scalar(
-            select(func.count(WecomPushLog.id)).where(
-                WecomPushLog.created_at >= today_start,
-                WecomPushLog.retry_count > 0,
-            )
-        )
-        or 0
-    )
-
-    dingtalk_total = int(
-        db.scalar(
-            select(func.count(DingtalkPushLog.id)).where(
-                DingtalkPushLog.created_at >= today_start,
-            )
-        )
-        or 0
-    )
-    dingtalk_success = int(
-        db.scalar(
-            select(func.count(DingtalkPushLog.id)).where(
-                DingtalkPushLog.created_at >= today_start,
-                DingtalkPushLog.status == "success",
-            )
-        )
-        or 0
-    )
-    dingtalk_failed = int(
-        db.scalar(
-            select(func.count(DingtalkPushLog.id)).where(
-                DingtalkPushLog.created_at >= today_start,
-                DingtalkPushLog.status == "failed",
-            )
-        )
-        or 0
-    )
-    dingtalk_retry = int(
-        db.scalar(
-            select(func.count(DingtalkPushLog.id)).where(
-                DingtalkPushLog.created_at >= today_start,
-                DingtalkPushLog.retry_count > 0,
-            )
-        )
-        or 0
-    )
-
-    today_total = feishu_total + wecom_total + dingtalk_total
-    today_success = feishu_success + wecom_success + dingtalk_success
-    today_failed = feishu_failed + wecom_failed + dingtalk_failed
-    today_retry = feishu_retry + wecom_retry + dingtalk_retry
+    today_total = feishu_total
+    today_success = feishu_success
+    today_failed = feishu_failed
+    today_retry = feishu_retry
     retry_rate = round((today_retry / today_total * 100), 1) if today_total else 0.0
 
     return ok({
@@ -206,18 +134,6 @@ def push_stats_api(
                 "success": feishu_success,
                 "failed": feishu_failed,
                 "retry": feishu_retry,
-            },
-            "wecom": {
-                "total": wecom_total,
-                "success": wecom_success,
-                "failed": wecom_failed,
-                "retry": wecom_retry,
-            },
-            "dingtalk": {
-                "total": dingtalk_total,
-                "success": dingtalk_success,
-                "failed": dingtalk_failed,
-                "retry": dingtalk_retry,
             },
         },
     })

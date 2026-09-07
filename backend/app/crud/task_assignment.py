@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
 
 from sqlalchemy import delete, func, select
@@ -284,35 +286,7 @@ def replace_task_assignments(
             )
         except Exception:
             pass
-        try:
-            from app.services.wecom.notify import notify_dispatch_assigned as wecom_notify_dispatch
-
-            wecom_notify_dispatch(
-                db,
-                user_ids=new_user_ids,
-                title="新任务派工",
-                content=f"任务 {task.task_code} 已派工，请至手机端查看",
-                biz_type="task",
-                biz_id=task.id,
-                task_code=task.task_code,
-            )
-        except Exception:
-            pass
-        try:
-            from app.services.dingtalk.notify import notify_dispatch_assigned as dingtalk_notify_dispatch
-
-            dingtalk_notify_dispatch(
-                db,
-                user_ids=new_user_ids,
-                title="新任务派工",
-                content=f"任务 {task.task_code} 已派工，请至手机端查看",
-                biz_type="task",
-                biz_id=task.id,
-                task_code=task.task_code,
-            )
-        except Exception:
-            pass
-    return result
+        return result
 
 
 def validate_report_qty_limit(

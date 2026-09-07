@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { i18n } from '@/locales'
 
 /** 规范化 SVG，便于浏览器以图片方式渲染 */

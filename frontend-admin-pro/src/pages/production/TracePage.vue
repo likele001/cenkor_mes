@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <script setup lang="ts">
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { onMounted, reactive, ref, computed } from 'vue'

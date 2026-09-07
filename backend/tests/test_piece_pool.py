@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """套号池：派工预赋码 + 谁有空谁领下一套"""
 
 import pytest

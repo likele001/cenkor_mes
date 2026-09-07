@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """解析 scanwork 导出的 INSERT 语句（参考文件.sql）"""
 
 from __future__ import annotations

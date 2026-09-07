@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """工资 / 计时 / 薪资导出 Celery 任务"""
 import json
 import logging

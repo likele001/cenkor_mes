@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 CenkorMES 演示数据 seed 脚本
 生成完整的业务闭环演示数据：客户→订单→工单→任务→报工→质检→工资+CRM+考勤

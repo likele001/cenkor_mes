@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request

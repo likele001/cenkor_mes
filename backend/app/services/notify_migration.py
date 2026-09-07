@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书/企微 settings 旧结构 → 新 channels 嵌套结构 一次性迁移
 
 旧结构 (例 飞书)：

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书个人推送必配项检查"""
 
 from __future__ import annotations
@@ -120,12 +122,12 @@ def build_personal_push_setup_check(*, app_id: str, app_secret: str, callback_ur
         },
         {
             "title": "飞书管理后台启用应用展示",
-            "detail": "管理后台 → 工作台 → 应用管理 → lightmes → 全部成员 + 勾选「在客户端展示」",
+            "detail": "管理后台 → 工作台 → 应用管理 → CenkorMES → 全部成员 + 勾选「在客户端展示」",
             "done": None,
         },
         {
             "title": "员工 OAuth 绑定并打开机器人",
-            "detail": "绑定后从工作台打开 lightmes，向机器人发送任意消息，激活个人通知通道",
+            "detail": "绑定后从工作台打开 CenkorMES，向机器人发送任意消息，激活个人通知通道",
             "done": None,
         },
     ]

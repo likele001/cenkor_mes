@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """通用 Excel 导出工具函数 — 供各报表导出 Celery task 复用"""
 import json
 import logging

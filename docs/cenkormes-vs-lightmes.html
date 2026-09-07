@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lightmes(SaaS) × cenkormes(独立版) 功能对比清单</title>
+<style>
+  :root{
+    --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
+    --bg:#f8fafc; --card:#fff;
+    --ok:#ecfdf5; --ok-b:#10b981; --no:#fef2f2; --no-b:#ef4444;
+    --half:#fffbeb; --half-b:#f59e0b; --brand:#4f46e5; --brand-b:#4f46e5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",Roboto,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+  header{padding:28px 30px;background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:#fff;border-radius:16px;margin-bottom:24px}
+  header h1{margin:0 0 6px;font-size:24px}
+  header .tag{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);padding:2px 10px;border-radius:20px;font-size:12px;margin-right:8px}
+  header p{margin:10px 0 0;opacity:.92;font-size:13px}
+  h2{font-size:18px;margin:32px 0 12px;padding-left:10px;border-left:4px solid var(--brand)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12.5px;color:var(--muted);padding:10px 16px;background:#fff;border:1px dashed var(--line);border-radius:10px;margin-bottom:22px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff}
+  th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#f3f4f6;font-weight:600}
+  tbody tr:hover{background:#fafbff}
+  .pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;white-space:nowrap}
+  .pill.ok{background:var(--ok);color:var(--ok-b)}
+  .pill.no{background:var(--no);color:var(--no-b)}
+  .pill.half{background:var(--half);color:var(--half-b)}
+  .pill.both{background:#eef2ff;color:var(--brand-b)}
+  .sub{font-size:12px;color:var(--muted)}
+  .count{font-weight:700;color:var(--brand)}
+  ul{margin:6px 0 0;padding-left:20px}
+  li{margin:3px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}.table-scroll{overflow-x:auto}}
+  code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-size:12px;color:#334155}
+  footer{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;margin:8px 0 4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>lightmes（SaaS） × cenkormes（独立版）功能对比清单</h1>
+  <div>
+    <span class="tag">版本定位核查</span>
+    <span class="tag">开源决策参考</span>
+    <span class="tag">2026-08-21</span>
+  </div>
+  <p>用于区分「商业收费的 SaaS 版」与「计划开源（AGPL）的独立版」，明确开源独立版应包含什么、收费项留在哪里。</p>
+</header>
+
+<div class="meta">
+  <div><b>核查对象</b>：<code>lightmes/backend</code>（SaaS 主仓）　×　<code>cenkormes/backend</code>（独立版）</div>
+  <div><b>核查方式</b>：服务端实际 Model / API 路由注册比对（非关键词表象）</div>
+  <div><b>API 规模</b>（@router 计数，非精确 endpoint）：lightmes <span class="count">748</span> 条　vs　cenkormes <span class="count">539</span> 条</div>
+</div>
+
+<div class="legend">
+  <span><span class="pill ok">双方都有</span> 开源独立版完整保留</span>
+  <span><span class="pill both">SaaS 独有</span> 建议留商业收费 / Pro 侧</span>
+  <span><span class="pill half">半成品</span> 独立版有表但未挂功能 API</span>
+</div>
+
+<h2>一、版本定位</h2>
+<div class="card">
+  <table>
+    <tr><th width="130">版本</th><th>定位</th><th>许可 / 商业模式</th><th>分包说明</th></tr>
+    <tr>
+      <td><b>lightmes</b></td>
+      <td><b>SaaS 版</b>（全集，含多租户平台层）</td>
+      <td>商业收费</td>
+      <td><code>community/</code>（AGPL 公开）+ <code>pro/</code>（私有 overlay）——<b>两个分包都属于 SaaS 侧</b></td>
+    </tr>
+    <tr>
+      <td><b>cenkormes</b></td>
+      <td><b>独立版</b>（单租户私有部署版）</td>
+      <td>计划开源（AGPL-3.0）</td>
+      <td>独立仓库，不含 SaaS 平台层</td>
+    </tr>
+  </table>
+</div>
+
+<h2>二、核心制造闭环（双方都有，开源独立版完整保留）</h2>
+<div class="card">
+  <p class="sub">以下为 MES 地基，两边均有模型与 API，开源时无需砍除：</p>
+  <table>
+    <thead><tr><th>功能域</th><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>生产计划 / 排产（production_plan）</td><td><span class="pill ok">双方都有</span></td><td>AP 计划，独立版含计算</td></tr>
+      <tr><td>工单 / 任务 / 派工（work_order·task）</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">核心执行闭环</td></tr>
+      <tr><td>报工 / 工序 / 工艺路线</td><td><span class="pill ok">双方都有</span></td><td>process·skill·route</td></tr>
+      <tr><td>质量检验（quality）</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>库存 / 物料 / 仓库单据</td><td><span class="pill ok">双方都有</span></td><td>material·sku·warehouse·entry</td></tr>
+      <tr><td>物料领料（material_issue）</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>采购 / 供应商 / 对账</td><td><span class="pill ok">双方都有</span></td><td>purchase·supplier·statement</td></tr>
+      <tr><td>追溯（trace）</td><td><span class="pill ok">双方都有</span></td><td>独立版另有 <b>trace/tree/{product_code} 追溯树</b></td></tr>
+      <tr><td>外协（subcontract）</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>MRP 物料需求计划</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>设备 / 班次 / 生产日历</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>考勤 / 工资 / 工资条</td><td><span class="pill ok">双方都有</span></td><td>salary·attendance</td></tr>
+      <tr><td>财务 / 台账 / 应收应付</td><td><span class="pill ok">双方都有</span></td><td rowspan="1">—</td></tr>
+      <tr><td>CRM / 客户 / 客户产品</td><td><span class="pill ok">双方都有</span></td><td>独立版另有 crm-adapter 适配器</td></tr>
+      <tr><td>执行看板（exec_dashboard）</td><td><span class="pill ok">双方都有</span></td><td>独立版独有的可视化亮点</td></tr>
+      <tr><td>文档打印模板（print_template）</td><td><span class="pill ok">双方都有</span></td><td>（已核实，非 SaaS 独有）</td></tr>
+      <tr><td>第三方消息通道（飞书/钉钉/企微）</td><td><span class="pill ok">双方都有</span></td><td>feishu·dingtalk·wecom 均有（已核实）</td></tr>
+      <tr><td>AI 助手 / 配置（api/admin/ai）</td><td><span class="pill ok">双方都有</span></td><td>独立版含基础 AI 能力</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2>三、SaaS 独有 / 独立版差异项（开源决策重点）</h2>
+<div class="grid2">
+  <div class="card">
+    <h2 style="margin-top:0">仅 lightmes（SaaS）有</h2>
+    <table>
+      <thead><tr><th>功能</th><th>层级</th></tr></thead>
+      <tbody>
+        <tr><td><b>AI 员工</b>（ai_employee）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td><b>行业模板</b>（industry）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td><b>报价</b>（quotation）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td><b>模具管理</b>（mold API）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td><b>SPC 统计过程控制</b>（spc API）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td><b>SaaS 平台层</b>（api/platform：租户/套餐/订阅）</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td>平台用户 / 套餐 / 订阅订单表</td><td><span class="pill both">SaaS 独有</span></td></tr>
+      </tbody>
+    </table>
+    <p class="sub">建议：这些留在 SaaS / Pro 侧，作为商业收费差异化项，不入开源独立版。</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">仅 cenkormes（独立版）有 / 半成品</h2>
+    <table>
+      <thead><tr><th>功能</th><th>层级</th></tr></thead>
+      <tbody>
+        <tr><td><b>追溯树</b>（trace/tree/{product_code}）</td><td><span class="pill ok">独立版亮点</span></td></tr>
+        <tr><td><b>CRM 适配器</b>（crm-adapter）</td><td><span class="pill ok">独立版亮点</span></td></tr>
+        <tr><td colspan="2" class="sub">注意：独立版 <b>无任何独有 Model</b>，上述独有均为 API/路由特色。</td></tr>
+        <tr><td><b>模具</b>：只有 <code>models/mold.py</code> 表</td><td><span class="pill half">有表无功能</span></td></tr>
+        <tr><td><b>SPC</b>：只有 <code>models/spc.py</code> 表</td><td><span class="pill half">有表无功能</span></td></tr>
+        <tr><td><b>报价</b>：只有模型，无独立模块</td><td><span class="pill half">有表无功能</span></td></tr>
+      </tbody>
+    </table>
+    <p class="sub">「有表无功能」= 模型文件在，但 <code>/admin/*</code> 未挂载对应路由，属未完成的半成品。</p>
+  </div>
+</div>
+
+<h2>四、落地上建议</h2>
+<div class="card">
+  <ul>
+    <li><b>开源独立版（cenkormes）直接开源即可</b>：核心制造闭环完整，天然不含 AI 员工 / 行业模板 / 报价 / SPC / 模具功能 / SaaS 平台层，这些收费项本就在 SaaS 侧，无需「砍功能」。</li>
+    <li>独立版推荐额外打磨的差异化亮点：<b>trace/tree 追溯树</b>、<b>crm-adapter</b>、<b>exec_dashboard 执行看板</b>——这些作为开源版的特色，利于推广。</li>
+    <li>若决定做「批次级溯源」，再考虑补 <b>incoming_batch（来料批次）</b>；当前它只是采购验收时写入的一条批次记录，无独立页面、未接入 trace，是否补齐取决于产品规划。</li>
+    <li>独立版的「有表无功能」（mold / spc / quotation）要么补全挂路由，要么在文档中标注「未开放」，避免使用者误以为功能缺失是 Bug。</li>
+  </ul>
+</div>
+
+<footer>
+  数据来源：lightmes / cenkormes 服务端实际 Model 与 API 路由注册比对 · 核查时间 2026-08-21 · 统计口径为 @router 装饰器数量，非精确 endpoint。
+</footer>
+
+</div>
+</body>
+</html>

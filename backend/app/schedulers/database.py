@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """基于数据库的 Celery Beat 调度器
 
 从 cron_jobs 表读取调度配置，支持通过 Redis 信号热重载。

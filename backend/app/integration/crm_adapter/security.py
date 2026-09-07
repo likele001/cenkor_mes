@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """HMAC-SHA256 双向验签（与 ck_crm MESConnector 完全一致）。
 
 签名: X-Signature = HMAC_SHA256(api_key, f"{X-Timestamp}.{原始body}")

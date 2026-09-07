@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """AI 预警通知：create_todo_on_critical"""
 
 from datetime import datetime

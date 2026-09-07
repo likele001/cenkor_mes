@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """派工候选人筛选"""
 
 from app.models.user import User, user_roles

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 export type CrudFieldType = 'text' | 'number' | 'textarea' | 'switch' | 'select' | 'date' | 'password'
 
 export type CrudFieldOption = { label: string; value: string | number | boolean }

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """API 嵌套对象与下拉项：统一返回展示名，编码仅作辅字段。"""
 
 from __future__ import annotations

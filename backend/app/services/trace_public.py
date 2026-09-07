@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """客户公开溯源：URL、二维码、脱敏详情"""
 
 from __future__ import annotations

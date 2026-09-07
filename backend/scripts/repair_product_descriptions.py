@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 修复导入时产品 color/spec 列错位导致的描述脏数据。
 用法: python3 -m scripts.repair_product_descriptions --tenant-code DEMO

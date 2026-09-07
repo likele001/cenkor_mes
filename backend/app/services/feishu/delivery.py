@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书消息投递诊断（个人 open_id / 机器人单聊）"""
 
 from __future__ import annotations
@@ -110,7 +112,7 @@ def build_delivery_diagnostics(
         "chat_open_link": FEISHU_CHAT_APPLINK.format(chat_id=chat_id) if chat_id else "",
         "p2p_message_count": msg_count,
         "hints": [
-            "个人推送不会出现在「应用消息」，请在消息列表找与机器人「{}」的单聊".format(bot.get("app_name") or "lightmes"),
+            "个人推送不会出现在「应用消息」，请在消息列表找与机器人「{}」的单聊".format(bot.get("app_name") or "CenkorMES"),
             "请确认飞书左上角企业名为「{}」".format(tenant_name or "与开发者后台一致"),
             "若搜不到机器人：开放平台 → 版本管理 → 可用范围设为「全部成员」并发布；管理后台 → 应用管理 → 勾选「在应用中心展示」",
             "可用 chat_open_link 在手机/电脑浏览器打开，会唤起飞书进入该单聊",

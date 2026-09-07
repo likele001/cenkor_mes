@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 const REMEMBER_PREF_KEY = 'cenkormes_remember_login'
 
 export function loadRememberPreference(): boolean {

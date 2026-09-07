@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """系统内置打印模板（按租户 code 幂等创建）"""
 
 TASK_LABEL_HTML = """<html><head><meta charset="utf-8" />

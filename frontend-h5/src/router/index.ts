@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 import { tryRecoverStaleChunk } from '@/utils/chunk-reload'
 import LoginPage from '@/pages/LoginPage.vue'

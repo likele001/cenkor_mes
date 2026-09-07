@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /** 深度合并 locale 对象，后者覆盖前者 */
 export function deepMerge<T extends Record<string, unknown>>(
   base: T,

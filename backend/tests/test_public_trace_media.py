@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """公开溯源：附件查询参数"""
 
 from app.crud.attachment import get_attachment_by_id

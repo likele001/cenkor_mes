@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { i18n } from '@/locales'
 
 /** 摄像头 / 现场录像（兼容 HTTP、Edge 手机、无 MediaRecorder 环境） */

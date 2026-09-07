@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-page">
     <MListLayout :items="items" :loading="loading" empty-text="暂无订单进度" :tap-to-select="false">

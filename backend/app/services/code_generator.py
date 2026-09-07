@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """统一业务编号：前缀 + 日期(可选) + 按日递增序号。示例 ORD202605200001"""
 
 from __future__ import annotations
@@ -40,6 +42,10 @@ class BizType:
     MATERIAL_ISSUE = "material_issue"
     MATERIAL_RETURN = "material_return"
     WAREHOUSE_ENTRY = "warehouse_entry"
+    INVOICE = "invoice"
+    VOUCHER = "voucher"
+    FIXED_ASSET = "fixed_asset"
+    ASSET_CHECK = "asset_check"
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,10 @@ _RULES: dict[str, _Rule] = {
     BizType.MATERIAL_ISSUE: _Rule("LI"),
     BizType.MATERIAL_RETURN: _Rule("RT"),
     BizType.WAREHOUSE_ENTRY: _Rule("WE"),
+    BizType.INVOICE: _Rule("INV"),
+    BizType.VOUCHER: _Rule("VCH"),
+    BizType.FIXED_ASSET: _Rule("FA"),
+    BizType.ASSET_CHECK: _Rule("AC"),
 }
 
 

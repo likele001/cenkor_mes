@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """WebSocket 连接池：推送大屏/看板刷新事件"""
 
 from __future__ import annotations

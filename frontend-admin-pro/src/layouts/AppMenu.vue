@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-menu
     class="admin-sider-menu border-0"
@@ -92,6 +96,17 @@
       </el-menu-item>
     </el-sub-menu>
 
+    <el-sub-menu index="erp" v-if="erpItems.length">
+      <template #title>
+        <el-icon><Money /></el-icon>
+        <span>{{ t('menu.erp') }}</span>
+      </template>
+      <el-menu-item v-for="it in erpItems" :key="it.path" :index="it.path">
+        <el-icon><component :is="it.icon" /></el-icon>
+        <span>{{ t(it.i18nKey) }}</span>
+      </el-menu-item>
+    </el-sub-menu>
+
     <el-menu-item v-if="auth.hasAnyPermission(['report.view'])" index="/reports">
       <el-icon><DataAnalysis /></el-icon>
       <span>{{ t('menu.reportsOverview') }}</span>
@@ -146,6 +161,9 @@ import {
   DataAnalysis,
   Clock,
   Wallet,
+  Coin,
+  TrendCharts,
+  Timer,
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
@@ -244,6 +262,18 @@ const financeAll: MenuItem[] = [
   { path: '/finance/ledgers', i18nKey: 'menu.financeLedgers', permissions: ['finance.manage'], icon: List },
   { path: '/finance/profit', i18nKey: 'menu.financeProfit', permissions: ['finance.manage'], icon: DataLine },
 ]
+const erpAll: MenuItem[] = [
+  { path: '/erp/invoices', i18nKey: 'menu.erpInvoices', permissions: ['erp.manage'], icon: Document },
+  { path: '/erp/accounts', i18nKey: 'menu.erpAccounts', permissions: ['erp.manage'], icon: Coin },
+  { path: '/erp/vouchers', i18nKey: 'menu.erpVouchers', permissions: ['erp.manage'], icon: List },
+  { path: '/erp/trial-balance', i18nKey: 'menu.erpTrialBalance', permissions: ['erp.manage'], icon: DataAnalysis },
+  { path: '/erp/balance-sheet', i18nKey: 'menu.erpBalanceSheet', permissions: ['erp.manage'], icon: TrendCharts },
+  { path: '/erp/costs', i18nKey: 'menu.erpCosts', permissions: ['erp.manage'], icon: Money },
+  { path: '/erp/assets', i18nKey: 'menu.erpAssets', permissions: ['erp.manage'], icon: Box },
+  { path: '/erp/assets/depreciation', i18nKey: 'menu.erpAssetDepreciation', permissions: ['erp.manage'], icon: Timer },
+  { path: '/erp/assets/checks', i18nKey: 'menu.erpAssetChecks', permissions: ['erp.manage'], icon: Search },
+]
+
 
 const systemItems = computed(() => systemAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 const masterItems = computed(() => masterAll.filter((x) => auth.hasAnyPermission(x.permissions)))
@@ -251,4 +281,5 @@ const productionItems = computed(() => productionAll.filter((x) => auth.hasAnyPe
 const purchaseItems = computed(() => purchaseAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 const warehouseItems = computed(() => warehouseAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 const financeItems = computed(() => financeAll.filter((x) => auth.hasAnyPermission(x.permissions)))
+const erpItems = computed(() => erpAll.filter((x) => auth.hasAnyPermission(x.permissions)))
 </script>

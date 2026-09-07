@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from types import SimpleNamespace
 
 from app.core.portal_access import is_h5_portal_user

@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('production.equipment.title')">
     <el-card class="flex-1 flex flex-col overflow-hidden" body-class="flex-1 overflow-hidden !p-0">

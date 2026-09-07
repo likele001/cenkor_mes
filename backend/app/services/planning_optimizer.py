@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """OR-Tools 约束排产（与 LLM 建议对比，人工选用）"""
 
 from __future__ import annotations

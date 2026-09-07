@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("user.manage", "用户管理"),
     ("role.manage", "角色管理"),
@@ -37,6 +39,7 @@ DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("ai.alert.view", "AI预警"),
     ("purchase.manage", "采购管理"),
     ("finance.manage", "财务管理"),
+    ("erp.manage", "ERP 财务管理"),
     ("warehouse.view", "库存查看"),
     ("warehouse.manage", "库存管理"),
     ("production.plan", "生产排产"),

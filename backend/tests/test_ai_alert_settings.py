@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from app.services.ai.alert_settings import get_alert_thresholds, save_alert_thresholds
 
 

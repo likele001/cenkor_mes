@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书回调 / OAuth 外网 URL 构建（独立模块，避免 settings ↔ oauth 循环导入）"""
 
 from __future__ import annotations

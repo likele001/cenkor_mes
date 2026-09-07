@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import type { CrudField, CrudSchema } from '@/types/adminCrud'
 
 const activeSwitch: CrudField = { key: 'is_active', label: '启用', type: 'switch' }

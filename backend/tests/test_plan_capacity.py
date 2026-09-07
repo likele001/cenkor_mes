@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from app.services.plan_capacity_settings import get_default_capacity, get_capacity_unit, task_load_qty
 
 

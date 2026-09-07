@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /** 部署后旧 tab 仍引用已删除的 lazy chunk 时，自动刷新一次加载新版本 */
 
 const RELOAD_KEY = 'cenkormes_h5_chunk_reload'

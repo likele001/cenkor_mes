@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 export function openPrintWindow(html: string, options?: { title?: string; autoPrint?: boolean }) {
   const title = options?.title || 'print'
   const autoPrint = Boolean(options?.autoPrint)

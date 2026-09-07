@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('master.skuBatch.title')">
       <div class="flex items-center justify-between gap-3 flex-wrap mb-4">

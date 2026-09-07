@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """报工审核动作（通道无关，飞书/钉钉等共用）"""
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ def _ensure_auditor(db: Session, auditor: User | None) -> User:
 def _has_report_audit(db: Session, user: User) -> bool:
     if user.is_superuser:
         return True
-    from app.services.wecom.targets import _users_with_permission
+    from app.services.feishu.targets import _users_with_permission
 
     return user.id in _users_with_permission(db, "report.audit")
 

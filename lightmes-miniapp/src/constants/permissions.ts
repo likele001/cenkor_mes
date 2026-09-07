@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /** 与 backend/app/core/seed.py DEFAULT_PERMISSIONS 对齐 */
 export const PermissionCode = {
   USER_MANAGE: 'user.manage',

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """考勤地理围栏校验（租户级可选配置，存 tenant_settings）"""
 
 from __future__ import annotations

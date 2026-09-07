@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-form-item v-if="enabled" :label="t('common.captcha')">
     <div class="flex gap-2 items-center w-full min-h-10">

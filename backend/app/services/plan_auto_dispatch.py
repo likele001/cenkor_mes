@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """计划自动派工（从 plans API 抽取，供自动化编排复用）"""
 
 from __future__ import annotations

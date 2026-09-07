@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """区分管理后台入口与 H5 入口的账号能力。"""
 
 from app.models.user import User

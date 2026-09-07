@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { apiGet, apiPostQuery } from '../request'
 
 export function getNotifications(params?: { unread?: boolean; offset?: number; limit?: number }) {

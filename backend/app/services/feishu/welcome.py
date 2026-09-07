@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """绑定后欢迎消息与单聊激活"""
 
 from __future__ import annotations
@@ -13,19 +15,19 @@ from app.services.feishu.settings import get_feishu_credentials
 logger = logging.getLogger(__name__)
 
 WELCOME_TEXT = (
-    "✅ LightMes 绑定成功！\n"
+    "✅ CenkorMES 绑定成功！\n"
     "您将在此收到：派工、报工审核、工资条等个人通知。\n\n"
-    "若消息列表未显示本对话，请从飞书【工作台】打开 lightmes，或回复任意消息完成激活。"
+    "若消息列表未显示本对话，请从飞书【工作台】打开 CenkorMES，或回复任意消息完成激活。"
 )
 
 P2P_ENTER_TEXT = (
-    "欢迎使用 LightMes 生产通知。\n"
+    "欢迎使用 CenkorMES 生产通知。\n"
     "派工、报工结果、工资提醒会推送到此对话。\n"
     "您也可回复「帮助」查看说明。"
 )
 
 REPLY_ACK_TEXT = (
-    "已收到。LightMes 个人通知通道正常，派工/报工消息会推送到此对话。"
+    "已收到。CenkorMES 个人通知通道正常，派工/报工消息会推送到此对话。"
 )
 
 

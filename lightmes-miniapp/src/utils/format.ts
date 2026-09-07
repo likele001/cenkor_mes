@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 export function formatMoney(n: number | null | undefined): string {
   const v = Number(n ?? 0)
   return v.toFixed(2)

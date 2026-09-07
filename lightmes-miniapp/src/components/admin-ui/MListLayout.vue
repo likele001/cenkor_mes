@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-list-wrap">
     <view v-if="loading" class="adm-empty-tip">加载中...</view>

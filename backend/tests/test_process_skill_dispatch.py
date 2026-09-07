@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """工序-技能绑定与派工过滤"""
 
 from app.models.employee_skill import Skill, UserSkillLink

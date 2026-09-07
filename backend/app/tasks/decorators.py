@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """Celery task 公共装饰器 — 自动管理 DB session 生命周期"""
 import functools
 import logging

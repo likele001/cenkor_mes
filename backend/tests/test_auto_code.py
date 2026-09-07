@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """主数据编码自动生成"""
 
 from sqlalchemy.orm import Session

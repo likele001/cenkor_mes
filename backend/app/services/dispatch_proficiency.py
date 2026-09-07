@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """派工：历史报工熟练度（规则统计，非 RL）"""
 
 from __future__ import annotations

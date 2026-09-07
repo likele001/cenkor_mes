@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 export const TASK_STATUS: Record<string, { text: string; tone: string }> = {
   pending: { text: '待开始', tone: 'warn' },
   working: { text: '进行中', tone: 'info' },

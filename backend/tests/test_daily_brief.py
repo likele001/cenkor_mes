@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from unittest.mock import patch
 
 from app.services.daily_brief import build_rule_brief, get_live_brief

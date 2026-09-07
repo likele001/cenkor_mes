@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """消息通道枚举与公共数据模型"""
 
 from __future__ import annotations

@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="ring-wrap">
     <svg :width="size" :height="size" viewBox="0 0 120 120">

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,8 +27,6 @@ from app.crud.process_flow import (
 from app.models.task import Task
 from app.models.work_order_piece import WorkOrderPiece
 from app.services.report_mode_settings import get_sequence_policy, use_unit_report_mode
-from app.services.ai.report_anomaly import check_report_anomaly
-from app.services.ai.report_risk_score import apply_auto_pass, calculate_risk_score
 from app.crud.task import get_task_by_code, get_task_by_id
 from app.crud.task_assignment import get_assignment
 from app.models.user import User
@@ -183,17 +183,7 @@ def submit_report_unit_api(
                         "anomaly_detail": {"type": "sequence_soft"},
                     })
 
-    # ── 异常检测（提交前拦截，仅首次提交时检查）──
-    if not payload.anomaly_confirmed:
-        anomaly = check_report_anomaly(db, user.id, task.id, is_piece_mode=True
-        )
-        if anomaly["level"] != "normal":
-            return ok({
-                "anomaly_warning": True,
-                "anomaly_level": anomaly["level"],
-                "anomaly_reason": anomaly["reason"],
-                "anomaly_detail": anomaly.get("detail"),
-            })
+    # 原 AI 异常检测（提交前拦截）已随 AI 功能移除，直接进入提交
 
     try:
         submit_unit(
@@ -204,63 +194,6 @@ def submit_report_unit_api(
             remark=payload.remark)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-
-    # ── AI 智能分流（Task 3）：基于风险评分决定是否自动通过 ──
-    risk: dict | None = None
-    try:
-        risk = calculate_risk_score(
-            db,
-            user_id=user.id,
-            task_id=task.id,
-            good_qty=1 if payload.result_type == "good" else 0,
-            bad_qty=1 if payload.result_type == "bad" else 0,
-            has_attachments=bool(payload.attachment_ids),
-            result_type=payload.result_type,
-            report_unit_id=None)
-        # 写入预审结果字段（不论是否自动通过，都留痕）
-        import json as _json
-
-        unit.prescreen_level = risk["level"]
-        unit.prescreen_json = _json.dumps(
-            {
-                "score": risk["score"],
-                "reasons": risk["reasons"],
-                "breakdown": risk["breakdown"],
-                "auto_pass_eligible": risk["auto_pass_eligible"],
-            },
-            ensure_ascii=False)
-        unit.prescreen_at = datetime.now()
-
-        # 低风险 + 自动通过条件满足：推到 leader_approved
-        if apply_auto_pass(db, unit=unit, risk=risk, audit_user_id=user.id):
-            from app.crud.automation_log import create_automation_log
-
-            create_automation_log(
-                db,
-                trigger="ai",
-                action="report_auto_passed",
-                status="success",
-                biz_type="report_unit",
-                biz_id=unit.id,
-                message=f"AI 自动通过：风险分 {risk['score']}",
-                created_by=user.id)
-    except Exception as e:
-        # 风险评分失败不能阻塞提交，只记录到日志
-        from app.crud.automation_log import create_automation_log
-
-        try:
-            create_automation_log(
-                db,
-                trigger="ai",
-                action="report_risk_score_error",
-                status="failed",
-                biz_type="report_unit",
-                biz_id=unit.id,
-                message=str(e),
-                created_by=user.id)
-        except Exception:
-            pass
-        risk = None
 
     anomaly_suffix = ""
     if payload.anomaly_confirmed:
@@ -300,45 +233,9 @@ def submit_report_unit_api(
         ),
         biz_type="report_unit",
         biz_id=unit.id)
-    try:
-        from app.services.wecom.notify import notify_report_submitted as wecom_notify_report_submitted
-
-        wecom_notify_report_submitted(db, report_user_id=user.id,
-            process_id=task.process_id if task else None,
-            title="待审核件次报工",
-            content=(
-                f"员工 {user.full_name or user.username} 提交件次报工：任务 {payload.task_code} "
-                f"第{unit.unit_seq}件（{payload.result_type}）{anomaly_suffix}"
-            ),
-            biz_type="report_unit",
-            biz_id=unit.id)
-    except Exception:
-        pass
-    try:
-        from app.services.dingtalk.notify import notify_report_submitted as dingtalk_notify_report_submitted
-
-        dingtalk_notify_report_submitted(db, report_user_id=user.id,
-            process_id=task.process_id if task else None,
-            title="待审核件次报工",
-            content=(
-                f"员工 {user.full_name or user.username} 提交件次报工：任务 {payload.task_code} "
-                f"第{unit.unit_seq}件（{payload.result_type}）{anomaly_suffix}"
-            ),
-            biz_type="report_unit",
-            biz_id=unit.id)
-    except Exception:
-        pass
     db.commit()
-    from app.services.audit_prescreen import enqueue_prescreen
-
-    enqueue_prescreen(unit.id)
     piece = _piece_for_unit(db, unit)
     out = _unit_out(unit, piece)
-    if risk:
-        out["risk_score"] = risk["score"]
-        out["risk_level"] = risk["level"]
-        out["risk_reasons"] = risk["reasons"]
-        out["auto_passed"] = risk.get("auto_pass_eligible", False) and unit.status == "leader_approved"
     return ok(out)
 
 @router.get("/report-units")

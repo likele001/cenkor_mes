@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { getToken } from './request'
 
 export type UploadResult = { id: number; url?: string; file_id?: number; play_url?: string }

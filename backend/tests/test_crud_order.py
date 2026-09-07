@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """订单/工单/任务 核心流程测试"""
 
 from sqlalchemy import select

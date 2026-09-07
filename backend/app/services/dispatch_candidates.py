@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """自动/手动派工：可派工人员筛选（与分工管理页一致）"""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """AI 平台配置与上下文（mock LLM）"""
 
 from unittest.mock import patch

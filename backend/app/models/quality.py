@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """质量检测体系：质检模板、缺陷代码、检测记录"""
 
 from datetime import datetime

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from app.storage.base import Storage, StoredObject
 from app.storage.local import LocalStorage
 from app.storage.factory import get_active_storage, get_storage_for, get_storage_backend, load_storage_config, build_storage

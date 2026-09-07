@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <!-- 生产日历 -->
   <el-dialog :model-value="calendarOpen" width="980px" title="生产日历" destroy-on-close @update:model-value="emit('update:calendarOpen', $event)">

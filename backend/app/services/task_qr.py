@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """任务报工二维码（打印标签 + 员工端展示）"""
 
 from __future__ import annotations

@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-container class="h-screen w-screen bg-[var(--admin-page-bg)]">
     <el-aside

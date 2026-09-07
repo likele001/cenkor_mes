@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-kv-grid">
     <view v-for="row in rows" :key="row.label" class="adm-kv-row">

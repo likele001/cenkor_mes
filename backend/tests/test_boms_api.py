@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """BOM API 测试"""
 
 from app.api.admin.master import boms as boms_api

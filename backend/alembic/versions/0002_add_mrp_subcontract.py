@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """0002_add_mrp_subcontract - MRP 物料需求计划 + 外协工序管理
 
 Revision ID: 0002_mrp_subcontract

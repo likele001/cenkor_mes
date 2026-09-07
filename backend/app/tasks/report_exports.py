@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """产量/良率/缺陷报表 Excel 导出 Celery 任务"""
 import logging
 from datetime import date, datetime, timezone

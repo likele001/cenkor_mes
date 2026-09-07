@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """0003_material_issue_warehouse_entry - 领料/退料/入库单（Phase2+Phase4 补迁移）
 
 Phase 2（领料/退料+库存成本）与 Phase 4（入库单独立单据化）的表

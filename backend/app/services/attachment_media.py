@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """附件访问 URL 与响应辅助"""
 
 from __future__ import annotations

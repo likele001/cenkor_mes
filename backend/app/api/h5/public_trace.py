@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """客户公开溯源（无需登录）"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query

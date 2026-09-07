@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import type { KvRow } from '@/components/admin-ui/AdminKvGrid.vue'
 
 /** 将 "a · b · c" 摘要拆成多行 KV（用于 CRUD 等仅有 listSub 的页面） */

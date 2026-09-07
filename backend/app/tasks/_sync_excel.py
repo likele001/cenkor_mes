@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """同步 Excel 导出工具 — 用于小数据量列表的即时导出"""
 from io import BytesIO
 
