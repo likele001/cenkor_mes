@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """工序流转：派工预赋成品码，逐件模式按套号池动态领套"""
 
 from __future__ import annotations

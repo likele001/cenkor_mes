@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """CRM webhook 客户端：把 MES 订单状态变化实时回传给 ck_crm。
 
 ck_crm 统一回调入口: POST {crm_base_url}/api/integration/webhook/{connection_id}

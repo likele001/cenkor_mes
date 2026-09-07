@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """报工 / 工资 核心逻辑测试"""
 
 from sqlalchemy.orm import Session

@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-page">
     <view class="hint">选择型号后，按产品工艺路线列出各工序，填写单价后一次保存。</view>

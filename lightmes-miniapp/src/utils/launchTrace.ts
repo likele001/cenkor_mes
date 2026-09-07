@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 const PENDING_TRACE_KEY = 'cenkormes_pending_trace_code'
 
 /** 从启动参数解析溯源码（仅认 code 或 trace: 前缀 / scene 内 code=） */

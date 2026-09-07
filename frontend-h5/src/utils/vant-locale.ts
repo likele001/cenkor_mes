@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { Locale } from 'vant'
 import vantEnUS from 'vant/es/locale/lang/en-US'
 import vantZhCN from 'vant/es/locale/lang/zh-CN'

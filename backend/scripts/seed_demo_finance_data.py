@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 CenkorMES 老板看板演示数据填充脚本
 --------------------------------

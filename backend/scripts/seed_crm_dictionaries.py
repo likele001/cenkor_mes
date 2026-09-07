@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """Seed 脚本：为 CRM 预置常用字典（胜负原因等）。
 
 使用方式：

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """AI 租户网关覆盖与 RAG 帮助"""
 
 from unittest.mock import patch

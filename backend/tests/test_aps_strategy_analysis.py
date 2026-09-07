@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from app.services.aps_strategy_analysis import analyze_aps_strategies
 
 

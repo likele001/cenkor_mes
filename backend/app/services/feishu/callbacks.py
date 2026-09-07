@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书事件订阅与卡片回调"""
 
 from __future__ import annotations

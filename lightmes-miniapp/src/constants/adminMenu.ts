@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -98,10 +100,7 @@ export const ADMIN_MENU_GROUPS: AdminMenuGroup[] = [
     key: 'ai',
     title: '智能中心',
     items: [
-      { title: '工厂助手', path: '/pages-admin/ai/assistant/index', icon: '🤖', tone: 'violet', permissions: ['ai.use'] },
       { title: '智能帮助', path: '/pages/shared/help/index', icon: '💡', tone: 'blue' },
-      { title: 'AI 深度分析', path: '/pages-admin/ai/deep/index', icon: '📊', tone: 'violet', permissions: ['ai.use'] },
-      { title: 'AI 调用统计', path: '/pages-admin/ai/stats/index', icon: '📈', tone: 'green', permissions: ['ai.use'] },
       { title: '生产自动化', path: '/pages-admin/system/automation/index', icon: '⚙', tone: 'orange', permissions: ['setting.manage'] },
     ],
   },
@@ -126,7 +125,6 @@ export const ADMIN_MENU_GROUPS: AdminMenuGroup[] = [
 
 /** PC 首页快捷入口（与 HomePage.vue 一致） */
 export const ADMIN_SHORTCUTS: AdminMenuItem[] = [
-  { title: '工厂助手', path: '/pages-admin/ai/assistant/index', icon: '🤖', tone: 'violet', permissions: ['ai.use'] },
   { title: '智能帮助', path: '/pages/shared/help/index', icon: '💡', tone: 'blue' },
   { title: '产能设置', path: '/pages-admin/plans/capacity/index', icon: '📊', tone: 'orange', permissions: ['plan.manage'] },
   { title: '用户管理', path: '/pages-admin/system/users/index', icon: '👤', tone: 'blue', permissions: ['user.manage'] },

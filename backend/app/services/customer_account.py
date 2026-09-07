@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """客户档案与 H5 登录账号绑定"""
 
 from fastapi import HTTPException

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """pytest fixtures: 使用 SQLite 内存数据库进行单元测试"""
 
 from collections.abc import Generator

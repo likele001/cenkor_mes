@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """上传文件 MIME 校验与按扩展名纠偏（手机视频常为 quicktime / octet-stream）"""
 
 from __future__ import annotations

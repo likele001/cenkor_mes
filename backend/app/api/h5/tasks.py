@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -252,28 +254,6 @@ def submit_report_api(
         content=f"员工 {user.full_name or user.username} 提交报工：任务 {task_code}，合格 {good_qty}，不良 {bad_qty}",
         biz_type="report",
         biz_id=report.id)
-    try:
-        from app.services.wecom.notify import notify_report_submitted as wecom_notify_report_submitted
-
-        wecom_notify_report_submitted(db, report_user_id=user.id,
-            process_id=task.process_id,
-            title="待审核报工",
-            content=f"员工 {user.full_name or user.username} 提交报工：任务 {task_code}，合格 {good_qty}，不良 {bad_qty}",
-            biz_type="report",
-            biz_id=report.id)
-    except Exception:
-        pass
-    try:
-        from app.services.dingtalk.notify import notify_report_submitted as dingtalk_notify_report_submitted
-
-        dingtalk_notify_report_submitted(db, report_user_id=user.id,
-            process_id=task.process_id,
-            title="待审核报工",
-            content=f"员工 {user.full_name or user.username} 提交报工：任务 {task_code}，合格 {good_qty}，不良 {bad_qty}",
-            biz_type="report",
-            biz_id=report.id)
-    except Exception:
-        pass
     db.commit()
 
     return ok({

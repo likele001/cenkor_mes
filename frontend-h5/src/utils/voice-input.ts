@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /**
  * 语音输入工具 — 基于 Web Speech API（webkitSpeechRecognition）
  *

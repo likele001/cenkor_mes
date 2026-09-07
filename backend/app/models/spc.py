@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """SPC 统计过程控制数据模型"""
 from datetime import datetime
 

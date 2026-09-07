@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """分工分配列表（按员工×任务维度，对标 thinkmes 分工分配）"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """审批流解析器 — 支持动态配置与默认回退
 
 根据 ApprovalFlow / ApprovalStep 数据库配置动态解析审批步骤，

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { ref, watch } from 'vue'
 import { getToken } from '@/api/request'
 import { fileUrl } from '@/api/files'

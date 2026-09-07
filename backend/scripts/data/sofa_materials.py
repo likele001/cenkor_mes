@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 沙发厂演示物料（来源：thinkmes.sql fa_mes_material / fa_mes_material_category）
 字段：code, name, category, unit, spec, stock, supplier_code

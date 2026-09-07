@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """微信小程序登录路由（单用户版：固定 tenant_id=1）"""
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query

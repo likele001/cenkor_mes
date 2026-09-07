@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """定时任务默认配置迁移（幂等）"""
 from sqlalchemy.orm import Session
 

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from celery import Celery
 from kombu import Queue
 from celery.schedules import crontab

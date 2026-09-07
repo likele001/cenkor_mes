@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { clearToken, getToken, setToken } from '@/api/request'

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { systemApi } from '@/api/system'
 
 /** 预览下一业务编号（不占用序号），失败时返回空串 */

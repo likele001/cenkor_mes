@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """批量添加型号及工序工价（对标 thinkmes batchAddModels）。"""
 
 from sqlalchemy import select

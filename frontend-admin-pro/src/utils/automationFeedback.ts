@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { i18n } from '@/locales'
 
 /** 解析订单/计划自动化 API 返回，生成用户提示文案 */

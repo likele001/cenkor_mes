@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """报工/审核影像：租户级拍摄时长、大小、数量（仅现场拍摄，控制服务器压力）"""
 
 from __future__ import annotations

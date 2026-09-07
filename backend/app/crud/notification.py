@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
 
 from sqlalchemy import func, select, update
@@ -47,52 +49,6 @@ def create_notification(
                 user_id=user_id,
                 department_id=feishu_department_id,
                 workshop=feishu_workshop,
-            )
-        except Exception:
-            pass
-        try:
-            from app.services.wecom.notify import emit_wecom_event
-
-            emit_wecom_event(
-                db,
-                feishu_event,
-                title=title,
-                content=content,
-                level=level,
-                biz_type=biz_type,
-                biz_id=biz_id,
-                user_id=user_id,
-                department_id=feishu_department_id,
-                workshop=feishu_workshop,
-            )
-        except Exception:
-            pass
-        try:
-            from app.services.dingtalk.notify import emit_dingtalk_event
-
-            emit_dingtalk_event(
-                db,
-                feishu_event,
-                title=title,
-                content=content,
-                level=level,
-                biz_type=biz_type,
-                biz_id=biz_id,
-                user_id=user_id,
-                department_id=feishu_department_id,
-                workshop=feishu_workshop,
-            )
-        except Exception:
-            pass
-        try:
-            from app.services.wechat_mp.notify import emit_wechat_mp_event
-
-            emit_wechat_mp_event(
-                db,
-                feishu_event,
-                title=title,
-                content=content,
-                user_id=user_id,
             )
         except Exception:
             pass

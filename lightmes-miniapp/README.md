@@ -1,4 +1,4 @@
-# LightMes 微信小程序 (uni-app)
+# CenkorMES 微信小程序 (uni-app)
 
 Vue 3 + TypeScript + Pinia + uni-app，覆盖完整员工端与 PC 租户管理端全量功能。
 
@@ -126,6 +126,6 @@ npm run build:mp-weixin  # 发布，输出 dist/build/mp-weixin
 - **主包**：登录、角色分流、5 个 Tab 壳页（员工/管理双模式）
 - **分包 pages-employee**：报工、任务详情、工资、消息等
 - **分包 pages-admin**：对齐 `frontend-admin-pro` 全部管理模块（56 页）
-- **权限**：`GET /auth/me` 返回 `roles` + `permissions`；管理 API 自动带 `X-LightMes-Portal: admin`
+- **权限**：`GET /auth/me` 返回 `roles` + `permissions`；管理 API 自动带 `X-CenkorMES-Portal: admin`
 
 详见 [`docs/小程序方案.md`](../docs/小程序方案.md)。

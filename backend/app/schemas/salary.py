@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """工资相关 Pydantic 模型：工资补贴/扣款、工资条、工资台账"""
 
 from datetime import datetime

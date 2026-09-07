@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """工资明细台账：件次报工 + 历史批量报工 + 计时工资，对标 thinkmes 工资列表"""
 
 from __future__ import annotations

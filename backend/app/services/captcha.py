@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """图形验证码生成与校验（一次性，Redis 优先）。"""
 
 from __future__ import annotations

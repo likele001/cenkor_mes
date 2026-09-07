@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('production.assignments.title')" description="按「员工 × 工序任务」展示；二维码对应该任务码，员工 H5 扫码报工">
     <template #actions>

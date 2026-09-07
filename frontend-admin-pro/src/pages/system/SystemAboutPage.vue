@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="system-about-page p-4 sm:p-6 space-y-6">
     <!-- 当前版本卡片 -->

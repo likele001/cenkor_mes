@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -52,10 +54,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'system/crm-orders', name: 'system-crm-orders', component: () => import('@/pages/system/CrmOrdersPage.vue'), meta: { title: () => i18n.global.t('menu.crmOrders'), permissions: ['setting.manage'] } },
       { path: 'system/approval-flows', name: 'system-approval-flows', component: () => import('@/pages/system/ApprovalFlowsPage.vue'), meta: { title: () => i18n.global.t('menu.approvalFlows'), permissions: ['setting.manage'] } },
       { path: 'system/feishu-notify', name: 'system-feishu-notify', component: () => import('@/pages/system/FeishuNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.feishuNotify'), permissions: ['setting.manage'] } },
-      { path: 'system/wecom-notify', name: 'system-wecom-notify', component: () => import('@/pages/system/WecomNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.wecomNotify'), permissions: ['setting.manage'] } },
-      { path: 'system/dingtalk-notify', name: 'system-dingtalk-notify', component: () => import('@/pages/system/DingtalkNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.dingtalkNotify'), permissions: ['setting.manage'] } },
       { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['notification.view'] } },
-      { path: 'system/push-monitor', name: 'system-push-monitor', component: () => import('@/pages/system/PushMonitorPage.vue'), meta: { title: () => i18n.global.t('menu.pushMonitor'), permissions: ['setting.manage'] } },
       { path: 'account/profile', name: 'account-profile', component: () => import('@/pages/account/ProfilePage.vue'), meta: { title: () => i18n.global.t('menu.profile') } },
 
       { path: 'master/products', name: 'master-products', component: () => import('@/pages/master/ProductsPage.vue'), meta: { title: () => i18n.global.t('menu.products'), permissions: ['product.manage'] } },
@@ -193,6 +192,15 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/statements/:id', name: 'finance-statement-detail', component: () => import('@/pages/finance/CustomerStatementDetailPage.vue'), meta: { title: () => i18n.global.t('menu.financeStatementDetail'), permissions: ['finance.manage'] } },
       { path: 'finance/ledgers', name: 'finance-ledgers', component: () => import('@/pages/finance/LedgersPage.vue'), meta: { title: () => i18n.global.t('menu.financeLedgers'), permissions: ['finance.manage'] } },
       { path: 'finance/profit', name: 'finance-profit', component: () => import('@/pages/finance/ProfitPage.vue'), meta: { title: () => i18n.global.t('menu.financeProfit'), permissions: ['finance.manage'] } },
+      { path: 'erp/invoices', name: 'erp-invoices', component: () => import('@/pages/erp/InvoicesPage.vue'), meta: { title: () => i18n.global.t('menu.erpInvoices'), permissions: ['erp.manage'] } },
+      { path: 'erp/accounts', name: 'erp-accounts', component: () => import('@/pages/erp/AccountsPage.vue'), meta: { title: () => i18n.global.t('menu.erpAccounts'), permissions: ['erp.manage'] } },
+      { path: 'erp/vouchers', name: 'erp-vouchers', component: () => import('@/pages/erp/VouchersPage.vue'), meta: { title: () => i18n.global.t('menu.erpVouchers'), permissions: ['erp.manage'] } },
+      { path: 'erp/trial-balance', name: 'erp-trial-balance', component: () => import('@/pages/erp/TrialBalancePage.vue'), meta: { title: () => i18n.global.t('menu.erpTrialBalance'), permissions: ['erp.manage'] } },
+      { path: 'erp/balance-sheet', name: 'erp-balance-sheet', component: () => import('@/pages/erp/BalanceSheetPage.vue'), meta: { title: () => i18n.global.t('menu.erpBalanceSheet'), permissions: ['erp.manage'] } },
+      { path: 'erp/costs', name: 'erp-costs', component: () => import('@/pages/erp/WorkOrderCostsPage.vue'), meta: { title: () => i18n.global.t('menu.erpCosts'), permissions: ['erp.manage'] } },
+      { path: 'erp/assets', name: 'erp-assets', component: () => import('@/pages/erp/AssetsPage.vue'), meta: { title: () => i18n.global.t('menu.erpAssets'), permissions: ['erp.manage'] } },
+      { path: 'erp/assets/depreciation', name: 'erp-asset-depreciation', component: () => import('@/pages/erp/AssetDepreciationPage.vue'), meta: { title: () => i18n.global.t('menu.erpAssetDepreciation'), permissions: ['erp.manage'] } },
+      { path: 'erp/assets/checks', name: 'erp-asset-checks', component: () => import('@/pages/erp/AssetCheckPage.vue'), meta: { title: () => i18n.global.t('menu.erpAssetChecks'), permissions: ['erp.manage'] } },
 
       { path: ':pathMatch(.*)*', name: 'adminNotFound', redirect: '/home' },
     ],

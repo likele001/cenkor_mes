@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, func

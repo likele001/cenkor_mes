@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """计时工资核心逻辑：工时计算、每日生成、台账查询"""
 
 from __future__ import annotations

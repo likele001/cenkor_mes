@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /** 从扫码结果或粘贴文本解析任务码（移植自 frontend-h5） */
 export function parseTaskCodeFromScan(raw: string): string {
   const s = (raw || '').trim()

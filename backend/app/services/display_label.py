@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """主数据对客户/员工端的展示名称（区别于内部编码）"""
 
 from __future__ import annotations

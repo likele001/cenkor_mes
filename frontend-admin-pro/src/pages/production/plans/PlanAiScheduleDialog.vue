@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-dialog :model-value="open" :title="title" width="720px" destroy-on-close @update:model-value="emit('update:open', $event)">
     <el-tabs :model-value="tab" @update:model-value="emit('update:tab', $event as any)">

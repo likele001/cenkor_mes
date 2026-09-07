@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view v-if="visible" class="mask" @tap="emit('close')">
     <view class="sheet" @tap.stop>

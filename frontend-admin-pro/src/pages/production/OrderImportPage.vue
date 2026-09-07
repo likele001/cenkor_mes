@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('production.orderImport.title')">
     <div class="mb-4 flex items-center gap-3">

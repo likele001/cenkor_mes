@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-dialog :model-value="open" width="860px" title="自动派工结果" destroy-on-close @update:model-value="emit('update:open', $event)">
     <div v-loading="loading">

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """Redis 连接（可选）；不可用时返回 None，验证码等可降级内存。"""
 
 from __future__ import annotations

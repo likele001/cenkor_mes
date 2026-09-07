@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <el-drawer v-model="visible" size="980px" :title="resolvedTitle" destroy-on-close @closed="emit('closed')">
     <div v-loading="loading">

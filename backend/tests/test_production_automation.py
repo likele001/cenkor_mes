@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from app.services.production_automation import precheck_order_for_automation, precheck_plan_for_automation
 
 

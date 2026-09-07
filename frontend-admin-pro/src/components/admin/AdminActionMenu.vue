@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="flex items-center gap-1">
     <!-- 主要操作（1-2 个，直接显示按钮） -->

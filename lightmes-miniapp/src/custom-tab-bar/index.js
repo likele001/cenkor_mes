@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 const EMPLOYEE_TABS = [
   { pagePath: '/pages/tabs/tab-0/index', text: '首页', icon: '⌂' },
   { pagePath: '/pages/tabs/tab-1/index', text: '任务', icon: '☰' },
@@ -14,7 +16,7 @@ const ADMIN_TABS = [
   { pagePath: '/pages/tabs/tab-4/index', text: '我的', icon: '☺' },
 ]
 
-const MODE_KEY = 'lightmes_app_mode'
+const MODE_KEY = 'cenkormes_app_mode'
 
 Component({
   data: {

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 type TabBarApi = {
   refreshList?: () => void
   setSelectedByPath?: (path: string) => void

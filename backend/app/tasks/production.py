@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """生产排程自动化 Celery 任务"""
 from celery import shared_task
 

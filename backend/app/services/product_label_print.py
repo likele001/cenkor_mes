@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """A4 成品溯源标签批量打印 HTML"""
 
 from __future__ import annotations

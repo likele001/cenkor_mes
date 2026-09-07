@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """定时任务调度配置（Beat 部署级单例，非租户隔离）"""
 from datetime import datetime
 

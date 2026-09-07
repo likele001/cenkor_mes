@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """0001_init_schema - 初始化所有现有表
 
 对已有库执行时幂等（checkfirst=True）；

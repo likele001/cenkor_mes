@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """区分成品型号与原材料 SKU（物料挂在 __MATERIAL__ 产品下，编码 MAT- 前缀）"""
 
 from __future__ import annotations

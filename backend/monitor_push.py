@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 推送队列监控脚本
 用于实时监控飞书、企业微信、钉钉的推送任务队列状态

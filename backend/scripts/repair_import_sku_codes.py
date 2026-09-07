@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 修复 scanwork 导入产生的异常型号编码（如 SW-M9--2 → SW-M9-3+F）。
 

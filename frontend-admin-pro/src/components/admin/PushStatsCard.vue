@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="push-stats-row grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 cursor-pointer" @click="goToLogs">
     <el-card v-loading="loading" class="stat-card" shadow="hover">
@@ -5,7 +9,6 @@
       <div class="text-2xl font-semibold mt-1">{{ stats.today_total ?? 0 }}</div>
       <div class="text-[10px] text-zinc-400 mt-1">
         <span class="mr-2">F: {{ stats.by_channel?.feishu?.total ?? 0 }}</span>
-        <span>W: {{ stats.by_channel?.wecom?.total ?? 0 }}</span>
       </div>
     </el-card>
     <el-card v-loading="loading" class="stat-card" shadow="hover">
@@ -39,14 +42,14 @@ const stats = ref<{
   today_failed: number
   today_retry: number
   retry_rate: number
-  by_channel: { feishu: { total: number }; wecom: { total: number } }
+  by_channel: { feishu: { total: number } }
 }>({
   today_total: 0,
   today_success: 0,
   today_failed: 0,
   today_retry: 0,
   retry_rate: 0,
-  by_channel: { feishu: { total: 0 }, wecom: { total: 0 } },
+  by_channel: { feishu: { total: 0 } },
 } as never)
 
 async function load() {

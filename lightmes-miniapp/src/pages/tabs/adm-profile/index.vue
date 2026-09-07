@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-page">
     <!-- 头像信息卡 -->
@@ -43,13 +47,6 @@
 
     <!-- 功能菜单 -->
     <view class="adm-card menu-card">
-      <view class="menu-row" @tap="goAssistant" v-if="auth.hasPermission(PermissionCode.AI_USE)">
-        <view class="menu-left">
-          <text class="menu-icon">🤖</text>
-          <text class="menu-text">工厂助手</text>
-        </view>
-        <text class="menu-arrow">›</text>
-      </view>
       <view class="menu-row" @tap="goHelp">
         <view class="menu-left">
           <text class="menu-icon">💡</text>
@@ -100,7 +97,6 @@
 import { computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/stores/auth'
-import { PermissionCode } from '@/constants/permissions'
 import { switchToEmployeeMode } from '@/utils/navigate'
 import { updateTabBarBadge } from '@/mixins/tabBar'
 
@@ -124,9 +120,6 @@ function goAbout() {
 }
 function goHelp() {
   uni.navigateTo({ url: '/pages/shared/help/index' })
-}
-function goAssistant() {
-  uni.navigateTo({ url: '/pages-admin/ai/assistant/index' })
 }
 function go(url: string) {
   uni.navigateTo({ url })

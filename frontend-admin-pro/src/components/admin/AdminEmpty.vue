@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="admin-empty flex flex-col items-center justify-center py-10 px-4 text-center">
     <el-icon :size="48" class="admin-empty__icon mb-3 opacity-60">

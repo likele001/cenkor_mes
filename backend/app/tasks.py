@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """Celery tasks – CenkorMES."""
 from celery import shared_task
 from app.tasks.salary import calculate_salary_items, generate_salary_slips

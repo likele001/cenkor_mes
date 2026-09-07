@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="admin-login-page min-h-screen w-screen flex items-center justify-center p-4">
     <div class="absolute inset-0 pointer-events-none overflow-hidden opacity-60" aria-hidden="true">

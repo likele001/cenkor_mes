@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """当前登录用户资料与密码（租户用户 / 平台用户共用校验逻辑）。"""
 
 from app.schemas.profile import ProfileUpdateIn

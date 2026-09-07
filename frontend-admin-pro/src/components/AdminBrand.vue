@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="admin-brand flex items-center gap-3 min-w-0" :class="{ 'admin-brand--compact': compact }">
     <div v-if="logoUrl" class="admin-brand__logo-img shrink-0 overflow-hidden rounded-lg border border-[var(--admin-brand-mark-border)]">

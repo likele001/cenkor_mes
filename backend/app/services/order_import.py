@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """订单 Excel 导入：页面填写订单头，Excel 仅含产品/型号/数量等明细。"""
 
 from __future__ import annotations

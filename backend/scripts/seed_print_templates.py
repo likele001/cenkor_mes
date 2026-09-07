@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 预置打印模板（任务码标签等）
 运行：cd backend && PYTHONPATH=. python3 scripts/seed_print_templates.py --tenant-code DEMO

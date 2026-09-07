@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """推送连续失败告警 + 告警接收人
 
 按事件 + 通道 维度统计连续失败次数，达到阈值通知管理员。
@@ -15,11 +17,9 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.crud.tenant_setting import get_setting, upsert_setting
-from app.models.dingtalk_push_log import DingtalkPushLog
 from app.models.feishu_push_log import FeishuPushLog
 from app.models.role import Role
 from app.models.user import User, user_roles
-from app.models.wecom_push_log import WecomPushLog
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +117,6 @@ def check_consecutive_failures(db: Session, event_code: str, channel: str) -> No
 
     model_map = {
         "feishu": FeishuPushLog,
-        "wecom": WecomPushLog,
-        "dingtalk": DingtalkPushLog,
     }
     model = model_map.get(channel)
     if not model:

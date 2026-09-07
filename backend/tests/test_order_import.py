@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """订单 Excel 导入测试（页面填订单头 + Excel 明细）"""
 
 from io import BytesIO

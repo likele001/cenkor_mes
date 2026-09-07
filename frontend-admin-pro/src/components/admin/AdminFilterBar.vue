@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <div class="admin-filter-bar flex items-center justify-between gap-3 flex-wrap">
     <div v-if="$slots.default" class="flex items-center gap-2 flex-wrap min-w-0">

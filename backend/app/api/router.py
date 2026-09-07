@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends
 
 from app.core.deps import get_current_user
@@ -22,7 +24,6 @@ from app.integration.crm_adapter.router import inbound_router, admin_router
 from app.api.admin.cron_jobs import router as admin_cron_jobs_router
 from app.api.admin.export_jobs import router as admin_export_jobs_router
 from app.api.admin.automation.router import router as admin_automation_router
-from app.api.admin.ai.router import router as admin_ai_router
 from app.api.admin.finance.router import router as admin_finance_router
 from app.api.admin.purchase.router import router as admin_purchase_router
 from app.api.admin.warehouse.router import router as admin_warehouse_router
@@ -49,7 +50,6 @@ api_router.include_router(admin_shift_router, prefix="/admin/shift", tags=["admi
 api_router.include_router(admin_exec_dashboard_router, prefix="/admin/exec-dashboard", tags=["admin-exec-dashboard"], dependencies=_admin_deps)
 api_router.include_router(admin_cron_jobs_router, prefix="/admin/cron-jobs", tags=["admin-cron-jobs"], dependencies=_admin_deps)
 api_router.include_router(admin_export_jobs_router, prefix="/admin", tags=["admin-export-jobs"], dependencies=_admin_deps)
-api_router.include_router(admin_ai_router, prefix="/ai", tags=["ai"], dependencies=_admin_deps)
 api_router.include_router(admin_automation_router, prefix="/admin/automation", tags=["admin-automation"], dependencies=_admin_deps)
 api_router.include_router(admin_finance_router, prefix="/admin/finance", tags=["admin-finance"], dependencies=_admin_deps)
 api_router.include_router(admin_purchase_router, prefix="/admin/purchase", tags=["admin-purchase"], dependencies=_admin_deps)
@@ -65,14 +65,6 @@ api_router.include_router(admin_router, prefix="/crm-adapter", tags=["crm-adapte
 from app.api.feishu.router import router as feishu_open_router
 
 api_router.include_router(feishu_open_router, prefix="/feishu", tags=["feishu-open"])
-
-from app.api.wecom.router import router as wecom_open_router
-
-api_router.include_router(wecom_open_router, prefix="/wecom", tags=["wecom-open"])
-
-from app.api.dingtalk.router import router as dingtalk_open_router
-
-api_router.include_router(dingtalk_open_router, prefix="/dingtalk", tags=["dingtalk-open"])
 
 from app.api.v1.push_monitor import router as push_monitor_router
 

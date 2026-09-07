@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { computed, reactive, ref } from 'vue'
 import { crudCreate, crudGet, crudList, crudRemove, crudUpdate } from '@/api/admin/crudHttp'
 import type { CrudField, CrudSchema } from '@/types/adminCrud'

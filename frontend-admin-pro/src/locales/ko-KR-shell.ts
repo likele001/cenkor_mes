@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /** 导航、工作台等高频 UI 韩文（与 zh-CN / en-US 的 menu、common 等 key 对齐） */
 export default {
   home: {

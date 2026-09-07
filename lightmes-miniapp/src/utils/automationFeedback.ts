@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 export function formatAutomationFeedback(res: {
   automation_plan_id?: number | null
   automation_pipeline_ran?: boolean

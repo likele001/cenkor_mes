@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('purchase.orderDetail.title')" :description="item?.code || ''">
     <el-card v-loading="loading">

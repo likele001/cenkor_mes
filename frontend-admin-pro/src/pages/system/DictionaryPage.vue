@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <AdminPage :title="t('system.dictionary.title')" class="h-full flex flex-col">
     <el-card shadow="never" class="flex-1 flex flex-col overflow-hidden" body-class="flex-1 overflow-hidden !p-0">

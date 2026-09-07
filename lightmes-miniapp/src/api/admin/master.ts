@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { apiDel, apiGet, apiPost, apiPut } from '../request'
 
 export type BomItem = { id?: number; material_id: number; qty_per: number; remark?: string | null }

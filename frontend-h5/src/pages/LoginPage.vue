@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { parseTenantFromPath, getStoredTenantCode, setStoredTenantCode, tenantH5Path } from '@/utils/tenant'

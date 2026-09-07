@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """crm_adapter 请求/响应 Pydantic 模型。
 
 OrderItemIn / SalesOrderIn 严格镜像 ck_crm 的 SalesOrderDTO，

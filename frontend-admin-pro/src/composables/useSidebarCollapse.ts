@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import { onMounted, ref, watch } from 'vue'
 
 const STORAGE_KEY = 'cenkormes-admin-sider-collapsed'

@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 /**
  * CenkorMES 单用户版 tenant 兼容层
  * SaaS 版有完整的多租户路由逻辑，单用户版不需要租户前缀

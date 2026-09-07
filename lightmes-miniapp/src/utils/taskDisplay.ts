@@ -1,3 +1,5 @@
+// Copyright (C) 2026 CenkorMES Project
+// SPDX-License-Identifier: AGPL-3.0
 import type { H5Task } from '@/api/h5/tasks'
 
 export function taskSkuTitle(task: H5Task): string {

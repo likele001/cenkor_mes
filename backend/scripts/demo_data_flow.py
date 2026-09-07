@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 CenkorMES 完整流程演示数据生成脚本
 ==================================

@@ -1,3 +1,7 @@
+<!--
+  Copyright (C) 2026 CenkorMES Project
+  SPDX-License-Identifier: AGPL-3.0
+-->
 <template>
   <view class="adm-page">
     <view class="hint">选择产品后逐行填写型号及工序单价；同产品下已存在的型号名称将自动跳过。</view>

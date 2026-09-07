@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """飞书卡片按钮触发的报工审核"""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """
 沙发厂演示物料导入（参考 thinkmes.sql）
 --------------------------------------

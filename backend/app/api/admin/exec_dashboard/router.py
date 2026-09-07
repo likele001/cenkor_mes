@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """老板看板（Executive Dashboard）API
 
 提供 5 大经营指标的聚合查询与下钻数据。

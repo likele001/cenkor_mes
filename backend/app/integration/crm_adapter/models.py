@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """crm_adapter 数据模型：连接配置（单行）+ CRM 推送进来的订单 + 产品映射表。
 
 表在应用启动（DB_AUTO_CREATE=true）时由 Base.metadata.create_all 自动创建，
