@@ -40,6 +40,32 @@
 
 > 开源独立版完整保留生产管理核心闭环，天然不含 SaaS 平台层与高级增值功能，商业增值能力集中在 SaaS 版。详细差异见 [`docs/cenkormes-vs-lightmes.html`](docs/cenkormes-vs-lightmes.html)。
 
+## 鸣谢（Acknowledgements）
+
+CenkorMES 深度构建在众多优秀的开源项目与第三方组件之上，本系统得以稳定运行、开发与交付，离不开这些上游项目的作者与广大社区长期无私的贡献。在此向以下技术与项目致以诚挚敬意：
+
+**前端与小程序**
+- **Vue 3 / Vue Router / Pinia / vue-i18n**（Vue 生态，MIT）— 核心框架、路由、状态与国际化
+- **Element Plus** 及图标库（MIT）、**Vant 4**（MIT）— 桌面端与移动端组件库
+- **ECharts / vue-echarts**（Apache ECharts，Apache-2.0）— 数据图表与经营看板
+- **bpmn-js**（bpmn.io）— 审批 / 工作流流程设计器
+- **Axios**（MIT）、**Tailwind CSS / clsx / tailwind-merge**（MIT）、**lucide-vue-next**（ISC）— 请求、样式与图标
+- **uni-app（DCloud）**（Apache-2.0）— 跨端小程序框架
+- **微信同声传译插件（WechatSI）**（腾讯）— 语音识别报工
+
+**后端与数据**
+- **FastAPI**（MIT）— 异步 Web 框架
+- **SQLAlchemy / Pydantic / alembic**（MIT）— ORM、数据校验与迁移
+- **Celery + Redis**（BSD / MIT）— 异步任务与定时调度
+- **OpenAI SDK**（Apache-2.0）、**ChromaDB**（Apache-2.0）— 大模型调用与 RAG 向量库
+- **OR-Tools**（Google，Apache-2.0）、**Prophet**、**scikit-learn**、**pandas / numpy** — 排产优化与机器学习
+- **阿里云 OSS / 腾讯云 COS / 七牛 Kodo SDK** — 对象存储
+- **python-jose / bcrypt / PyMySQL / openpyxl / httpx / Pillow / pytest** 等众多元件
+
+我们严格遵循各上游开源许可证（MIT / Apache-2.0 / BSD-3-Clause / ISC / HPND / AGPL 兼容），并在分发时完整保留其版权与许可声明。
+
+> 完整、逐条的第三方依赖许可证清单，请参阅 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) 与 [LICENSE](./LICENSE)。我们对每一位开源贡献者再次表示感谢。
+
 ## 快速启动
 
 ### 环境要求
