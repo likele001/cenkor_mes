@@ -40,27 +40,55 @@
 
 > 开源独立版完整保留生产管理核心闭环，天然不含 SaaS 平台层与高级增值功能，商业增值能力集中在 SaaS 版。详细差异见 [`docs/cenkormes-vs-lightmes.html`](docs/cenkormes-vs-lightmes.html)。
 
+---
 ## 鸣谢（Acknowledgements）
 
 CenkorMES 深度构建在众多优秀的开源项目与第三方组件之上，本系统得以稳定运行、开发与交付，离不开这些上游项目的作者与广大社区长期无私的贡献。在此向以下技术与项目致以诚挚敬意：
 
 **前端与小程序**
-- **Vue 3 / Vue Router / Pinia / vue-i18n**（Vue 生态，MIT）— 核心框架、路由、状态与国际化
-- **Element Plus** 及图标库（MIT）、**Vant 4**（MIT）— 桌面端与移动端组件库
-- **ECharts / vue-echarts**（Apache ECharts，Apache-2.0）— 数据图表与经营看板
-- **bpmn-js**（bpmn.io）— 审批 / 工作流流程设计器
-- **Axios**（MIT）、**Tailwind CSS / clsx / tailwind-merge**（MIT）、**lucide-vue-next**（ISC）— 请求、样式与图标
-- **uni-app（DCloud）**（Apache-2.0）— 跨端小程序框架
-- **微信同声传译插件（WechatSI）**（腾讯）— 语音识别报工
+
+| 依赖 | 用途 | 官方主页 / 仓库 |
+|------|------|-----------------|
+| [Vue 3](https://github.com/vuejs/core) | 核心渐进式框架 | github.com/vuejs/core · MIT |
+| [Vue Router](https://github.com/vuejs/router) | 前端路由 | github.com/vuejs/router · MIT |
+| [Pinia](https://github.com/vuejs/pinia) | 状态管理 | github.com/vuejs/pinia · MIT |
+| [vue-i18n](https://github.com/intlify/vue-i18n-next) | 国际化 | github.com/intlify/vue-i18n-next · MIT |
+| [Element Plus](https://github.com/element-plus/element-plus) | 桌面端组件库 | github.com/element-plus/element-plus · MIT |
+| [Vant 4](https://github.com/youzan/vant) | 移动端组件库 | github.com/youzan/vant · MIT |
+| [Apache ECharts](https://github.com/apache/echarts) | 数据图表与看板 | github.com/apache/echarts · Apache-2.0 |
+| [vue-echarts](https://github.com/ecomfe/vue-echarts) | Vue 中的 ECharts 封装 | github.com/ecomfe/vue-echarts · MIT |
+| [bpmn-js](https://github.com/bpmn-io/bpmn-js) | 审批 / 工作流流程图设计器 | github.com/bpmn-io/bpmn-js · bpmn.io License |
+| [Axios](https://github.com/axios/axios) | HTTP 请求 | github.com/axios/axios · MIT |
+| [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | 原子化 CSS | github.com/tailwindlabs/tailwindcss · MIT |
+| [lucide-vue-next](https://github.com/lucide-icons/lucide) | 图标 | github.com/lucide-icons/lucide · ISC |
+| [uni-app](https://github.com/dcloudio/uni-app) | 跨端小程序框架 | github.com/dcloudio/uni-app · Apache-2.0 |
+| 微信同声传译插件（WechatSI） | 语音识别报工 | 微信官方小程序插件平台 |
 
 **后端与数据**
-- **FastAPI**（MIT）— 异步 Web 框架
-- **SQLAlchemy / Pydantic / alembic**（MIT）— ORM、数据校验与迁移
-- **Celery + Redis**（BSD / MIT）— 异步任务与定时调度
-- **OpenAI SDK**（Apache-2.0）、**ChromaDB**（Apache-2.0）— 大模型调用与 RAG 向量库
-- **OR-Tools**（Google，Apache-2.0）、**Prophet**、**scikit-learn**、**pandas / numpy** — 排产优化与机器学习
-- **阿里云 OSS / 腾讯云 COS / 七牛 Kodo SDK** — 对象存储
-- **python-jose / bcrypt / PyMySQL / openpyxl / httpx / Pillow / pytest** 等众多元件
+
+| 依赖 | 用途 | 官方主页 / 仓库 |
+|------|------|-----------------|
+| [FastAPI](https://github.com/fastapi/fastapi) | 异步 Web 框架 | github.com/fastapi/fastapi · MIT |
+| [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) | ORM | github.com/sqlalchemy/sqlalchemy · MIT |
+| [Pydantic](https://github.com/pydantic/pydantic) | 数据校验 | github.com/pydantic/pydantic · MIT |
+| [alembic](https://github.com/sqlalchemy/alembic) | 数据库迁移 | github.com/sqlalchemy/alembic · MIT |
+| [Celery](https://github.com/celery/celery) | 异步任务与定时调度 | github.com/celery/celery · BSD-3-Clause |
+| [Redis](https://github.com/redis/redis) | 缓存 / 消息中间件 | github.com/redis/redis · BSD-3-Clause |
+| [OpenAI Python SDK](https://github.com/openai/openai-python) | 大模型调用 | github.com/openai/openai-python · Apache-2.0 |
+| [ChromaDB](https://github.com/chroma-core/chroma) | RAG 向量数据库 | github.com/chroma-core/chroma · Apache-2.0 |
+| [Google OR-Tools](https://github.com/google/or-tools) | 排产 / 运筹优化 | github.com/google/or-tools · Apache-2.0 |
+| [Prophet](https://github.com/facebook/prophet) | 时间序列预测 | github.com/facebook/prophet · MIT |
+| [scikit-learn](https://github.com/scikit-learn/scikit-learn) | 机器学习 | github.com/scikit-learn/scikit-learn · BSD-3-Clause |
+| [pandas](https://github.com/pandas-dev/pandas) | 数据分析 | github.com/pandas-dev/pandas · BSD-3-Clause |
+| [numpy](https://github.com/numpy/numpy) | 数值计算 | github.com/numpy/numpy · BSD-3-Clause |
+| [python-jose](https://github.com/mpdavis/python-jose) | JWT 签名 | github.com/mpdavis/python-jose · MIT |
+| [bcrypt](https://github.com/pyca/bcrypt) | 密码哈希 | github.com/pyca/bcrypt · Apache-2.0 |
+| [PyMySQL](https://github.com/PyMySQL/PyMySQL) | MySQL 驱动 | github.com/PyMySQL/PyMySQL · MIT |
+| [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl) | Excel 读写 | openpyxl · MIT |
+| [httpx](https://github.com/encode/httpx) | HTTP 客户端 | github.com/encode/httpx · BSD-3-Clause |
+| [Pillow](https://github.com/python-pillow/Pillow) | 图像处理 | github.com/python-pillow/Pillow · HPND |
+| 阿里云 OSS SDK / 腾讯云 COS SDK / 七牛 Kodo SDK | 对象存储 | 各云厂商官方 SDK |
+| [pytest](https://github.com/pytest-dev/pytest) | 单元测试 | github.com/pytest-dev/pytest · MIT |
 
 我们严格遵循各上游开源许可证（MIT / Apache-2.0 / BSD-3-Clause / ISC / HPND / AGPL 兼容），并在分发时完整保留其版权与许可声明。
 
