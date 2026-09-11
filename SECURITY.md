@@ -1,21 +1,46 @@
 # Security Policy
 
-## Supported Versions
+感谢你关注 CenkorMES 的安全。本文件说明了哪些版本仍在安全支持期内，以及如何安全地报告你发现的漏洞。
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+## 支持的版本（Supported Versions）
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+以下版本当前接受安全更新。请优先升级到仍受支持的版本，以确保能收到安全修复补丁。
 
-## Reporting a Vulnerability
+| 版本 | 支持状态 |
+| ---- | -------- |
+| v2.0.x | ✅ 支持（当前主版本，安全更新持续维护） |
+| v1.x | ❌ 不再支持（仅保留历史记录，建议尽快升级到 v2.x） |
+| < 1.0 | ❌ 不提供支持 |
 
-Use this section to tell people how to report a vulnerability.
+> 说明：只有**当前主版本（v2）** 的最近发行版会持续获得安全修复。旧版本不受支持，升级路径与发布说明请查看本仓库的 Release 记录。
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+## 漏洞报告（Reporting a Vulnerability）
+
+如果你在产品（后端 API / 管理后台 / H5 / 微信小程序）中发现了安全问题，请通过以下**私密、非公开**的渠道报告，切勿在公开 Issue、论坛或社群中直接泄露漏洞细节：
+
+1. **首选 — GitHub 私密漏洞报告（Private Vulnerability Reporting）**
+   在本仓库页面点 **Security → Report a vulnerability**，填写漏洞描述。此渠道提交内容仅项目维护者可见。
+
+2. **备用 — 维护者邮箱**
+   将漏洞详情（含复现步骤、受影响版本、影响范围、可选的缓解建议）发送至：
+   **security@cenkormes.dev**（占位，请项目所有者替换为真实安全邮箱）
+
+### 处理周期与预期
+
+| 阶段 | 预期时间 |
+| ---- | -------- |
+| 首次响应（确认收到） | 48 小时内 |
+| 漏洞评估与初步缓解方案 | 5 个工作日内 |
+| 修复版本发布（PoC 高危） | 视严重程度优先排期 |
+
+- 我们会告诉你：漏洞是否被接受、预计的修复时间、会随哪个版本发布。
+- 若漏洞被拒绝（已修复 / 非安全问题 / 超出支持范围），我们会说明理由。
+- 请勿在未经维护者确认修复完成前公开漏洞细节，以保护所有使用者。
+
+## 安全承诺
+
+- 本仓库遵循 [AGPL-3.0](./LICENSE) 开源协议。
+- 敏感数据处理采用行业常见的安全基线（密码非明文存储、JWT 鉴权、接口权限校验、多租户数据隔离等），并持续接受审计与修复。
+- 完整第三方依赖清单及对应许可，请参阅 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+
+感谢你帮助 CenkorMES 与所有使用者保持安全。
