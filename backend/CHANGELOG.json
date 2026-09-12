@@ -143,5 +143,10 @@
     "version": "v2.0.0",
     "release_date": "2026-09-01",
     "description": "refactor: 移除旧AI、钉钉、企微相关代码，新增ERP财务管理模块\n\n1. 删除所有AI服务相关文件、三方消息对接（企微/钉钉）代码及前端相关页面\n2. 更新项目名称与配置信息，统一替换LightMes为CenkorMES\n3. 新增ERP财务管理相关的schema、API路由与数据库模型\n4. 移除推送统计中的企微/钉钉统计项，调整通知推送逻辑"
+  },
+  {
+    "version": "v2.0.1",
+    "release_date": "2026-09-12",
+    "description": "feat(api): 添加独立版AI智能中心兼容占位路由\n\n- 在主路由中增加 AI 兼容层路由，避免独立版出现/api/ai/* 404错误\n- 新增 ai_compat 子模块，提供安全的空数据接口作为兜底\n- 实现 /brief、/alerts、/alerts/run 三个占位接口，均返回空内容确保前端调用安全\n- 兼容层导入失败时不影响主路由加载，保证系统稳定性"
   }
 ]
