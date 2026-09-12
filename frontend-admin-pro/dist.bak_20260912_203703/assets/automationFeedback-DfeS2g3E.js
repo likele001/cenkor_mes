@@ -1,0 +1,1 @@
+import{O as n}from"./index-jycFH-vk.js";function u(i){const a=n.global.t,t=[];return i.automation_plan_id&&t.push(a("utils.automation.autoCreatedPlan",{id:i.automation_plan_id})),i.automation_pipeline_ran&&t.push(a("utils.automation.pipelineSynced")),i.pipeline_queued&&t.push(a("utils.automation.pipelineQueued")),t.length?t.join("；"):null}export{u as f};

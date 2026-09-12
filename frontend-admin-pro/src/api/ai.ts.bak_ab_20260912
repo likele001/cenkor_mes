@@ -1,9 +1,3 @@
-// 独立版构建期短路：除非显式开启 VITE_ENABLE_AI=1，否则 aiApi 为安全空实现。
-// 这样 vite 会把整个 ai.ts tree-shake 掉，主入口 chunk 不再出现 /ai/* 路径。
-const AI_ENABLED = (import.meta.env.VITE_ENABLE_AI === '1')
-const _disabled = <T>(fallback?: T): Promise<T> => Promise.resolve((fallback ?? null) as T)
-const _disabledVoid: Promise<void> = Promise.resolve()
-
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
 import { http } from '@/utils/http'
@@ -59,7 +53,7 @@ export type AuditSummaryOut = {
   suggest_actions?: string[]
 }
 
-const _aiApiEnabled = {
+export const aiApi = {
   listModels: () => http.request<any>({ url: '/ai/models', method: 'GET' }),
   listConversations: (kind: string) => http.request<any>({ url: '/ai/conversations', method: 'GET', params: { kind } }),
   deleteConversation: (id: number) => http.request<void>({ url: `/ai/conversations/${id}`, method: 'DELETE' }),
@@ -82,30 +76,3 @@ const _aiApiEnabled = {
   auditSummary: (status: string) => http.request<any>({ url: '/ai/audit/summary', method: 'GET', params: { status } }),
   reportVision: (id: number) => http.request<any>({ url: `/ai/report-units/${id}/vision`, method: 'POST' }),
 }
-
-
-// 独立版默认关闭 AI：所有 aiApi 方法返回安全空值
-const _aiApiDisabled: Record<string, (...args: any[]) => Promise<any>> = {
-  listModels: () => _disabled({ items: [] }),
-  listConversations: () => _disabled({ items: [] }),
-  deleteConversation: () => _disabledVoid,
-  runAlerts: () => _disabled({ events: 0, notified: 0 }),
-  listAlerts: () => _disabled({ items: [] }),
-  getAiBrief: () => _disabled({ mode: null, content: null }),
-  getAlertSettings: () => _disabled({ items: [] }),
-  saveAlertSettings: () => _disabled({ ok: true }),
-  chatStream: () => _disabled({ reply: '' }),
-  planScheduleSuggest: () => _disabled({ dispatch_hints: [] }),
-  planScheduleOptimize: () => _disabled({ ok: false }),
-  planScheduleApply: () => _disabledVoid,
-  getPlanForecast: () => _disabled({ due_risk: 'low' }),
-  getPlanApsStrategy: () => _disabled({ items: [] }),
-  planAnalyze: () => _disabled({ ok: false }),
-  getGatewaySettings: () => _disabled({ items: [] }),
-  saveGatewaySettings: () => _disabled({ ok: true }),
-  getPromptSettings: () => _disabled({ items: [] }),
-  savePromptSettings: () => _disabled({ ok: true }),
-  auditSummary: () => _disabled({ summary: '', anomaly_count: 0, ai_suggestions: [] }),
-  reportVision: () => _disabled({ text: '', anomaly_count: 0 }),
-}
-export const aiApi = AI_ENABLED ? (_aiApiEnabled as any) : (_aiApiDisabled as any)

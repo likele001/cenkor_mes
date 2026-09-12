@@ -73,11 +73,3 @@ api_router.include_router(push_monitor_router, prefix="/admin/push-monitor", tag
 from app.api.miniapp.auth import router as miniapp_auth_router
 
 api_router.include_router(miniapp_auth_router, prefix="/miniapp/auth", tags=["miniapp"])
-# 独立版兼容层：AI 智能中心占位接口（独立版不开放 AI，确保 /api/ai/* 不出现 404）
-try:
-    from app.api.ai_compat.router import router as ai_compat_router
-    api_router.include_router(ai_compat_router, prefix="/ai", tags=["ai-compat"])
-except Exception:
-    # 兼容层导入失败不阻塞主路由
-    pass
-

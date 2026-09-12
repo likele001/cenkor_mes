@@ -32,7 +32,7 @@ const mediaCfg = ref({
   max_video_count: 3,
 })
 const auth = useAuthStore()
-const canAi = computed(() => false)
+const canAi = computed(() => auth.hasAnyPermission(['ai.use', 'report.audit']))
 const aiSummaryLoading = ref(false)
 const aiSummaryData = ref<AuditSummaryOut | null>(null)
 const aiSummaryOpen = ref(false)

@@ -268,7 +268,7 @@ import AdminPage from '@/components/admin/AdminPage.vue'
 import PushStatsCard from '@/components/admin/PushStatsCard.vue'
 import { dashboardApi, type DashboardChartsOut, type DashboardSummaryOut } from '@/api/dashboard'
 import { productionApi } from '@/api/production'
-import { aiApi } from '@/api/ai' // 独立版暂不开放 AI 智能中心（canAi=false 时函数早返回）
+import { aiApi } from '@/api/ai'
 import { ElMessage } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -291,9 +291,9 @@ const chartDays = ref(14)
 const canDashboard = computed(() => auth.hasAnyPermission(['dashboard.view']))
 const canCrm = computed(() => auth.hasAnyPermission(['customer.manage', 'crm.sales']))
 const crmSummary = ref<{ open_opportunities: number; public_pool: number; due_followups: number } | null>(null)
-const canAi = computed(() => false)
-const canAiAlert = computed(() => false)
-const canAiSettings = computed(() => false)
+const canAi = computed(() => auth.hasAnyPermission(['ai.use']))
+const canAiAlert = computed(() => auth.hasAnyPermission(['ai.alert.view']))
+const canAiSettings = computed(() => auth.hasAnyPermission(['ai.use', 'setting.manage']))
 
 const aiOpen = ref(false)
 const aiInput = ref('')
