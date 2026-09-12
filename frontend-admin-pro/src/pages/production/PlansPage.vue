@@ -1034,7 +1034,7 @@ const { t } = useI18n()
 const router = useRouter()
 const { label: statusLabel, type: statusTagType } = useStatus('plan')
 const auth = useAuthStore()
-const canAi = computed(() => auth.hasAnyPermission(['ai.use', 'plan.manage']))
+const canAi = computed(() => false)
 const canAutomationSettings = computed(() => auth.hasAnyPermission(['setting.manage']))
 const automationSettings = ref<AutomationSettings | null>(null)
 
