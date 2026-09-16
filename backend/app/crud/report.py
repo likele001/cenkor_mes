@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import select, update as sa_update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.process_price import ProcessPrice
@@ -117,6 +118,12 @@ def calc_and_create_salary(
     if not wo:
         return None
 
+    # 幂等保护：同一报工报告仅生成一条工资明细（schema 有 uq_salary_items_report 唯一约束）。
+    # 无此检查时，重复终审核会触发 UNIQUE 约束抛 IntegrityError（表现为 500）。
+    existing = db.scalar(select(SalaryItem).where(SalaryItem.report_id == report.id))
+    if existing is not None:
+        return existing
+
     price = db.scalar(
         select(ProcessPrice).where(
             ProcessPrice.sku_id == wo.sku_id,
@@ -143,7 +150,14 @@ def calc_and_create_salary(
         month=month,
     )
     db.add(item)
-    db.flush()
+    # 并发安全：若并发终审同时到达，唯一约束冲突时回滚 SAVEPOINT 并返回已存在的工资明细，避免 500
+    _sp = db.begin_nested()
+    try:
+        db.flush()
+        _sp.commit()
+    except IntegrityError:
+        _sp.rollback()
+        return db.scalar(select(SalaryItem).where(SalaryItem.report_id == report.id))
     return item
 
 
