@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """ERP 财务总账 CRUD"""
 from datetime import date, datetime
 from decimal import Decimal

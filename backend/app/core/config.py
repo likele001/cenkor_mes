@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = ""
     H5_PUBLIC_BASE_URL: str = ""
 
+    # 安全基线
+    JWT_SECRET_MIN_LENGTH: int = 32          # 生产环境 JWT 密钥最小长度
+    PASSWORD_MIN_LENGTH: int = 6             # 用户密码最小长度（兼容内置种子账号长度）
+    CORS_ORIGINS: str = ""                   # 允许跨域的来源，逗号分隔；留空则不开启 CORS
+    TRUSTED_HOSTS: str = ""                  # 允许的 Host，逗号分隔；生产建议固定，留空不启用校验
+
     STORAGE_DRIVER: str = "local"
     STORAGE_LOCAL_ROOT: str = "./data/storage"
     FILE_MAX_UPLOAD_SIZE: int = 100 * 1024 * 1024

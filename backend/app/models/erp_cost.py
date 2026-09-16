@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """ERP 工单成本核算：实际成本归集 + 报价毛利对比"""
 from datetime import date, datetime
 from decimal import Decimal

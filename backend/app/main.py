@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +13,9 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.core.errors import BizError
+from app.core.middleware import SecurityHeadersMiddleware
 from app.core.response import fail, ok
+from app.core.security import ensure_secure_jwt_secret
 from app.crud.rbac import ensure_permissions, create_default_roles
 from app.crud.user import create_user
 from app.models.base import Base
@@ -19,6 +23,26 @@ from app.models.user import User
 
 
 app = FastAPI(title=settings.APP_NAME)
+
+# 安全响应头：全局补发，不覆盖已有值
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS：仅当显式配置了 CORS_ORIGINS（逗号分隔）时才启用白名单
+if settings.CORS_ORIGINS:
+    _allowed = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Host 头校验：仅当显式配置了 TRUSTED_HOSTS 时才启用
+if settings.TRUSTED_HOSTS:
+    _hosts = [h.strip() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
+
 app.include_router(api_router, prefix="/api")
 
 
@@ -62,6 +86,7 @@ def any_exception_handler(_: Request, exc: Exception):
 
 @app.on_event("startup")
 def on_startup():
+    ensure_secure_jwt_secret()
     if settings.DB_AUTO_CREATE:
         Base.metadata.create_all(bind=engine)
     if settings.DB_AUTO_SEED:

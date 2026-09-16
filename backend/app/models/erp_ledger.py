@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """ERP 财务总账：会计科目 / 记账凭证 / 凭证分录 / 会计期间"""
 from datetime import date, datetime
 from decimal import Decimal

@@ -178,7 +178,10 @@ server {
 | `DB_URL` | `mysql+pymysql://...cenkormes...` | 数据库连接串，库名默认 `cenkormes` |
 | `DB_AUTO_CREATE` | `true` | 首启自动按 ORM 建表 |
 | `DB_AUTO_SEED` | `true` | 首启自动创建默认管理员 |
-| `JWT_SECRET` | 无默认强值 | **生产必须自设强随机串** |
+| `JWT_SECRET` | 无默认强值 | **生产必须自设强随机串**；`APP_ENV=prod` 时若为默认/过短将拒绝启动 |
+| `CORS_ORIGINS` | 空 | 逗号分隔白名单；留空不开 CORS（推荐 Nginx 同域反代） |
+| `TRUSTED_HOSTS` | 空 | 逗号分隔 Host 白名单；留空不校验，生产建议固定 |
+| `PASSWORD_MIN_LENGTH` | `6` | 用户密码最小长度 |
 | `PUBLIC_BASE_URL` | — | 对外访问地址（打印/分享/回调） |
 | `STORAGE_DRIVER` | `local` | 存储驱动：local / aliyun_oss / tencent_cos / qiniu |
 | `REDIS_URL` / `CELERY_*` | — | Redis 与 Celery 任务队列 |
@@ -187,10 +190,64 @@ server {
 
 ## 6. 安全基线（上线前）
 
+内置加固（无需配置即生效，全部响应携带安全头）：
+
+- 安全响应头：`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、
+  `Referrer-Policy`、`X-XSS-Protection`、`Permissions-Policy`（不覆盖反向代理已设的值）。
+- 密码强度：`create_user` / `set_password`（改密、重置、建号）统一校验
+  `PASSWORD_MIN_LENGTH` 与字符多样性，弱口令返回友好 400 提示。
+- 对称环境差异：`APP_ENV=prod` 时若 `JWT_SECRET` 仍为默认/不足 32 位，启动直接
+  fail-fast 拒绝运行，杜绝用已知弱密钥伪造令牌。
+
+上线 Checklist：
+
 - 立即修改默认管理员 `admin` 密码，并关闭弱口令。
-- 设置强随机 `JWT_SECRET`。
-- 生产将 `APP_ENV` 置为 `prod`，关闭 `--reload`。
+- 设置强随机 `JWT_SECRET`（≥32 位）：`python3 -c "import secrets;print(secrets.token_urlsafe(48))"`。
+- 设置 `APP_ENV=prod` 关闭 `--reload`；在 `backend/.env` 配置 `TRUSTED_HOSTS`。
+- 多端直连后端（非 Nginx 反代）时，按需配置 `CORS_ORIGINS` 白名单。
 - 为 MySQL、Redis 设置强账号密码（默认仅用于本地演示）。
 - 通过 HTTPS + Nginx 对外提供，`PUBLIC_BASE_URL` 指向 HTTPS 地址。
 
 更多详见 [`SECURITY.md`](../SECURITY.md)。
+
+---
+
+## 7. 数据备份与恢复
+
+CenkorMES 业务数据存于 MySQL，文件存于本地卷（`STORAGE_LOCAL_ROOT`）或对象存储。
+**生产上线前务必配置周期性备份。**
+
+### Docker 部署（MySQL 在容器中）
+
+```bash
+# 逻辑备份到宿主机（utf8mb4 中文友好）
+docker compose exec -T mysql mysqldump \
+  -uroot -proot --default-character-set=utf8mb4 --single-transaction \
+  cenkormes > backup/cenkormes_$(date +%F_%H%M).sql
+
+# 恢复（先确认目标库为空或可覆盖）
+docker compose exec -T mysql mysql -uroot -proot cenkormes < backup/cenkormes_xxxx.sql
+
+# 文件卷备份（Docker 命名卷）
+docker run --rm -v cenkormes_storage_data:/data -v "$PWD/backup":/backup \
+  busybox tar czf /backup/storage_$(date +%F).tar.gz -C /data .
+```
+
+> 备份卷名以 `docker compose volume ls` 实际输出为准；`root` 密码默认 `root`，
+> 生产务必改为强密码并在命令中替换。
+
+### 手动 / 宝塔部署
+
+- 宝塔面板「数据库」可对 `cenkormes` 库一键备份/定时任务；存储目录
+  `backend/data/storage` 单独打包。
+- 裸机 crontab 示例（每天 02:30 备份 + 保留 14 天）：
+
+```bash
+30 2 * * *  mysqldump --default-character-set=utf8mb4 --single-transaction -uroot -p'密码' cenkormes | gzip > /data/backup/cenkormes_$(date +\%F).sql.gz && find /data/backup -name '*.sql.gz' -mtime +14 -delete
+```
+
+### 恢复要点
+
+- 恢复前备份当前库；导入新 dump 前最好清空目标库避免主键冲突。
+- 先验证 dump 中账号数据完整（`users` / `roles` / `orders` 等表），再切换流量。
+- 对象存储（阿里云 OSS 等）建议同时开启服务商侧回收站 / 跨区冗余。
