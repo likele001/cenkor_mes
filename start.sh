@@ -1,49 +1,71 @@
 #!/bin/bash
-# CenkorMES 启动脚本
-set -e
+# CenkorMES 本地启动脚本
+#   默认 dev：后端 uvicorn --reload（:8000）+ 管理后台 vite（:5174）+ H5 vite（:5173）
+#   生产：   ./start.sh --prod   后端编译关闭 reload，前端先 build 再用 vite preview 托管
+#
+# 依赖：Python 3.10+ / Node 18+ / 本地 MySQL；可选 Redis（Celery 任务）
+set -euo pipefail
 
-echo "=== CenkorMES 启动 ==="
+cd "$(dirname "$0")"
 
-# 检查 Python 环境
-if [ ! -d "backend/venv" ]; then
-    echo "创建 Python 虚拟环境..."
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+ADMIN_PORT="${ADMIN_PORT:-5174}"
+H5_PORT="${H5_PORT:-5173}"
+MODE="dev"
+if [ "${1:-}" = "--prod" ]; then MODE="prod"; fi
+
+echo "=== CenkorMES 启动（${MODE} 模式）==="
+
+# 1) 后端 Python 环境
+if [ ! -d backend/venv ]; then
+    echo ">>> 创建后端虚拟环境并安装依赖..."
     python3 -m venv backend/venv
-    source backend/venv/bin/activate
-    pip install -r backend/requirements.txt
-else
-    source backend/venv/bin/activate
+    backend/venv/bin/pip install --upgrade pip
+    backend/venv/bin/pip install -r backend/requirements.txt
 fi
 
-# 启动后端
-echo "启动后端服务 (端口 8500)..."
-cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8500 --reload &
+# 2) 环境配置检查
+if [ ! -f backend/.env ]; then
+    echo "[提示] 未找到 backend/.env，首次可: cp backend/env.example backend/.env，再编辑数据库连接。"
+fi
+
+# 3) 启动后端
+if [ "$MODE" = "prod" ]; then
+    echo ">>> 启动后端 (${BACKEND_PORT}, 无 --reload)"
+    ( cd backend && exec venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" ) &
+else
+    echo ">>> 启动后端 (${BACKEND_PORT}, --reload)"
+    ( cd backend && exec venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload ) &
+fi
 BACKEND_PID=$!
-cd ..
 
-# 启动前端(admin)
-echo "启动管理后台前端 (端口 5174)..."
-cd frontend-admin-pro
-npm install --silent 2>/dev/null
-npm run dev -- --port 5174 &
+# 4) 前端
+start_frontend() {
+    local name="$1" dir="$2" port="$3"
+    echo ">>> 准备前端 ${name} ..."
+    ( cd "$dir" && npm install --silent ) &
+    wait $!
+    if [ "$MODE" = "prod" ]; then
+        echo ">>> 构建 ${name} 并以 preview 托管 (:${port})"
+        ( cd "$dir" && npm run build && npm run preview -- --host 0.0.0.0 --port "$port" ) &
+    else
+        ( cd "$dir" && npm run dev -- --port "$port" ) &
+    fi
+}
+
+start_frontend "管理后台" frontend-admin-pro "$ADMIN_PORT"
 ADMIN_PID=$!
-cd ..
-
-# 启动前端(H5)
-echo "启动 H5 移动端 (端口 5173)..."
-cd frontend-h5
-npm install --silent 2>/dev/null
-npm run dev -- --port 5173 &
+start_frontend "H5 移动端" frontend-h5 "$H5_PORT"
 H5_PID=$!
-cd ..
 
 echo ""
-echo "=== 服务启动完成 ==="
-echo "管理后台: http://localhost:5174"
-echo "H5 移动端: http://localhost:5173"
-echo "API:        http://localhost:8500/api"
+echo "=== 服务已启动 ==="
+echo "  管理后台: http://localhost:${ADMIN_PORT}"
+echo "  H5 移动端: http://localhost:${H5_PORT}"
+echo "  API:        http://localhost:${BACKEND_PORT}/api   (文档: /docs)"
+echo "  默认管理员: admin / admin123"
 echo ""
-echo "按 Ctrl+C 停止所有服务"
+echo "按 Ctrl+C 停止全部服务"
 
-trap "kill $BACKEND_PID $ADMIN_PID $H5_PID 2>/dev/null" EXIT
+trap 'kill $BACKEND_PID $ADMIN_PID $H5_PID 2>/dev/null || true' EXIT
 wait
