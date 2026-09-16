@@ -1,38 +1,82 @@
-version: "3.8"
-
+# CenkorMES 一键部署（生产形态）
+#
+# 启动：  docker compose up -d --build
+# 停止：  docker compose down            # 保留数据卷
+# 销毁：  docker compose down -v         # 连同 MySQL/Redis/存储数据卷一起删除
+#
+# 端口：  http://<主机IP>:8000  → 后端 API（含 /docs 交互文档）
+# 说明：  前端（管理后台 / H5 / 小程序）见 docs/DEPLOYMENT.md 的“前端构建与部署”。
+#
+# 环境变量（可选覆盖）： APP_PORT=8000 默认对外端口；JWT_SECRET 生产务必自设强随机值。
 services:
   mysql:
-    image: mysql:5.7
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: cenkormes
-      MYSQL_CHARACTER_SET_SERVER: utf8mb4
-      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
-    ports:
-      - "3306:3306"
+      TZ: Asia/Shanghai
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [cenkormes]
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [cenkormes]
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .            # 仓库根目录（Dockerfile 以仓库根为构建上下文）
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    # 对外端口 8000；容器内部固定 8000，避免本机 .env 里 APP_PORT=8500 造成端口不一致
     ports:
-      - "8000:8000"
-    env_file: .env
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      APP_ENV: prod
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8000"
+      DB_URL: "mysql+pymysql://root:root@mysql:3306/cenkormes?charset=utf8mb4"
+      DB_ECHO: "false"
+      DB_AUTO_CREATE: "true"        # 首启自动建表
+      DB_AUTO_SEED: "true"          # 首启自动建默认管理员
+      REDIS_URL: "redis://redis:6379/0"
+      CELERY_BROKER_URL: "redis://redis:6379/0"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /app/data/storage
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:8000}"
+      JWT_SECRET: "${JWT_SECRET:-MUST_CHANGE_ME_in_production}"   # 生产务必替换
     depends_on:
-      - mysql
-      - redis
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
-      - ./backend/data:/app/data
+      - storage_data:/app/data
+    networks: [cenkormes]
+
+networks:
+  cenkormes:
 
 volumes:
   mysql_data:
   redis_data:
+  storage_data:

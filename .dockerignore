@@ -1,0 +1,39 @@
+# ---- version control ----
+.git
+.gitignore
+readme_backup_20260911
+
+# ---- backend runtime artifacts（避免打进镜像）----
+backend/.venv
+backend/venv
+backend/__pycache__
+backend/data
+backend/uvicorn.log
+backend/celerybeat-schedule*
+backend/CHANGELOG.json
+backend/tests
+backend/.pytest_cache
+backend/htmlcov
+backend/.coverage
+
+# ---- frontend build artifacts ----
+frontend-admin-pro/node_modules
+frontend-admin-pro/dist
+frontend-h5/node_modules
+frontend-h5/dist
+frontend-admin-pro/*.local
+frontend-h5/*.local
+lightmes-miniapp/node_modules
+lightmes-miniapp/unpackage
+
+# ---- misc ----
+logs
+docs
+node_modules
+*.pyc
+__pycache__
+.pytest_cache
+.vscode
+.idea
+*.log
+.DS_Store

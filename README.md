@@ -97,25 +97,43 @@ CenkorMES 深度构建在众多优秀的开源项目与第三方组件之上，�
 ## 快速启动
 
 ### 环境要求
-- Python 3.10+
-- Node.js 18+
-- MySQL 5.7+
-- Redis (可选，用于 Celery 异步任务)
+- Python 3.10+、Node.js 18+
+- MySQL 5.7+（推荐 8.x）；使用 Docker 一键部署则无需自备 MySQL / Redis
+- Redis（可选，用于 Celery 异步任务）
 
-### 1. 启动后端
+### 方式一：Docker 一键启动（推荐）
+
+```bash
+docker compose up -d --build
+```
+
+- 一键拉起 **后端 + MySQL 8 + Redis**；首次启动自动建表并创建默认管理员。
+- 后端地址 `http://localhost:8000`，接口交互文档 `/docs`。
+- 完整演示数据（可选、幂等，可重复执行）：
+  ```bash
+  bash docker/scripts/init-demo.sh
+  ```
+- 更详细的两种部署方式与 Nginx 反代示例见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
+
+### 方式二：手动启动
+
+1. 启动后端：
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp ../.env .env  # 编辑数据库配置
+cp env.example .env        # 编辑数据库连接串 DB_URL 与 JWT_SECRET
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-首次启动自动创建数据库表和种子数据。
+首次启动自动建表并创建默认管理员。注入演示数据（可选）：
 
-### 2. 启动管理后台 (PC)
+```bash
+python scripts/seed_demo.py
+```
+
+2. 启动管理后台 (PC)：
 
 ```bash
 cd frontend-admin-pro
@@ -125,7 +143,7 @@ npm run dev -- --port 5174
 
 访问 http://localhost:5174
 
-### 3. 启动 H5 移动端
+3. 启动 H5 移动端：
 
 ```bash
 cd frontend-h5
@@ -135,19 +153,20 @@ npm run dev -- --port 5173
 
 访问 http://localhost:5173
 
-### 4. Docker 一键启动
+> vite 开发代理把 `/api` 转发到 `http://127.0.0.1:8000`（见 `frontend-admin-pro/vite.config.ts`），
+> 请保持后端端口与其一致。
+
+### 一条命令启动（本地开发/演示）
 
 ```bash
-docker compose up -d
+./start.sh          # dev：后端 :8000 + 管理后台 :5174 + H5 :5173
+./start.sh --prod   # prod：后端无热重载，前端 build 后 preview 托管
 ```
 
 ## 默认账号
 
-首次启动系统自动创建管理员账号：
-- 用户名: `admin`
-- 密码: `admin123`
-
-请及时修改密码。
+- 管理员：`admin` / `admin123`（首启自动创建，**请及时修改密码**）
+- 演示数据账号密码：`123456`（运行 `seed_demo.py` 后可用）
 
 ## 项目结构
 
