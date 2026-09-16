@@ -104,7 +104,10 @@ def create_api(
         if not r:
             raise HTTPException(status_code=400, detail=f"角色不存在: {rid}")
         roles.append(r)
-    item = create_user(db, username=payload.username, password=payload.password, full_name=payload.full_name)
+    try:
+        item = create_user(db, username=payload.username, password=payload.password, full_name=payload.full_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     update_user(
         db, item,
         is_active=payload.is_active,
@@ -168,7 +171,10 @@ def update_api(
             roles.append(r)
         set_user_roles(db, item, roles)
     if payload.password is not None:
-        set_password(db, item, payload.password)
+        try:
+            set_password(db, item, payload.password)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     update_user(
         db,
         item,

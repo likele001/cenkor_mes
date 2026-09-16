@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password, verify_password
+from app.core.security import hash_password, validate_password_strength, verify_password
 from app.models.role import Role
 from app.models.user import User
 
@@ -42,6 +42,7 @@ def list_users(
 
 
 def create_user(db: Session, username: str, password: str, **kwargs) -> User:
+    validate_password_strength(password)
     user = User(username=username, password_hash=hash_password(password), **kwargs)
     db.add(user)
     db.flush()
@@ -102,6 +103,7 @@ def change_user_password(db: Session, user: User, old_password: str, new_passwor
 
 
 def set_password(db: Session, user: User, password: str) -> User:
+    validate_password_strength(password)
     user.password_hash = hash_password(password)
     db.flush()
     return user

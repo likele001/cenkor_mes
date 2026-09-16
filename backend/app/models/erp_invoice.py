@@ -1,3 +1,5 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
 """ERP 发票管理：销项/进项发票登记"""
 from datetime import date, datetime
 from decimal import Decimal
