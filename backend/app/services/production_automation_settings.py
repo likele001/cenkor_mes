@@ -76,5 +76,5 @@ def get_automation_settings(db: Session, tenant_id: int = 1) -> dict:
 def save_automation_settings(db: Session, tenant_id: int, payload: dict) -> dict:
     current = get_automation_settings(db, tenant_id)
     merged = _merge_dict(current, payload or {})
-    upsert_setting(db, tenant_id=tenant_id, key=KEY, value=json.dumps(merged, ensure_ascii=False))
+    upsert_setting(db, tenant_id, KEY, json.dumps(merged, ensure_ascii=False))
     return merged
