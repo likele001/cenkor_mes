@@ -10,18 +10,28 @@ from app.crud.user import authenticate, change_user_password, update_user_profil
 from app.schemas.auth import LoginIn
 from app.schemas.profile import ChangePasswordIn, ProfileUpdateIn
 from app.services.login_captcha import assert_login_captcha
+from app.services.login_ratelimit import is_login_blocked, record_login_failure, reset_login_failures
 from app.services.profile import profile_fields_to_update
 
 
 router = APIRouter()
 
 
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
 @router.post("/login")
 def login(payload: LoginIn, request: Request, db: Session = Depends(get_db)):
+    ip = _client_ip(request)
+    if is_login_blocked(ip):
+        raise HTTPException(status_code=429, detail="登录失败次数过多，请稍后再试")
     assert_login_captcha(db, payload.captcha_id, payload.captcha_code)
     user = authenticate(db, payload.username, payload.password)
     if not user:
+        record_login_failure(ip)
         raise HTTPException(status_code=400, detail="账号或密码错误")
+    reset_login_failures(ip, payload.username)
     minutes = token_expire_minutes(payload.remember_me)
     token = create_access_token(
         {"sub": str(user.id), "username": user.username},

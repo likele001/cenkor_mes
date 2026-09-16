@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = 6             # 用户密码最小长度（兼容内置种子账号长度）
     CORS_ORIGINS: str = ""                   # 允许跨域的来源，逗号分隔；留空则不开启 CORS
     TRUSTED_HOSTS: str = ""                  # 允许的 Host，逗号分隔；生产建议固定，留空不启用校验
+    LOGIN_MAX_FAILURES: int = 10             # 登录失败锁定阈值（≤0 表示关闭限流）
+    LOGIN_FAIL_WINDOW_SECONDS: int = 300     # 失败计数滑动窗口（秒）
+    LOGIN_LOCKOUT_SECONDS: int = 300         # 锁定持续时间（秒）
 
     STORAGE_DRIVER: str = "local"
     STORAGE_LOCAL_ROOT: str = "./data/storage"

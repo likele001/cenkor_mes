@@ -10,7 +10,7 @@ from app.services.report_media_settings import get_report_media_settings
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
-from app.utils.upload_mime import mime_allowed, resolve_upload_content_type
+from app.utils.upload_mime import looks_like_web_content, mime_allowed, resolve_upload_content_type
 from app.crud.attachment import create_attachment, get_attachment_by_id
 from app.models.user import User
 from app.services.attachment_media import attachment_out, attachment_play_url
@@ -67,6 +67,10 @@ def upload_file(
     file.file.seek(0)
     file_bytes = file.file.read()
     file_stream = BytesIO(file_bytes)
+
+    # 二次防护：文件声明为图片/视频/PDF，但真实头部含 HTML/SVG/脚本 => 拒绝
+    if not content_type.startswith(("text/", "image/svg+xml")) and looks_like_web_content(file_bytes):
+        raise HTTPException(status_code=400, detail="文件内容与类型不匹配或包含可执行网页内容，已拒绝上传")
 
     storage = get_active_storage(db)
     try:
