@@ -1,1 +1,0 @@
-import{N as r}from"./index-jycFH-vk.js";const t={summary(){return r.request({url:"/dashboard/summary",method:"GET"})},charts(a){return r.request({url:"/dashboard/charts",method:"GET",params:{days:a}})}};export{t as d};
