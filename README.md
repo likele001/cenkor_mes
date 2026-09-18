@@ -158,6 +158,19 @@ BACKEND_PORT=8500 ./start.sh        # 后端端口被占用时，前端自动跟
 
 ---
 
+## 绑定域名与 HTTPS（Docker 部署 · 可选）
+
+容器内 nginx 已内置「静态托管 + `/api` 反代」，默认通过 `IP:端口`（`8080` 管理后台 / `8081` H5 / `8000` API）访问。要对外使用**域名 + HTTPS**，在后端默认**不校验 Host** 的前提下，只需在宿主机加一层**入口代理**把域名转发到对应端口即可：
+
+- **宝塔面板**：DNS 把两个子域名 A 记录指向服务器 IP → 添加两个站点绑定域名 → 各自在「反向代理」填 `http://127.0.0.1:8080`（管理后台）/ `http://127.0.0.1:8081`（H5）→ 站点 SSL 申请 Let's Encrypt 证书并强制 HTTPS。
+- **系统 Nginx**：反代到 `127.0.0.1:8080 / 8081`，用 `certbot --nginx` 自动签发证书。
+- 若在 `.env` 配置了 `TRUSTED_HOSTS`（Host 白名单），务必把域名加入，否则访问会被 403 拦截。
+- 需要后端识别 HTTPS（避免生成 `http://` 链接）时，在入口反代追加 `proxy_set_header X-Forwarded-Proto https;`，并将 `PUBLIC_BASE_URL` / `H5_PUBLIC_BASE_URL` 指向 HTTPS 地址。
+
+> 完整配置示例与 `TRUSTED_HOSTS` 说明见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 第 4 节。
+
+---
+
 ## 默认账号
 
 | 账号 | 说明 |
