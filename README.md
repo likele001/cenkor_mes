@@ -256,4 +256,51 @@ pytest tests
 
 本项目采用 **AGPL-3.0** 开源协议，详见 [LICENSE](LICENSE)。
 
-系统深度构建于 Vue、Element Plus、FastAPI、SQLAlchemy、Celery、Apache ECharts 等众多优秀开源项目之上，我们严格按照各上游许可证（MIT / Apache-2.0 / BSD-3-Clause / ISC / HPND）分发并保留版权声明。完整、逐条的第三方依赖许可证与版权信息，请参阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [LICENSE](LICENSE)。
+CenkorMES 构建于众多优秀开源项目之上。我们对以下第三方技术与组件致以谢意，并严格
+按其上游许可证分发、保留版权声明：
+
+### 后端
+
+| 技术 | 官方站点 | 许可证 |
+|------|----------|--------|
+| FastAPI | https://fastapi.tiangolo.com/ | MIT |
+| Uvicorn | https://www.uvicorn.org/ | BSD-3-Clause |
+| SQLAlchemy | https://www.sqlalchemy.org/ | MIT |
+| Alembic | https://alembic.sqlalchemy.org/ | MIT |
+| Pydantic | https://docs.pydantic.dev/ | MIT |
+| Celery | https://docs.celeryq.dev/ | BSD-3-Clause |
+| PyMySQL | https://pymysql.readthedocs.io/ | MIT |
+| Redis 客户端 | https://redis.io/ | MIT |
+| Pillow | https://python-pillow.org/ | HPND |
+
+### 前端
+
+| 技术 | 官方站点 | 许可证 |
+|------|----------|--------|
+| Vue / Vue Router | https://vuejs.org/ | MIT |
+| Pinia | https://pinia.vuejs.org/ | MIT |
+| Element Plus | https://element-plus.org/ | MIT |
+| Vant | https://vant-ui.github.io/vant/ | MIT |
+| Apache ECharts | https://echarts.apache.org/ | Apache-2.0 |
+| Tailwind CSS | https://tailwindcss.com/ | MIT |
+| Vite | https://vitejs.dev/ | MIT |
+| TypeScript | https://www.typescriptlang.org/ | Apache-2.0 |
+| uni-app | https://uniapp.dcloud.net.cn/ | Apache-2.0 |
+
+### 数据 / 算法 / 部署
+
+| 技术 | 官方站点 | 许可证 |
+|------|----------|--------|
+| MySQL | https://www.mysql.com/ | GPLv2 / 商用 |
+| Redis | https://redis.io/ | BSD-3-Clause |
+| Nginx | https://nginx.org/ | BSD-2-Clause |
+| Docker / Moby | https://www.docker.com/ | Apache-2.0 |
+| Google OR-Tools | https://developers.google.com/optimization | Apache-2.0 |
+| Prophet | https://facebook.github.io/prophet/ | MIT |
+| scikit-learn | https://scikit-learn.org/ | BSD-3-Clause |
+| OpenAI SDK | https://github.com/openai/openai-python | Apache-2.0 |
+| 阿里云 OSS | https://help.aliyun.com/zh/oss/ | SDK: MIT |
+| 腾讯云 COS | https://cloud.tencent.com/product/cos | SDK: MIT |
+
+> 完整、逐条目的第三方依赖清单与许可证信息，请参阅
+> [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [LICENSE](LICENSE)。
