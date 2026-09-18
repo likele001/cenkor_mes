@@ -1,13 +1,19 @@
-# CenkorMES 一键部署（生产形态）
+# CenkorMES 一键部署（生产形态，全栈：后端 + 数据库 + 缓存 + 双前端）
 #
 # 启动：  docker compose up -d --build
 # 停止：  docker compose down            # 保留数据卷
 # 销毁：  docker compose down -v         # 连同 MySQL/Redis/存储数据卷一起删除
 #
-# 端口：  http://<主机IP>:8000  → 后端 API（含 /docs 交互文档）
-# 说明：  前端（管理后台 / H5 / 小程序）见 docs/DEPLOYMENT.md 的“前端构建与部署”。
+# 端口（可用同目录 .env 覆盖，例如 APP_PORT、WEB_ADMIN_PORT、WEB_H5_PORT）：
+#   http://<主机IP>:8000   → 后端 API（含 /docs 交互文档）
+#   http://<主机IP>:8080   → 管理后台 Web
+#   http://<主机IP>:8081   → 员工 H5 Web
+#   前端容器内已内置 nginx，/api 就地反代到 backend:8000，开箱即用。
 #
-# 环境变量（可选覆盖）： APP_PORT=8000 默认对外端口；JWT_SECRET 生产务必自设强随机值。
+# 默认内置：首启自动建表 + 自动建默认管理员（DB_AUTO_SEED=true）。
+# 演示数据：可选执行一次 `bash docker/scripts/init-demo.sh`（幂等）。
+#
+# 安全：JWT_SECRET 生产务必自设强随机值（≥32 位），切勿使用默认值。
 services:
   mysql:
     image: mysql:8.0
@@ -46,7 +52,8 @@ services:
       context: .            # 仓库根目录（Dockerfile 以仓库根为构建上下文）
       dockerfile: backend/Dockerfile
     restart: unless-stopped
-    # 对外端口 8000；容器内部固定 8000，避免本机 .env 里 APP_PORT=8500 造成端口不一致
+    # 对外端口默认 8000；容器内部固定 8000（前端反代目标）。
+    # 若宿主 8000 已被占用（如本机已有其它项目占用了 8000），请在 .env 里设 APP_PORT=其它端口。
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:
@@ -62,7 +69,7 @@ services:
       CELERY_RESULT_BACKEND: "redis://redis:6379/1"
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /app/data/storage
-      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:8000}"
+      PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-http://localhost:8080}"
       JWT_SECRET: "${JWT_SECRET:-MUST_CHANGE_ME_in_production}"   # 生产务必替换
     depends_on:
       mysql:
@@ -71,6 +78,32 @@ services:
         condition: service_healthy
     volumes:
       - storage_data:/app/data
+    networks: [cenkormes]
+
+  web-admin:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        FRONTEND: frontend-admin-pro
+    restart: unless-stopped
+    ports:
+      - "${WEB_ADMIN_PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks: [cenkormes]
+
+  web-h5:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        FRONTEND: frontend-h5
+    restart: unless-stopped
+    ports:
+      - "${WEB_H5_PORT:-8081}:80"
+    depends_on:
+      - backend
     networks: [cenkormes]
 
 networks:

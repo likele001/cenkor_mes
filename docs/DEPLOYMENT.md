@@ -2,11 +2,11 @@
 
 覆盖两种主流部署方式：
 
-1. **Docker Compose 一键部署** —— 后端 + MySQL 8 + Redis，适合快速上线 / 隔离环境。
+1. **Docker Compose 一键部署（全栈）** —— 一条命令拉起后端 + MySQL 8 + Redis + 管理后台 + 员工 H5，快速上线 / 隔离环境。
 2. **手动部署（本地 / 宝塔面板）** —— 适合已有 MySQL 环境、需要对前端做更多定制的场景。
 
-> 规范端口：后端 **8000**（`config` 默认值、`vite` 开发代理、README、docker-compose 全部一致）。
-> 若通过反向代理对外提供服务，代理请指向后端 8000。
+> 默认端口（均可用仓库根 `.env` 覆盖）：后端 API **8000**、管理后台 **8080**、员工 H5 **8081**。
+> 前端容器内已内置 nginx，`/api` 自动反代到后端，拿到即可访问、无需再配前端。
 
 ---
 
@@ -15,6 +15,8 @@
 | 项 | 默认值 |
 |----|--------|
 | 后端 API | `http://localhost:8000/api`（交互文档 `/docs`） |
+| 管理后台（生产/Docker） | `http://localhost:8080` |
+| 员工 H5（生产/Docker） | `http://localhost:8081` |
 | 管理后台（dev） | `http://localhost:5174` |
 | H5 移动端（dev） | `http://localhost:5173` |
 | 默认管理员 | `admin` / `admin123`（首启自动创建，请立即修改） |
@@ -24,7 +26,7 @@
 
 ## 1. Docker Compose 一键部署
 
-### 1.1 启动后端（含 MySQL 8 + Redis）
+### 1.1 启动完整系统（后端 + MySQL 8 + Redis + 管理后台 + H5）
 
 ```bash
 # 在仓库根目录
@@ -32,14 +34,18 @@ docker compose up -d --build
 ```
 
 - 首次启动会自动建表（`DB_AUTO_CREATE=true`）并创建默认管理员（`DB_AUTO_SEED=true`）。
-- 对外端口默认 8000，可用环境变量覆盖：`APP_PORT=9000 docker compose up -d --build`。
+- 管理后台与 H5 由前端容器内的 nginx 托管，`/api` 自动反代到后端，开箱即用。
+- 对外端口可用环境变量覆盖：
+  `APP_PORT=9000 WEB_ADMIN_PORT=9001 WEB_H5_PORT=9002 docker compose up -d --build`。
 - **生产务必设置强 JWT 密钥**：`JWT_SECRET=xxxxxxxx docker compose up -d --build`。
 
 验证：
 
 ```bash
-curl http://localhost:8000/docs          # Swagger 交互文档
-curl http://localhost:8000/api/health     # 健康检查（视实际路由）
+curl http://localhost:8000/docs            # Swagger 交互文档
+curl http://localhost:8080                 # 管理后台
+curl http://localhost:8081                 # 员工 H5
+curl http://localhost:8000/api/health      # 健康检查（视实际路由）
 docker compose ps
 ```
 
@@ -51,11 +57,11 @@ bash docker/scripts/init-demo.sh
 
 ### 1.3 前端如何运行
 
-Docker 镜像当前只包含后端。前端（管理后台 / H5 / 小程序）推荐两种方式：
+Docker 镜像已把管理后台与员工 H5 **一起容器化**：
 
+- **生产（Docker）**：`docker compose up -d --build` 会一并构建并托管管理后台（`:8080`）与 H5（`:8081`），前端 nginx 把 `/api` 反代到后端，开箱即用。
 - **开发**：按第 2 节 `npm run dev`，让 vite 代理 `/api` 到 `127.0.0.1:8000`。
-- **生产**：在宿主机 `npm run build` 后用 Nginx / 宝塔托管 `dist` 静态目录，
-  并将 `/api/` 反向代理到后端 8000（示例见第 4 节）。
+- **宿主机生产**：`npm run build` 后用 Nginx / 宝塔托管 `dist` 静态目录，并将 `/api/` 反向代理到后端 8000（示例见第 4 节）。
 
 ### 1.4 常用 Docker 命令
 
