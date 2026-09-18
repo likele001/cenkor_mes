@@ -225,6 +225,66 @@ server {
 > 与 `H5_PUBLIC_BASE_URL` 配置为对外可访问的 HTTPS 地址，保证生成的
 > 打印、分享、回调链接正确。
 
+### 4.1 Docker 全栈部署的域名绑定与 HTTPS 配置
+
+Docker 全栈部署下，前端容器内的 nginx 已自带「静态托管 + `/api` 反代」，无需再配置
+后端 API 反代。但当需要对外用 **域名 + HTTPS** 访问时，需在宿主机加一层「入口代理」，
+把域名转发到容器对外映射的端口（管理后台 `8080` / 员工 H5 `8081`）。
+
+默认情况下后端**不校验 Host 头**（`TRUSTED_HOSTS` 留空即不启用校验），因此绑定任意
+域名即可直接访问。若在 `.env` 配置了 `TRUSTED_HOSTS`（逗号分隔白名单），必须把对外
+域名加入，否则会被 403 拦截：
+
+```bash
+# backend/.env（或在仓库根 .env 通过 compose 注入）
+TRUSTED_HOSTS=admin.example.com,h5.example.com
+```
+
+#### 方式 A：宝塔面板（推荐，可视化）
+
+1. **解析域名**：在域名 DNS 添加 A 记录指向服务器 IP。管理后台与 H5 是独立端口，建议用
+   两个子域名，避免同一域名按路径分流导致 SPA 路由错乱：
+   - `admin.example.com  →  111.222.33.44`（管理后台）
+   - `h5.example.com     →  111.222.33.44`（员工 H5）
+2. **添加站点**：宝塔「网站 → 添加站点」，分别绑定上述两个域名（纯静态站点，无需上传文件）。
+3. **配置反向代理**：以管理后台为例，网站设置 → 反向代理 → 添加，目标填
+   `http://127.0.0.1:8080`；H5 站点目标填 `http://127.0.0.1:8081`。
+4. **SSL 证书**：站点设置 → SSL → Let's Encrypt 申请证书，并开启「强制 HTTPS」。
+   如需把 HTTPS 正确回报给后端，在反代配置补充：
+   ```nginx
+   proxy_set_header X-Forwarded-Proto https;
+   proxy_set_header X-Forwarded-Host  $host;
+   ```
+
+#### 方式 B：系统 Nginx + certbot
+
+为管理后台创建 `/etc/nginx/conf.d/admin.example.com.conf`：
+
+```nginx
+server {
+    listen 80;
+    server_name admin.example.com;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+```
+
+H5 同理（`server_name h5.example.com`，`proxy_pass http://127.0.0.1:8081`），再执行
+`certbot --nginx -d admin.example.com -d h5.example.com` 自动签发并续期证书。
+
+#### 需要留意的点
+
+- 后端默认不校验 Host，直接可用；配置了 `TRUSTED_HOSTS` 后必须把域名加进白名单。
+- 容器内 nginx 是内部 http 访问后端，入口层传 `X-Forwarded-Proto https` 可让后端生成
+  HTTPS 链接；纯 API 调用不受影响。
+- 如需打印 / 分享 / 回调链接为 HTTPS，同时把 `PUBLIC_BASE_URL` 与 `H5_PUBLIC_BASE_URL`
+  指向对外 HTTPS 地址。
+
 ---
 
 ## 5. 环境变量说明
