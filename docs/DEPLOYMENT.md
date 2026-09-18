@@ -72,6 +72,48 @@ docker compose down                 # 停止（保留数据卷）
 docker compose down -v              # 停止并清空数据卷（谨慎）
 ```
 
+### 1.5 离线安装包（内网 / 无外网部署）
+
+在能联网且已成功 `docker compose build` 的机器上生成一次离线包：
+
+```bash
+bash docker/scripts/export-images.sh             # 导出全部镜像（含 MySQL/Redis）到 dist-images/
+```
+
+目标机（无外网）导入并启动：
+
+```bash
+docker load < dist-images/cenkormes_images_*.tar.gz
+docker compose up -d                             # 无需再联网拉取 / 构建
+```
+
+> 离线包内含 `cenkormes-backend` / `cenkormes-web-admin` / `cenkormes-web-h5` 及
+> `mysql:8.0` / `redis:7-alpine`，覆盖全栈所需镜像。
+
+### 1.6 多架构构建（linux/amd64 + linux/arm64）
+
+默认构建跟随当前主机架构。需要同时产出 x86_64 与 ARM64 镜像时（如发布到镜像仓库 / 同时交付两种服务器）：
+
+```bash
+# 1) 启用 BuildKit 多架构（ARM64 交叉需 binfmt，首次执行一次即可）
+docker buildx create --name multi --use
+docker run --privileged --rm tonistiigi/binfmt --install all
+
+# 2) 后端（架构无关，同一份镜像）
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f backend/Dockerfile -t cenkormes-backend:multi --load .
+
+# 3) 前端（管理后台 / H5）
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f docker/frontend/Dockerfile --build-arg FRONTEND=frontend-admin-pro -t cenkormes-web-admin:multi --load .
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f docker/frontend/Dockerfile --build-arg FRONTEND=frontend-h5 -t cenkormes-web-h5:multi --load .
+```
+
+> 说明：多架构构建磁盘与网络开销较大；多个平台镜像通过单一 tag 分发（media-type OCI manifest
+> list），运行时按目标机架构自动拉取对应构建。发布到 registry 时改用 `--push`（去掉 `--load`）。
+> 后端镜像已精简（去掉 gcc/mysqlclient 编译链，仅保留 PyMySQL 与运行时系统库 libgomp1）。
+
 ---
 
 ## 2. 手动部署
