@@ -14,6 +14,9 @@ H5_PORT="${H5_PORT:-5173}"
 MODE="dev"
 if [ "${1:-}" = "--prod" ]; then MODE="prod"; fi
 
+# 前端 dev 的 /api 代理跟随后端端口，避免端口被占用/被改而串到其它服务（如其它项目占8000）
+export VITE_API_PROXY="${VITE_API_PROXY:-http://127.0.0.1:${BACKEND_PORT}}"
+
 echo "=== CenkorMES 启动（${MODE} 模式）==="
 
 # 1) 后端 Python 环境

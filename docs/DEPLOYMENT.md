@@ -37,7 +37,12 @@ docker compose up -d --build
 - 管理后台与 H5 由前端容器内的 nginx 托管，`/api` 自动反代到后端，开箱即用。
 - 对外端口可用环境变量覆盖：
   `APP_PORT=9000 WEB_ADMIN_PORT=9001 WEB_H5_PORT=9002 docker compose up -d --build`。
-- **生产务必设置强 JWT 密钥**：`JWT_SECRET=xxxxxxxx docker compose up -d --build`。
+- **JWT 密钥**：未设置时容器入口自动生成临时随机密钥保证一键可启动；生产部署请设置固定强密钥
+  ```bash
+  JWT_SECRET=xxxxxxxx # 建议 ≥32 位随机串（python3 -c "import secrets;print(secrets.token_urlsafe(48))"）
+  docker compose up -d --build
+  ```
+  （临时密钥重启容器后失效，会导致已登录用户需重新登录）
 
 验证：
 
@@ -165,8 +170,10 @@ npm install
 npm run dev -- --port 5173          # 开发
 ```
 
-> 注意：vite 开发代理将 `/api` 转发到 `http://127.0.0.1:8000`
-> （见 `frontend-admin-pro/vite.config.ts`）。后端端口需保持一致。
+> vite 开发代理默认将 `/api` 转发到 `http://127.0.0.1:8000`，可通过环境变量 `VITE_API_PROXY`
+> 指定其它后端地址（例如 `VITE_API_PROXY=http://127.0.0.1:8500 npm run dev`），
+> 避免本机 8000 被其它项目占用时 `/api` 串到错误服务。
+> 生产构建不受影响：产物由 Nginx / 宝塔反代到真实后端端口。
 
 ---
 
@@ -175,6 +182,9 @@ npm run dev -- --port 5173          # 开发
 ```bash
 ./start.sh          # dev：后端 :8000 + 管理后台 :5174 + H5 :5173
 ./start.sh --prod   # prod：后端无 reload，前端 build 后 preview 托管
+
+# 后端端口被占用时可改端口，前端 /api 代理会自动跟随：
+BACKEND_PORT=8500 ./start.sh
 ```
 
 ---

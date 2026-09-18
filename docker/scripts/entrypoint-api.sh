@@ -23,4 +23,14 @@ sys.exit(1)
 PYEOF
 echo "[cenkormes] MySQL 已就绪，启动后端 ..."
 
+# 生产 + 未配置安全 JWT_SECRET 时，兜底生成临时强随机密钥，保证一键启动开箱即用。
+# 判定复用应用自身的 ensure_secure_jwt_secret（黑名单 / 最短长度一致）。
+if [ "${APP_ENV:-prod}" = "prod" ]; then
+  if ! python -c 'from app.core.security import ensure_secure_jwt_secret; ensure_secure_jwt_secret()' 2>/dev/null; then
+    export JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    echo "[cenkormes][WARN] 未配置安全的 JWT_SECRET，已临时生成随机密钥（重启容器后失效）。"
+    echo "[cenkormes][WARN] 正式部署请设置固定强密钥：在仓库根 .env 设置 JWT_SECRET 后重新 docker compose up -d。"
+  fi
+fi
+
 exec "$@"
