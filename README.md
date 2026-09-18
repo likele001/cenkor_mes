@@ -103,17 +103,25 @@ CenkorMES 深度构建在众多优秀的开源项目与第三方组件之上，�
 
 ### 方式一：Docker 一键启动（推荐）
 
+一条命令拉起**完整系统（后端 + MySQL 8 + Redis + 管理后台 + 员工 H5）**：
+
 ```bash
 docker compose up -d --build
 ```
 
-- 一键拉起 **后端 + MySQL 8 + Redis**；首次启动自动建表并创建默认管理员。
-- 后端地址 `http://localhost:8000`，接口交互文档 `/docs`。
+- 首启自动建表并创建默认管理员；前端镜像内已内置 Nginx，`/api` 自动反代到后端，开箱即用。
+- 各服务访问地址（可在仓库根 `.env` 覆盖端口）：
+  | 服务 | 地址 |
+  |------|------|
+  | 后端 API（含 `/docs`） | `http://localhost:8000` |
+  | 管理后台 | `http://localhost:8080` |
+  | 员工 H5 | `http://localhost:8081` |
+- 若默认端口被占用，在 `.env` 设 `APP_PORT` / `WEB_ADMIN_PORT` / `WEB_H5_PORT` 换端口（详见 `.env.example`）。
 - 完整演示数据（可选、幂等，可重复执行）：
   ```bash
   bash docker/scripts/init-demo.sh
   ```
-- 更详细的两种部署方式与 Nginx 反代示例见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
+- 更多部署细节、端口覆盖与手动部署见 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)。
 
 ### 方式二：手动启动
 
@@ -182,10 +190,17 @@ cenkormes/
 │   │   ├── services/        # 业务逻辑层
 │   │   └── tasks/           # Celery 异步任务
 │   ├── alembic/             # 数据库迁移
+│   ├── Dockerfile           # 后端镜像
 │   └── requirements.txt
 ├── frontend-admin-pro/      # PC 管理后台 (Vue 3 + Element Plus)
 ├── frontend-h5/             # H5 移动端 (Vue 3 + Vant 4)
-└── lightmes-miniapp/        # 微信小程序 (uni-app, 员工版)
+├── lightmes-miniapp/        # 微信小程序 (uni-app, 员工版)
+├── docker/
+│   ├── frontend/            # 前端多阶段构建镜像（管理后台 / H5）
+│   ├── nginx/               # 前端容器 nginx 配置（含 /api 反代）
+│   └── scripts/             # 容器入口 / 演示数据脚本
+├── docker-compose.yml       # 全栈一键部署（后端 + MySQL + Redis + 双前端）
+└── docs/                    # 部署与差异说明
 ```
 
 ## License
