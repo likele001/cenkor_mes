@@ -162,8 +162,9 @@ npm run dev -- --port 5173
 
 访问 http://localhost:5173
 
-> vite 开发代理把 `/api` 转发到 `http://127.0.0.1:8000`（见 `frontend-admin-pro/vite.config.ts`），
-> 请保持后端端口与其一致。
+> vite 开发代理默认把 `/api` 转发到 `http://127.0.0.1:8000`，可用环境变量 `VITE_API_PROXY`
+> 指定其它后端地址（如 `VITE_API_PROXY=http://127.0.0.1:8500 npm run dev`），
+> `./start.sh` 会自动跟随后端端口。
 
 ### 一条命令启动（本地开发/演示）
 
