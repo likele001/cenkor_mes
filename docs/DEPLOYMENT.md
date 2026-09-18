@@ -39,7 +39,7 @@ docker compose up -d --build
   `APP_PORT=9000 WEB_ADMIN_PORT=9001 WEB_H5_PORT=9002 docker compose up -d --build`。
 - **JWT 密钥**：未设置时容器入口自动生成临时随机密钥保证一键可启动；生产部署请设置固定强密钥
   ```bash
-  JWT_SECRET=xxxxxxxx # 建议 ≥32 位随机串（python3 -c "import secrets;print(secrets.token_urlsafe(48))"）
+  JWT_SECRET=REPLACE_ME_8uP3aXq9vN2kLmR7sT5cHd2jF0bWz6eY4gQ1oI9nBxC3 # ≥32 位，务必替换为你自己的（生成: python3 -c "import secrets;print(secrets.token_urlsafe(48))"）
   docker compose up -d --build
   ```
   （临时密钥重启容器后失效，会导致已登录用户需重新登录）
