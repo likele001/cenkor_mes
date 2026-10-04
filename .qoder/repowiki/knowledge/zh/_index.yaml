@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: master
 nodes_managed: true
-exported_at: "2026-10-04T05:03:01Z"
+exported_at: "2026-10-04T10:03:15Z"
 modules:
     "":
         dir_name: CenkorMES 制造执行系统根模块
@@ -79,7 +79,7 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: backend_services_tasks/order_import
+            - path: backend_services_tasks/shared_services
             - path: frontend_admin_pro/master_data
     backend_admin_production:
         dir_name: 生产管理与委外_采购计划后端 API
@@ -92,11 +92,10 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: backend_services_tasks/crm_scope
-            - path: backend_services_tasks/order_import
             - path: backend_services_tasks/planning_and_dispatch
             - path: backend_services_tasks/production_automation
             - path: backend_services_tasks/reporting_and_labels
+            - path: frontend_admin_pro/production/customer_management
             - path: frontend_admin_pro/production/order_management
             - path: frontend_admin_pro/production/planning_scheduling
             - path: frontend_admin_pro/production/salary_reporting
@@ -111,6 +110,7 @@ modules:
         children: []
         depends_on: []
         related_to:
+            - path: backend_models_schemas_crud/warehouse_inventory
             - path: frontend_admin_pro/purchase
     backend_admin_quality_equipment:
         dir_name: 设备管理与产品追溯管理
@@ -121,7 +121,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_models_schemas_crud/work_order_dispatch
     backend_admin_reports_shift:
         dir_name: 管理端报表与班次排班 API
         title: 管理端报表与班次排班 API
@@ -132,6 +133,7 @@ modules:
         children: []
         depends_on: []
         related_to:
+            - path: backend_models_schemas_crud/reporting_auto_salary
             - path: frontend_admin_pro/reports_dashboard
     backend_admin_system_rbac:
         dir_name: 后台管理系统 RBAC 与字典接口
@@ -143,6 +145,7 @@ modules:
         children: []
         depends_on: []
         related_to:
+            - path: backend_models_schemas_crud/rbac_tenant
             - path: frontend_admin_pro/system_admin
     backend_admin_warehouse:
         dir_name: 仓库管理后台 API（仓储_发货_领退料_入库单）
@@ -153,6 +156,7 @@ modules:
         children: []
         depends_on: []
         related_to:
+            - path: backend_models_schemas_crud/warehouse_inventory
             - path: frontend_admin_pro/warehouse
     backend_api_router:
         dir_name: API 路由聚合与基础公共接口
@@ -165,8 +169,8 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: backend_services_tasks/attendance_geofence
             - path: backend_services_tasks/notification_pipeline
+            - path: frontend_admin_pro/system_admin
     backend_core:
         dir_name: 后端核心基础设施（配置_认证_存储_调度）
         title: 后端核心基础设施（配置/认证/存储/调度）
@@ -178,7 +182,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: docker_infra
     backend_h5_miniapp_api:
         dir_name: H5_小程序_看板 WebSocket 前端 API
         title: H5/小程序/看板 WebSocket 前端 API
@@ -190,15 +195,14 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: backend_services_tasks/attendance_geofence
-            - path: backend_services_tasks/feishu_integration
-            - path: backend_services_tasks/notification_pipeline
             - path: frontend_h5/app_shell_and_shared
             - path: frontend_h5/attendance_pages
             - path: frontend_h5/customer_order_pages
             - path: frontend_h5/reporting_pages
             - path: frontend_h5/task_management_pages
             - path: frontend_h5/wages_pages
+            - path: lightmes_miniapp/customer_area
+            - path: lightmes_miniapp/employee_area
     backend_integrations:
         dir_name: 外部系统集成适配层（CRM _ 飞书 _ AI 兼容）
         title: 外部系统集成适配层（CRM / 飞书 / AI 兼容）
@@ -209,7 +213,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: frontend_admin_pro/system_admin
     backend_migrations_scripts_tests:
         dir_name: 数据库迁移、演示数据脚本与单元测试
         title: 数据库迁移、演示数据脚本与单元测试
@@ -318,7 +323,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_system_rbac
     backend_models_schemas_crud/reporting_auto_salary:
         dir_name: 报工与自动算薪
         title: 报工与自动算薪
@@ -329,7 +335,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_reports_shift
     backend_models_schemas_crud/warehouse_inventory:
         dir_name: 仓库与库存管理
         title: 仓库与库存管理
@@ -340,7 +347,9 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_purchase
+            - path: backend_admin_warehouse
     backend_models_schemas_crud/work_order_dispatch:
         dir_name: 生产工单与派工数据层
         title: 生产工单与派工数据层
@@ -351,7 +360,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_quality_equipment
     backend_services_tasks:
         dir_name: 后端业务服务与 Celery 异步任务编排
         title: 后端业务服务与 Celery 异步任务编排
@@ -383,9 +393,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend_api_router
-            - path: backend_h5_miniapp_api
+        related_to: []
     backend_services_tasks/crm_scope:
         dir_name: CRM 数据域与关联实体展示服务
         title: CRM 数据域与关联实体展示服务
@@ -396,8 +404,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend_admin_production
+        related_to: []
     backend_services_tasks/feishu_integration:
         dir_name: 飞书集成与消息推送服务
         title: 飞书集成与消息推送服务
@@ -406,9 +413,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend_h5_miniapp_api
-            - path: backend_services_tasks/task_workers
+        related_to: []
     backend_services_tasks/notification_pipeline:
         dir_name: 统一消息通知与 WebSocket 推送
         title: 统一消息通知与 WebSocket 推送
@@ -421,8 +426,6 @@ modules:
         depends_on: []
         related_to:
             - path: backend_api_router
-            - path: backend_h5_miniapp_api
-            - path: backend_services_tasks/task_workers
     backend_services_tasks/order_import:
         dir_name: 订单导入与 SKU 批量管理
         title: 订单导入与 SKU 批量管理
@@ -433,9 +436,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend_admin_master_data
-            - path: backend_admin_production
+        related_to: []
     backend_services_tasks/planning_and_dispatch:
         dir_name: 排产优化与自动派工服务
         title: 排产优化与自动派工服务
@@ -481,7 +482,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_master_data
     backend_services_tasks/task_workers:
         dir_name: Celery 异步任务与定时调度
         title: Celery 异步任务与定时调度
@@ -492,8 +494,8 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: backend_services_tasks/feishu_integration
-            - path: backend_services_tasks/notification_pipeline
+            - path: docker_infra
+            - path: frontend_admin_pro/system_admin
     docker_infra:
         dir_name: Docker 容器化与部署基础设施
         title: Docker 容器化与部署基础设施
@@ -504,7 +506,12 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_core
+            - path: backend_services_tasks/task_workers
+            - path: frontend_admin_pro
+            - path: frontend_h5
+            - path: lightmes_miniapp
     frontend_admin_pro:
         dir_name: CenkorMES 管理端前端聚合模块
         title: CenkorMES 管理端前端聚合模块
@@ -521,17 +528,130 @@ modules:
             - frontend_admin_pro/system_admin
             - frontend_admin_pro/warehouse
         depends_on: []
-        related_to: []
+        related_to:
+            - path: docker_infra
     frontend_admin_pro/erp:
         dir_name: ERP 财务与资产管理前端页面
         title: ERP 财务与资产管理前端页面
         scope:
             - frontend-admin-pro/src/pages/erp/
         source_files: []
-        children: []
+        children:
+            - frontend_admin_pro/erp/equipment_management
+            - frontend_admin_pro/erp/finance_accounting
+            - frontend_admin_pro/erp/master_data
+            - frontend_admin_pro/erp/permissions_tenant_system
+            - frontend_admin_pro/erp/production_work_orders_dispatch
+            - frontend_admin_pro/erp/purchase_procurement
+            - frontend_admin_pro/erp/quality_inspection
+            - frontend_admin_pro/erp/reporting_salary
+            - frontend_admin_pro/erp/scheduling_plans
+            - frontend_admin_pro/erp/warehouse_in_outbound
         depends_on: []
         related_to:
             - path: backend_admin_finance
+    frontend_admin_pro/erp/equipment_management:
+        dir_name: 生产基础数据管理（设备_报工件次_班次）
+        title: 生产基础数据管理（设备/报工件次/班次）
+        scope:
+            - frontend-admin-pro/src/pages/production/EquipmentPage.vue
+            - frontend-admin-pro/src/pages/production/ReportUnitsPage.vue
+            - frontend-admin-pro/src/pages/production/ShiftsPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/finance_accounting:
+        dir_name: finance_accounting
+        title: finance_accounting
+        scope:
+            - frontend-admin-pro/src/pages/finance/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/master_data:
+        dir_name: 基础数据管理页面（物料_BOM_产品_SKU_供应商_工序_工艺路线）
+        title: 基础数据管理页面（物料/BOM/产品/SKU/供应商/工序/工艺路线）
+        scope:
+            - frontend-admin-pro/src/pages/master/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/permissions_tenant_system:
+        dir_name: 权限、角色与用户管理页面
+        title: 权限、角色与用户管理页面
+        scope:
+            - frontend-admin-pro/src/pages/system/PermissionsPage.vue
+            - frontend-admin-pro/src/pages/system/RolesPage.vue
+            - frontend-admin-pro/src/pages/system/UsersPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/production_work_orders_dispatch:
+        dir_name: 生产订单与派工管理前端页面
+        title: 生产订单与派工管理前端页面
+        scope:
+            - frontend-admin-pro/src/pages/production/OrdersPage.vue
+            - frontend-admin-pro/src/pages/production/WorkOrdersPage.vue
+            - frontend-admin-pro/src/pages/production/TasksPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/purchase_procurement:
+        dir_name: purchase_procurement
+        title: purchase_procurement
+        scope:
+            - frontend-admin-pro/src/pages/purchase/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/quality_inspection:
+        dir_name: 生产质检与追溯管理页面
+        title: 生产质检与追溯管理页面
+        scope:
+            - frontend-admin-pro/src/pages/production/InspectionTemplatesPage.vue
+            - frontend-admin-pro/src/pages/production/DefectCodesPage.vue
+            - frontend-admin-pro/src/pages/production/TracePage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/reporting_salary:
+        dir_name: 生产报工与薪资核算前端页面
+        title: 生产报工与薪资核算前端页面
+        scope:
+            - frontend-admin-pro/src/pages/production/SalaryPage.vue
+            - frontend-admin-pro/src/pages/production/SalarySlipsPage.vue
+            - frontend-admin-pro/src/pages/production/ReportsPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/scheduling_plans:
+        dir_name: 生产排产计划前端页面
+        title: 生产排产计划前端页面
+        scope:
+            - frontend-admin-pro/src/pages/production/plans/
+            - frontend-admin-pro/src/pages/production/PlansPage.vue
+            - frontend-admin-pro/src/pages/production/PlanFormPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp/warehouse_in_outbound:
+        dir_name: warehouse_in_outbound
+        title: warehouse_in_outbound
+        scope:
+            - frontend-admin-pro/src/pages/warehouse/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
     frontend_admin_pro/finance:
         dir_name: 财务对账与报表前端页面
         title: 财务对账与报表前端页面
@@ -577,7 +697,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_admin_production
     frontend_admin_pro/production/order_management:
         dir_name: 生产订单管理（前端）
         title: 生产订单管理（前端）
@@ -669,6 +790,9 @@ modules:
         depends_on: []
         related_to:
             - path: backend_admin_system_rbac
+            - path: backend_api_router
+            - path: backend_integrations
+            - path: backend_services_tasks/task_workers
     frontend_admin_pro/warehouse:
         dir_name: 仓库管理前端页面
         title: 仓库管理前端页面
@@ -694,7 +818,8 @@ modules:
             - frontend_h5/task_management_pages
             - frontend_h5/wages_pages
         depends_on: []
-        related_to: []
+        related_to:
+            - path: docker_infra
     frontend_h5/app_shell_and_shared:
         dir_name: H5 前端路由与 API 客户端层
         title: H5 前端路由与 API 客户端层
@@ -706,6 +831,8 @@ modules:
         depends_on: []
         related_to:
             - path: backend_h5_miniapp_api
+            - path: frontend_h5/attendance_pages
+            - path: frontend_h5/reporting_pages
     frontend_h5/attendance_pages:
         dir_name: 移动端考勤与报工页面
         title: 移动端考勤与报工页面
@@ -718,6 +845,7 @@ modules:
         depends_on: []
         related_to:
             - path: backend_h5_miniapp_api
+            - path: frontend_h5/app_shell_and_shared
     frontend_h5/customer_order_pages:
         dir_name: 客户订单前端页面（下单、详情、进度）
         title: 客户订单前端页面（下单、详情、进度）
@@ -742,6 +870,8 @@ modules:
         depends_on: []
         related_to:
             - path: backend_h5_miniapp_api
+            - path: frontend_h5/app_shell_and_shared
+            - path: frontend_h5/shared_ui_layers
     frontend_h5/shared_ui_layers:
         dir_name: H5 前端共享 UI 层与通用工具
         title: H5 前端共享 UI 层与通用工具
@@ -752,7 +882,10 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: frontend_h5/reporting_pages
+            - path: frontend_h5/task_management_pages
+            - path: frontend_h5/wages_pages
     frontend_h5/task_management_pages:
         dir_name: 任务管理与员工H5页面
         title: 任务管理与员工H5页面
@@ -765,6 +898,7 @@ modules:
         depends_on: []
         related_to:
             - path: backend_h5_miniapp_api
+            - path: frontend_h5/shared_ui_layers
     frontend_h5/wages_pages:
         dir_name: 移动端工资与对账单页面
         title: 移动端工资与对账单页面
@@ -777,6 +911,7 @@ modules:
         depends_on: []
         related_to:
             - path: backend_h5_miniapp_api
+            - path: frontend_h5/shared_ui_layers
     lightmes_miniapp:
         dir_name: CenkorMES 多角色小程序前端（uni-app）
         title: CenkorMES 多角色小程序前端（uni-app）
@@ -790,7 +925,8 @@ modules:
             - lightmes_miniapp/employee_area
             - lightmes_miniapp/shared_infra
         depends_on: []
-        related_to: []
+        related_to:
+            - path: docker_infra
     lightmes_miniapp/admin_area:
         dir_name: 管理端小程序页面与通用管理 UI 组件
         title: 管理端小程序页面与通用管理 UI 组件
@@ -800,7 +936,9 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: lightmes_miniapp/app_shell_and_theme
+            - path: lightmes_miniapp/shared_infra
     lightmes_miniapp/app_shell_and_theme:
         dir_name: 小程序应用外壳与多角色主题
         title: 小程序应用外壳与多角色主题
@@ -811,7 +949,10 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: lightmes_miniapp/admin_area
+            - path: lightmes_miniapp/customer_area
+            - path: lightmes_miniapp/employee_area
     lightmes_miniapp/customer_area:
         dir_name: 客户自助小程序页面（订单_对账_通知）
         title: 客户自助小程序页面（订单/对账/通知）
@@ -821,7 +962,10 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_h5_miniapp_api
+            - path: lightmes_miniapp/app_shell_and_theme
+            - path: lightmes_miniapp/shared_infra
     lightmes_miniapp/employee_area:
         dir_name: 员工端小程序页面与组件
         title: 员工端小程序页面与组件
@@ -831,7 +975,10 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend_h5_miniapp_api
+            - path: lightmes_miniapp/app_shell_and_theme
+            - path: lightmes_miniapp/shared_infra
     lightmes_miniapp/shared_infra:
         dir_name: 小程序共享基础设施（API_状态_权限_国际化）
         title: 小程序共享基础设施（API/状态/权限/国际化）
@@ -846,4 +993,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: lightmes_miniapp/admin_area
+            - path: lightmes_miniapp/customer_area
+            - path: lightmes_miniapp/employee_area

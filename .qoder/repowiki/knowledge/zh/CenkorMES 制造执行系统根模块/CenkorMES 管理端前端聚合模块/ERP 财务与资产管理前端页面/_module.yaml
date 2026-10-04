@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp
+title: ERP 财务与资产管理前端页面
+scope:
+    - frontend-admin-pro/src/pages/erp/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_finance

@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_admin_pro/production/trace_mrp
+title: 生产追溯与 MRP 计划前端页面
+scope:
+    - frontend-admin-pro/src/pages/production/TracePage.vue
+    - frontend-admin-pro/src/pages/production/TraceTreePage.vue
+    - frontend-admin-pro/src/pages/production/MrpPage.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_production

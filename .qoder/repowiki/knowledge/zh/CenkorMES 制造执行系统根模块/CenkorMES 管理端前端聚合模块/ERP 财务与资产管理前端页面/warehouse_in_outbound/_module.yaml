@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/warehouse_in_outbound
+title: warehouse_in_outbound
+scope:
+    - frontend-admin-pro/src/pages/warehouse/
+source_files: []
+depends_on: []
+related_to: []

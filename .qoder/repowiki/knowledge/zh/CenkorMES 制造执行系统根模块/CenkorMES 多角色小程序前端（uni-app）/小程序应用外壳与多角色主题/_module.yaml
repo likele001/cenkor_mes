@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: lightmes_miniapp/app_shell_and_theme
+title: 小程序应用外壳与多角色主题
+scope:
+    - lightmes-miniapp/src/styles/
+    - lightmes-miniapp/src/custom-tab-bar/
+    - lightmes-miniapp/src/mixins/
+source_files: []
+depends_on: []
+related_to:
+    - path: lightmes_miniapp/admin_area
+    - path: lightmes_miniapp/customer_area
+    - path: lightmes_miniapp/employee_area

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/finance_accounting
+title: finance_accounting
+scope:
+    - frontend-admin-pro/src/pages/finance/
+source_files: []
+depends_on: []
+related_to: []

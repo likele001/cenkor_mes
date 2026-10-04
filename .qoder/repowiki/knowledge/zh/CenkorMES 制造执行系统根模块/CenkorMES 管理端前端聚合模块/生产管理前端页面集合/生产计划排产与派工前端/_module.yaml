@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_admin_pro/production/planning_scheduling
+title: 生产计划排产与派工前端
+scope:
+    - frontend-admin-pro/src/pages/production/plans/
+    - frontend-admin-pro/src/pages/production/PlansPage.vue
+    - frontend-admin-pro/src/pages/production/PlanFormPage.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_production

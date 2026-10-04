@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: frontend_admin_pro/system_admin
+title: 系统管理后台页面集
+scope:
+    - frontend-admin-pro/src/pages/system/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_system_rbac
+    - path: backend_api_router
+    - path: backend_integrations
+    - path: backend_services_tasks/task_workers

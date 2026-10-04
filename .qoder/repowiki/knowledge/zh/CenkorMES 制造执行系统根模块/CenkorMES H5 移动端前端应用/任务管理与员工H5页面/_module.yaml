@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: frontend_h5/task_management_pages
+title: 任务管理与员工H5页面
+scope:
+    - frontend-h5/src/pages/TasksPage.vue
+    - frontend-h5/src/pages/TaskDetailPage.vue
+    - frontend-h5/src/pages/GuidePage.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_h5_miniapp_api
+    - path: frontend_h5/shared_ui_layers
