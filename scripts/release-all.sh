@@ -12,6 +12,8 @@
 #   - 每次发布会把说明追加进 backend/CHANGELOG.json（按版本号幂等：同版本号覆盖描述）。
 #   - 后端 main.py 在【启动时】把 CHANGELOG.json 同步进 system_versions 表，
 #     因此发布后必须【在宝塔面板重启 cenkormes 后端】，关于页才会显示新版本。
+#   - 发布同时会打并推送附注 tag（vX.Y.Z）；.github/workflows/release.yml 监听该 tag
+#     自动在 GitHub 创建对应 Release（说明取 CHANGELOG.json 中该版本的描述）。
 #   - 本脚本不导出社区版/专业版（cenkormes 为单仓，无 lightmes 那套双仓拆分）。
 set -euo pipefail
 
@@ -109,11 +111,22 @@ else
   _run git commit -m "chore(release): bump version to $NEW_VER" -m "$CHANGE_DESC"
 fi
 
+# ---- 打附注 tag（GitHub 上由 tag 触发 Actions 自动生成 Release）----
+TAG="$NEW_VER"
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+  echo "==> tag $TAG 已存在，跳过创建"
+else
+  _run git tag -a "$TAG" -m "$CHANGE_DESC"
+  echo "==> 创建附注 tag: $TAG"
+fi
+
 if [[ "$DRY_RUN" -eq 0 && "$NO_PUSH" -eq 0 ]]; then
   _run git push -u origin "$BRANCH"
-  echo "✅ 已推送到 origin/$BRANCH"
+  _run git push origin "$TAG"
+  echo "✅ 已推送 origin/$BRANCH 及 tag $TAG —— GitHub 将自动生成 Release"
 elif [[ "$NO_PUSH" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
-  echo "（--no-push）已本地提交，未推送。需要时手动: git push -u origin $BRANCH"
+  echo "（--no-push）已本地提交并打 tag，未推送。需要时手动:"
+  echo "    git push -u origin $BRANCH && git push origin $TAG"
 fi
 
 echo "========================================"
