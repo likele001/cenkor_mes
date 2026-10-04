@@ -15,9 +15,12 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+# pip 源做成可覆盖参数：默认官方源（海外机器直连可用）。
+# 国内部署可传：--build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_INDEX_URL=https://pypi.org/simple
 COPY backend/requirements.txt .
-RUN pip install --upgrade pip --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
-    && pip install --no-cache-dir -r requirements.txt --index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --upgrade pip --index-url ${PIP_INDEX_URL} \
+    && pip install --no-cache-dir -r requirements.txt --index-url ${PIP_INDEX_URL}
 
 COPY backend/ .
 
