@@ -48,8 +48,26 @@ def test_permission_point_seeded():
     assert "cloud_storage.manage" in codes
 
 
+def _collect_route_paths(routes) -> set:
+    """递归收集路由 path。
+
+    兼容不同 Starlette 版本：旧版 `include_router` 会把子路由平铺进 `.routes`；
+    新版（如 1.7+）改用 `_IncludedRouter` 包装（无 `.path`，但有 `.routes`）。
+    递归收集可跨版本稳定，避免上游升级造成假红灯。
+    """
+    paths: set = set()
+    for r in routes:
+        p = getattr(r, "path", None)
+        if p:
+            paths.add(p)
+        sub = getattr(r, "routes", None)
+        if sub:
+            paths |= _collect_route_paths(sub)
+    return paths
+
+
 def test_routes_mounted():
-    paths = {r.path for r in system_router.routes}
+    paths = _collect_route_paths(system_router.routes)
     base = "/cloud-storage"
     assert f"{base}" in paths
     assert f"{base}/providers/{{provider}}/credentials" in paths

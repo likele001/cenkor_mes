@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal, engine
 from app.core.errors import BizError
 from app.core.middleware import SecurityHeadersMiddleware
+from app.core.observability import RequestContextMiddleware, enable_slow_query_logging, setup_logging
 from app.core.response import fail, ok
 from app.core.security import ensure_secure_jwt_secret
 from app.crud.rbac import ensure_permissions, create_default_roles
@@ -43,6 +44,12 @@ if settings.CORS_ORIGINS:
 if settings.TRUSTED_HOSTS:
     _hosts = [h.strip() for h in settings.TRUSTED_HOSTS.split(",") if h.strip()]
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=_hosts)
+
+# 可观测性（PERF-1）：结构化访问日志 + request_id 关联 + SQLAlchemy 慢查询日志。
+# RequestContextMiddleware 最后注册 = 最外层，可统计含 CORS/安全头在内的完整耗时。
+setup_logging()
+enable_slow_query_logging(engine)
+app.add_middleware(RequestContextMiddleware)
 
 app.include_router(api_router, prefix="/api")
 

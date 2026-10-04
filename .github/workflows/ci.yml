@@ -1,0 +1,76 @@
+# CI 门禁（QA-5）：PR / push 到主干时自动跑「后端测试 + 前端类型检查与构建」。
+# 红则不可合并，防止回归流入生产。与 release.yml（负责打 Release）相互独立。
+name: CI
+
+on:
+  pull_request:
+    branches: ["**"]
+  push:
+    branches: ["master", "main"]
+  workflow_dispatch:
+
+# 同一分支的新提交取消上一次仍在跑的流水线，节省额度
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: 后端测试 (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # CI 无 .env：显式给出可预测的最小配置。测试用 SQLite 内存库并覆盖 get_db，
+      # 这里的 DB_URL 仅避免 settings 默认指向 MySQL，实际不会被连接。
+      APP_ENV: dev
+      DB_URL: "sqlite+pysqlite:///:memory:"
+      JWT_SECRET: "ci_placeholder_secret_0123456789abcdef0123456789abcdef"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-ci.txt
+
+      - name: 安装依赖（精简 CI 清单，剔除未使用的 ML 栈）
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      - name: 运行测试套件
+        run: python -m pytest tests -q
+
+  frontend:
+    name: 前端构建 (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend-admin-pro, frontend-h5]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      # build 脚本为 `vue-tsc -b && vite build`：类型检查 + 产物构建一并校验
+      - name: 类型检查与构建
+        run: npm run build

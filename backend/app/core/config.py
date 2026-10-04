@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     DB_AUTO_CREATE: bool = True
     DB_AUTO_SEED: bool = True
 
+    # 可观测性（PERF-1）
+    HTTP_ACCESS_LOG: bool = True             # 是否输出结构化 HTTP 访问日志（含 request_id 与耗时）
+    DB_SLOW_QUERY_MS: int = 800              # 慢查询阈值（毫秒），单次游标执行超过则 WARNING；<=0 关闭
+
     JWT_SECRET: str = "change_me"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
