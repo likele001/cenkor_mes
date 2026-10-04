@@ -168,5 +168,10 @@
     "version": "v2.0.5",
     "release_date": "2026-10-04",
     "description": "新增核心闭环HTTP集成测试、CI质量门禁与请求可观测性(访问日志/慢查询/X-Request-ID)"
+  },
+  {
+    "version": "v2.0.6",
+    "release_date": "2026-10-04",
+    "description": "财务域清理与新功能：删除 erp_* 孤儿模块(含 drop 迁移 0006)；AR/AP 客户/供应商对账单新增账龄分析与部分核销(逐笔登记/冲销、到期日、账龄看板，全栈+i18n)"
   }
 ]
