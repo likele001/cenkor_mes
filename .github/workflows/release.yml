@@ -7,6 +7,13 @@ on:
   push:
     tags:
       - "v*"
+  # 手动触发：可为任意已存在的 tag 补建 Release（用于回填历史版本）
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要补建 Release 的已存在 tag（例如 v2.0.4）"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,13 +21,16 @@ permissions:
 jobs:
   github-release:
     runs-on: ubuntu-latest
+    env:
+      # tag 推送事件取 ref_name；手动触发取输入的 tag
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: 提取本版本 CHANGELOG 说明
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           python3 - <<'PY'
           import json, os
@@ -41,11 +51,11 @@ jobs:
       - name: 创建 / 更新 GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG 已存在，更新说明与标题"
-            gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" --latest
+            gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
           else
-            gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" --latest
+            gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
           fi
