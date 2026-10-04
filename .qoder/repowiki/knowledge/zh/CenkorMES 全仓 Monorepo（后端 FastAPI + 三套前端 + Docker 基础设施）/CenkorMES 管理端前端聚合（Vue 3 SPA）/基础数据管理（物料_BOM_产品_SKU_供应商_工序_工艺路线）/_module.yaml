@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: frontend_admin_pro/master_data
-title: 基础数据管理（物料/BOM/产品/SKU/供应商/工序/工艺路线）
-scope:
-    - frontend-admin-pro/src/pages/master/
-source_files: []
-depends_on: []
-related_to: []

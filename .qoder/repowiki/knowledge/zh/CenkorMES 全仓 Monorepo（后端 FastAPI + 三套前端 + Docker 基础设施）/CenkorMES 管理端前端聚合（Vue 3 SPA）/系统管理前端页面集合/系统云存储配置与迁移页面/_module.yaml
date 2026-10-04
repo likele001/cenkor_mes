@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: frontend_admin_pro/system_admin/cloud_storage_page
-title: 系统云存储配置与迁移页面
-scope:
-    - frontend-admin-pro/src/pages/system/CloudStoragePage.vue
-source_files: []
-depends_on: []
-related_to: []
