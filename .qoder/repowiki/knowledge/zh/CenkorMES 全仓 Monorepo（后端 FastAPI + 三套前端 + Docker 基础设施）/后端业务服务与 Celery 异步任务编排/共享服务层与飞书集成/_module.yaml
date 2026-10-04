@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: backend_services_tasks/shared_services
-title: 共享服务层与飞书集成
-scope:
-    - backend/app/services/
-source_files: []
-depends_on: []
-related_to: []
