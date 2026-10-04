@@ -2200,6 +2200,21 @@ skuBatch: {
         custom_domain: '七牛下载签名依赖空间绑定的已认证域名，必填。',
         prefix: '可选，对象统一存放的目录前缀。',
       },
+      migration: {
+        title: '历史附件迁移',
+        subtitle: '将本地存储的存量附件批量迁移到已配置的云后端；迁移不删除本地源文件，可随时续跑。',
+        pickTarget: '选择目标',
+        start: '开始迁移',
+        failed: '失败',
+        noJob: '暂无迁移任务。',
+        confirm: '确认将本地存量附件迁移到 {name}？迁移在后台执行，可离开本页。',
+        status: {
+          pending: '排队中',
+          running: '迁移中',
+          done: '已完成',
+          failed: '失败',
+        },
+      },
     },
     feishu: {
       title: '飞书消息推送',

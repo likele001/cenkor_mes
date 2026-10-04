@@ -130,6 +130,20 @@ export type CloudHealthResult = {
   error?: string
 }
 
+export type CloudMigrationJob = {
+  id: number
+  source: string
+  target: string
+  total: number
+  done: number
+  failed: number
+  status: 'pending' | 'running' | 'done' | 'failed' | string
+  error?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  created_at?: string | null
+}
+
 export const systemApi = {
   listUsers(params: any) {
     return http.request<ListResp<UserOut>>({ url: '/admin/system/users', method: 'GET', params })
@@ -429,6 +443,19 @@ export const systemApi = {
       url: '/admin/system/cloud-storage/settings',
       method: 'PUT',
       data: { keep_local_backup },
+    })
+  },
+  startCloudMigration(target: string, source = 'local') {
+    return http.request<CloudMigrationJob>({
+      url: '/admin/system/cloud-storage/migration',
+      method: 'POST',
+      data: { target, source },
+    })
+  },
+  getLatestCloudMigration() {
+    return http.request<CloudMigrationJob | null>({
+      url: '/admin/system/cloud-storage/migration/latest',
+      method: 'GET',
     })
   },
 }

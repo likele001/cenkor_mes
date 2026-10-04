@@ -2573,6 +2573,21 @@ export default {
         "custom_domain": "Qiniu download signing relies on the space's verified domain, required.",
         "prefix": "Optional directory prefix for stored objects.",
       },
+      "migration": {
+        "title": "Legacy Attachment Migration",
+        "subtitle": "Batch migrate existing attachments from local storage to a configured cloud backend. Source files are kept and it can be resumed anytime.",
+        "pickTarget": "Select target",
+        "start": "Start migration",
+        "failed": "Failed",
+        "noJob": "No migration job yet.",
+        "confirm": "Migrate existing local attachments to {name}? It runs in the background and you may leave this page.",
+        "status": {
+          "pending": "Queued",
+          "running": "Running",
+          "done": "Completed",
+          "failed": "Failed",
+        },
+      },
     },
     "feishu": {
       "title": "Feishu Message Push",

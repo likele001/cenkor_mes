@@ -16,8 +16,9 @@ from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.errors import BizError
 from app.core.response import ok
 from app.models.user import User
-from app.schemas.cloud_storage import ActivateIn, CloudCredsIn, SettingsIn
+from app.schemas.cloud_storage import ActivateIn, CloudCredsIn, MigrationIn, SettingsIn
 from app.services import cloud_storage_config as svc
+from app.services import cloud_storage_migration as mig_svc
 from app.storage.factory import registered_drivers
 
 
@@ -115,6 +116,37 @@ def test_provider(
         return ok(storage.health_check())
     # 降级到 local（凭据不全/SDK 缺失）时没有 health_check
     return ok({"ok": storage.driver == "local", "provider": storage.driver, "detail": {"fell_back_to_local": storage.driver == "local" and provider != "local"}})
+
+
+@router.post("/migration")
+def start_migration(
+    payload: MigrationIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """创建并异步启动历史附件迁移任务（local → 目标云）。同一时刻仅允许一个任务。"""
+    try:
+        job = mig_svc.create_migration_job(db, target=payload.target, source=payload.source, user_id=user.id)
+    except mig_svc.MigrationError as exc:
+        raise _bad_request(exc) from exc
+    write_op_log(
+        db, request, user,
+        module="system.cloud_storage", action="start_migration",
+        object_type="cloud_storage_migration_job", object_id=job.id,
+        detail=f"{job.source}->{job.target} total={job.total}",
+    )
+    db.commit()
+    # 校验与日志落库后再拉起后台线程，确保线程看到已提交的 pending 任务
+    mig_svc.run_migration_async(job.id)
+    return ok(mig_svc._job_out(job))
+
+
+@router.get("/migration/latest")
+def get_latest_migration(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """轮询最新迁移任务状态（无任务返回 null）。"""
+    job = mig_svc.get_latest_job(db)
+    return ok(mig_svc._job_out(job) if job else None)
 
 
 @router.put("/settings")
