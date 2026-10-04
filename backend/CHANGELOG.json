@@ -148,5 +148,10 @@
     "version": "v2.0.1",
     "release_date": "2026-09-12",
     "description": "feat(api): 添加独立版AI智能中心兼容占位路由\n\n- 在主路由中增加 AI 兼容层路由，避免独立版出现/api/ai/* 404错误\n- 新增 ai_compat 子模块，提供安全的空数据接口作为兜底\n- 实现 /brief、/alerts、/alerts/run 三个占位接口，均返回空内容确保前端调用安全\n- 兼容层导入失败时不影响主路由加载，保证系统稳定性"
+  },
+  {
+    "version": "v2.0.2",
+    "release_date": "2026-10-04",
+    "description": "修复管理后台因 Element Plus 分包循环依赖导致的白屏"
   }
 ]
