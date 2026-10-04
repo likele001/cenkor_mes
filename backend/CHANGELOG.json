@@ -153,5 +153,10 @@
     "version": "v2.0.2",
     "release_date": "2026-10-04",
     "description": "修复管理后台因 Element Plus 分包循环依赖导致的白屏"
+  },
+  {
+    "version": "v2.0.3",
+    "release_date": "2026-10-04",
+    "description": "云存储配置功能上线(CS-1~CS-5): 凭据加密存储/阿里OSS·腾讯COS·七牛驱动/管理端设置页"
   }
 ]
