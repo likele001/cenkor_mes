@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro
+title: frontend_admin_pro
+scope:
+    - frontend-admin-pro/
+source_files: []
+depends_on: []
+related_to: []

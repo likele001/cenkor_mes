@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: backend_admin_master_data
+title: 基础数据管理 API（产品/物料/BOM/工序/SKU/供应商）
+scope:
+    - backend/app/api/admin/master/
+source_files: []
+depends_on: []
+related_to: []
