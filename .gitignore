@@ -104,6 +104,8 @@ lightmes-miniapp/unpackage/
 # IDE / 编辑器
 .vscode/
 .idea/
+# Qoder 本地生成物(RepoWiki / 知识卡 / wiki_plan,随源码重建而变动,不纳入版本管理)
+.qoder/
 *.swp
 *.swo
 *~
