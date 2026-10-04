@@ -13,8 +13,8 @@ from app.core.config import settings
 class LocalStorage(Storage):
     driver = "local"
 
-    def __init__(self):
-        self.root = Path(settings.STORAGE_LOCAL_ROOT)
+    def __init__(self, root: str | os.PathLike | None = None):
+        self.root = Path(root) if root else Path(settings.STORAGE_LOCAL_ROOT)
 
     def _object_key(self, *, filename: str) -> str:
         dt = datetime.now()
