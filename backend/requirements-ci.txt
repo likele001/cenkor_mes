@@ -1,0 +1,28 @@
+# CI 专用精简依赖（不用于生产镜像，生产仍用 requirements.txt）
+# 目的：只装 `app.main` 导入链 + pytest 测试套件真正需要的包，剔除 ML 栈
+# （ortools / chromadb / prophet / scikit-learn / joblib / pandas / numpy 在 app 与 tests 中均零引用），
+# 让 GitHub Actions 门禁安装快、失败率低。
+#
+# 关键包用 `==` 钉到当前开发 venv 实测可用的已知良好版本：CI 门禁必须**确定性**，
+# 否则 fastapi/starlette 上游浮级会改变路由内省等内部结构，造成与业务无关的假红灯。
+# 升级依赖请在本地跑通 pytest 后再同步这里的 pin。
+fastapi==0.136.3
+starlette==1.3.1
+SQLAlchemy==2.0.50
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-jose[cryptography]==3.5.0
+httpx==0.28.1
+bcrypt>=4.0.1
+PyMySQL>=1.1.0
+python-multipart>=0.0.9
+aiofiles>=23.2.1
+openpyxl>=3.1.2
+celery[redis]>=5.3.6
+qrcode>=7.4.2
+redis>=5.0.0
+Pillow>=10.0.0
+oss2>=2.18.0
+cos-python-sdk-v5>=1.9.30
+qiniu>=7.12.0
+pytest>=8.0.0
