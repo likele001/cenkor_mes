@@ -1,0 +1,1 @@
+import{h as r}from"./index-CO6g8Awh.js";const t={summary(){return r.request({url:"/dashboard/summary",method:"GET"})},charts(a){return r.request({url:"/dashboard/charts",method:"GET",params:{days:a}})}};export{t as d};

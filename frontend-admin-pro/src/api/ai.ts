@@ -75,10 +75,6 @@ const _aiApiEnabled = {
   getPlanForecast: (planId: number) => http.request<any>({ url: `/ai/plan/${planId}/forecast`, method: 'GET' }),
   getPlanApsStrategy: (planId: number) => http.request<any>({ url: `/ai/plan/${planId}/aps-strategy`, method: 'GET' }),
   planAnalyze: (planId: number) => http.request<any>({ url: `/ai/plan/${planId}/analyze`, method: 'POST' }),
-  getGatewaySettings: () => http.request<any>({ url: '/ai/gateway-settings', method: 'GET' }),
-  saveGatewaySettings: (data: unknown) => http.request<void>({ url: '/ai/gateway-settings', method: 'PUT', data }),
-  getPromptSettings: () => http.request<any>({ url: '/ai/prompt-settings', method: 'GET' }),
-  savePromptSettings: (data: unknown) => http.request<void>({ url: '/ai/prompt-settings', method: 'PUT', data }),
   auditSummary: (status: string) => http.request<any>({ url: '/ai/audit/summary', method: 'GET', params: { status } }),
   reportVision: (id: number) => http.request<any>({ url: `/ai/report-units/${id}/vision`, method: 'POST' }),
 }
@@ -101,10 +97,6 @@ const _aiApiDisabled: Record<string, (...args: any[]) => Promise<any>> = {
   getPlanForecast: () => _disabled({ due_risk: 'low' }),
   getPlanApsStrategy: () => _disabled({ items: [] }),
   planAnalyze: () => _disabled({ ok: false }),
-  getGatewaySettings: () => _disabled({ items: [] }),
-  saveGatewaySettings: () => _disabled({ ok: true }),
-  getPromptSettings: () => _disabled({ items: [] }),
-  savePromptSettings: () => _disabled({ ok: true }),
   auditSummary: () => _disabled({ summary: '', anomaly_count: 0, ai_suggestions: [] }),
   reportVision: () => _disabled({ text: '', anomaly_count: 0 }),
 }

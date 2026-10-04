@@ -138,47 +138,6 @@
       </el-form>
     </el-card>
 
-    <el-card class="mb-4" v-loading="aiGwLoading">
-      <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.aiGateway') }}</div>
-      <div class="text-xs text-zinc-500 mb-4">
-        {{ t('system.settings.aiGatewayHint') }}
-      </div>
-      <el-form :model="aiGwForm" label-width="140px" class="max-w-xl">
-        <el-form-item :label="t('system.settings.enableOverride')">
-          <el-switch v-model="aiGwForm.enabled" />
-        </el-form-item>
-        <el-form-item label="Base URL">
-          <el-input v-model="aiGwForm.base_url" placeholder="https://api.openai.com/v1" maxlength="512" />
-        </el-form-item>
-        <el-form-item label="API Key">
-          <el-input
-            v-model="aiGwForm.api_key"
-            type="password"
-            show-password
-            :placeholder="aiGwForm.api_key_configured ? t('system.settings.leaveEmptyNoChangeKey') : 'sk-...'"
-            maxlength="256"
-          />
-          <p v-if="aiGwForm.api_key_configured" class="text-xs text-zinc-500 mt-1">{{ t('system.settings.leaveEmptyNoChangeKey') }}</p>
-        </el-form-item>
-        <el-form-item label="Model ID">
-          <el-input v-model="aiGwForm.model_id" :placeholder="t('system.settings.leaveEmptyDefaultModel')" maxlength="128" />
-        </el-form-item>
-        <el-form-item :label="t('system.settings.timeoutSeconds')">
-          <el-input-number v-model="aiGwForm.timeout_seconds" :min="10" :max="600" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="aiGwSaving" @click="saveAiGwSettings">{{ t('system.settings.saveAiGateway') }}</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <el-card class="mb-4" v-loading="aiPromptLoading">
-      <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.aiPrompt') }}</div>
-      <p class="text-xs text-zinc-500 mb-3">{{ t('system.settings.aiPromptHint') }}</p>
-      <el-input v-model="aiPromptForm.prompt" type="textarea" :rows="4" maxlength="2000" show-word-limit />
-      <el-button class="mt-3" type="primary" :loading="aiPromptSaving" @click="saveAiPrompt">{{ t('system.settings.savePrompt') }}</el-button>
-    </el-card>
-
     <el-card>
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="text-[16px] font-semibold">{{ t('system.settings.settingTable') }}</div>
@@ -252,7 +211,6 @@ import type { FormInstance, FormRules, UploadRequestOptions } from 'element-plus
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { systemApi, type SettingOut } from '@/api/system'
-import { aiApi } from '@/api/ai'
 import { useAppConfigStore } from '@/stores/app-config'
 
 const { t } = useI18n()
@@ -293,20 +251,6 @@ const mediaForm = reactive({
   max_video_count: 3,
   max_photo_count: 5,
   camera_only: true,
-})
-
-const aiGwLoading = ref(false)
-const aiGwSaving = ref(false)
-const aiPromptLoading = ref(false)
-const aiPromptSaving = ref(false)
-const aiPromptForm = reactive({ prompt: '' })
-const aiGwForm = reactive({
-  enabled: false,
-  base_url: '',
-  api_key: '',
-  api_key_configured: false,
-  model_id: '',
-  timeout_seconds: 120,
 })
 
 const dlg = reactive({
@@ -519,74 +463,11 @@ async function saveWxSettings() {
   }
 }
 
-async function loadAiGwSettings() {
-  aiGwLoading.value = true
-  try {
-    const cfg = await aiApi.getGatewaySettings()
-    aiGwForm.enabled = cfg.enabled
-    aiGwForm.base_url = cfg.base_url || ''
-    aiGwForm.api_key_configured = cfg.api_key_configured
-    aiGwForm.api_key = ''
-    aiGwForm.model_id = cfg.model_id || ''
-    aiGwForm.timeout_seconds = cfg.timeout_seconds || 120
-  } catch {
-    /* 无 ai.use 权限时忽略 */
-  } finally {
-    aiGwLoading.value = false
-  }
-}
-
-async function saveAiGwSettings() {
-  if (aiGwForm.enabled && !aiGwForm.base_url.trim()) {
-    ElMessage.warning(t('system.settings.enableOverrideHint'))
-    return
-  }
-  aiGwSaving.value = true
-  try {
-    const data: Record<string, unknown> = {
-      enabled: aiGwForm.enabled,
-      base_url: aiGwForm.base_url.trim(),
-      model_id: aiGwForm.model_id.trim(),
-      timeout_seconds: aiGwForm.timeout_seconds,
-    }
-    if (aiGwForm.api_key.trim()) data.api_key = aiGwForm.api_key.trim()
-    await aiApi.saveGatewaySettings(data)
-    ElMessage.success(t('system.settings.aiGatewaySaved'))
-    await loadAiGwSettings()
-  } finally {
-    aiGwSaving.value = false
-  }
-}
-
-async function loadAiPromptSettings() {
-  aiPromptLoading.value = true
-  try {
-    const cfg = await aiApi.getPromptSettings()
-    aiPromptForm.prompt = cfg.prompt || ''
-  } catch {
-    aiPromptForm.prompt = ''
-  } finally {
-    aiPromptLoading.value = false
-  }
-}
-
-async function saveAiPrompt() {
-  aiPromptSaving.value = true
-  try {
-    await aiApi.savePromptSettings({ prompt: aiPromptForm.prompt })
-    ElMessage.success(t('system.settings.promptSaved'))
-  } finally {
-    aiPromptSaving.value = false
-  }
-}
-
 onMounted(() => {
   loadCompanyInfo()
   loadModeSettings()
   loadWxSettings()
   loadMediaSettings()
-  loadAiGwSettings()
-  loadAiPromptSettings()
   reload()
 })
 </script>
