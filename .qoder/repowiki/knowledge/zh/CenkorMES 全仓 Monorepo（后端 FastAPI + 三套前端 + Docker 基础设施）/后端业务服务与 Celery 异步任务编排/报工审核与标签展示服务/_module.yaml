@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: backend_services_tasks/reporting_and_labels
+title: 报工审核与标签展示服务
+scope:
+    - backend/app/services/report_audit_actions.py
+    - backend/app/services/product_label_print.py
+    - backend/app/services/display_label.py
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_h5/reporting_pages
+title: 报工与生产看板 H5 页面
+scope:
+    - frontend-h5/src/pages/ReportWorkPage.vue
+    - frontend-h5/src/pages/ReportUnitPage.vue
+    - frontend-h5/src/pages/ScreenPage.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_h5_miniapp_api

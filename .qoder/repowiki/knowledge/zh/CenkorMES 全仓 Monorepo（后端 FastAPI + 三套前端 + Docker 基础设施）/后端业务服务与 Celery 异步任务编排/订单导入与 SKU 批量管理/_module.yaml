@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: backend_services_tasks/order_import
+title: 订单导入与 SKU 批量管理
+scope:
+    - backend/app/services/order_import.py
+    - backend/app/services/sku_batch.py
+    - backend/app/services/sku_scope.py
+source_files: []
+depends_on: []
+related_to: []

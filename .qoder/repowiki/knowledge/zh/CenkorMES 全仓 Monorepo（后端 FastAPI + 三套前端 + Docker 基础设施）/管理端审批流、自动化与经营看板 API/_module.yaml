@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend_admin_approval_automation
+title: 管理端审批流、自动化与经营看板 API
+scope:
+    - backend/app/api/admin/approval/
+    - backend/app/api/admin/automation/
+    - backend/app/api/admin/exec_dashboard/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_models_schemas_crud/async_tasks_automation
+    - path: backend_services_tasks/production_automation

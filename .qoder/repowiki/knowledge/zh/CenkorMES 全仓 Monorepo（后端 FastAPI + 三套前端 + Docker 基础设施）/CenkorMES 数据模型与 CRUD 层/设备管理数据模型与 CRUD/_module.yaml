@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/equipment_management
+title: 设备管理数据模型与 CRUD
+scope:
+    - backend/app/models/equipment.py
+    - backend/app/schemas/equipment.py
+    - backend/app/crud/equipment.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_quality_equipment

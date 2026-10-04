@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/work_order_dispatch
+title: 生产工单与派工数据层
+scope:
+    - backend/app/models/work_order.py
+    - backend/app/schemas/work_order.py
+    - backend/app/crud/work_order.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_production

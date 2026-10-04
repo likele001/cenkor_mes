@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro
+title: CenkorMES 管理端前端聚合（Vue 3 SPA）
+scope:
+    - frontend-admin-pro/
+source_files: []
+depends_on: []
+related_to: []

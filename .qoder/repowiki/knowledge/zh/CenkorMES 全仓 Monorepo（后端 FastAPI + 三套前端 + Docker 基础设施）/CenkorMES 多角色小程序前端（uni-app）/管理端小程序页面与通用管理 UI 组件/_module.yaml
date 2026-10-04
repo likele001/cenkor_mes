@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: lightmes_miniapp/admin_area
+title: 管理端小程序页面与通用管理 UI 组件
+scope:
+    - lightmes-miniapp/src/pages-admin/
+    - lightmes-miniapp/src/components/admin-ui/
+source_files: []
+depends_on: []
+related_to: []

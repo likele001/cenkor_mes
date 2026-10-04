@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_integrations
+title: 外部系统集成适配层（CRM / 飞书 / AI 兼容）
+scope:
+    - backend/app/integration/
+    - backend/app/api/feishu/
+    - backend/app/api/ai_compat/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_services_tasks/feishu_integration

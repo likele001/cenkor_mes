@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/quality_inspection
+title: 质量检测（质检模板/缺陷代码/检测记录）
+scope:
+    - backend/app/models/quality.py
+    - backend/app/schemas/quality.py
+    - backend/app/crud/quality.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_quality_equipment

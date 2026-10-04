@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: lightmes_miniapp/employee_area
+title: 员工端小程序页面与组件
+scope:
+    - lightmes-miniapp/src/pages-employee/
+    - lightmes-miniapp/src/components/employee-ui/
+source_files: []
+depends_on: []
+related_to: []

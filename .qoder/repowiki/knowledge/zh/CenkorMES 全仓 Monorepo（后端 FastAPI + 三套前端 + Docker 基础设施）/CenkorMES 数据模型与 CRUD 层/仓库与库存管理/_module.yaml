@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/warehouse_inventory
+title: 仓库与库存管理
+scope:
+    - backend/app/models/warehouse.py
+    - backend/app/schemas/platform.py
+    - backend/app/crud/warehouse.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_purchase
+    - path: backend_admin_warehouse

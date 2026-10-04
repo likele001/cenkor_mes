@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/purchase_procurement
+title: 采购与委外订单管理前端页面
+scope:
+    - frontend-admin-pro/src/pages/purchase/
+source_files: []
+depends_on: []
+related_to: []
