@@ -12,9 +12,11 @@
         <el-select v-model="query.status" clearable :placeholder="t('finance.supplierStatements.statusFilter')" style="width: 160px" @change="reload(true)">
           <el-option :label="t('finance.supplierStatements.draft')" value="draft" />
           <el-option :label="t('finance.supplierStatements.confirmed')" value="confirmed" />
+          <el-option :label="t('finance.supplierStatements.partial')" value="partial" />
           <el-option :label="t('finance.supplierStatements.paid')" value="paid" />
         </el-select>
         <el-button @click="reload(true)">{{ t('finance.supplierStatements.refresh') }}</el-button>
+        <el-button type="warning" plain @click="openAging('ap')">{{ t('finance.supplierStatements.aging') }}</el-button>
         <el-button type="primary" @click="createVisible = true">{{ t('finance.supplierStatements.create') }}</el-button>
       </div>
     </template>
@@ -39,15 +41,25 @@
             <span>{{ formatMoney(row.total_amount) }}</span>
           </template>
         </el-table-column>
+        <el-table-column :label="t('finance.supplierStatements.dueDate')" width="120">
+          <template #default="{ row }">{{ row.due_date || '-' }}</template>
+        </el-table-column>
+        <el-table-column :label="t('finance.supplierStatements.paidAmount')" width="120" align="right">
+          <template #default="{ row }">{{ formatMoney(row.paid_amount) }}</template>
+        </el-table-column>
+        <el-table-column :label="t('finance.supplierStatements.balance')" width="120" align="right">
+          <template #default="{ row }"><span class="text-red-500">{{ formatMoney(row.balance) }}</span></template>
+        </el-table-column>
         <el-table-column :label="t('finance.supplierStatements.status')" width="140">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" :label="t('finance.supplierStatements.createdAt')" width="180" />
-        <el-table-column :label="t('finance.supplierStatements.actions')" width="140" fixed="right">
+        <el-table-column :label="t('finance.supplierStatements.actions')" width="220" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="router.push(`/finance/supplier-statements/${row.id}`)">{{ t('finance.supplierStatements.detail') }}</el-button>
+            <el-button v-if="row.status === 'confirmed' || row.status === 'partial'" size="small" type="warning" @click="openSettle(row)">{{ t('finance.supplierStatements.settle') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -69,11 +81,14 @@
             </dd>
             <dt>{{ t('finance.supplierStatements.amount') }}</dt>
             <dd>{{ formatMoney(row.total_amount) }}</dd>
+            <dt>{{ t('finance.supplierStatements.balance') }}</dt>
+            <dd class="text-red-500">{{ formatMoney(row.balance) }}</dd>
             <dt>{{ t('finance.supplierStatements.createdAtShort') }}</dt>
             <dd>{{ row.created_at || '—' }}</dd>
           </dl>
           <div class="admin-mobile-actions">
             <el-button size="small" type="primary" @click="router.push(`/finance/supplier-statements/${row.id}`)">{{ t('finance.supplierStatements.detail') }}</el-button>
+            <el-button v-if="row.status === 'confirmed' || row.status === 'partial'" size="small" type="warning" @click="openSettle(row)">{{ t('finance.supplierStatements.settle') }}</el-button>
           </div>
         </div>
         <el-empty v-if="!loading && !items.length" :description="t('finance.supplierStatements.noData')" />
@@ -127,6 +142,9 @@
             style="width: 100%"
           />
         </el-form-item>
+        <el-form-item :label="t('finance.supplierStatements.dueDate')">
+          <el-date-picker v-model="createForm.due_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
         <el-form-item :label="t('finance.supplierStatements.remark')">
           <el-input v-model="createForm.remark" type="textarea" :rows="2" maxlength="500" />
         </el-form-item>
@@ -136,6 +154,75 @@
         <el-button type="primary" :loading="creating" @click="doCreate">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="settleVisible" :title="t('finance.settle.title')" width="520px">
+      <div v-if="current">
+        <div class="flex justify-between text-sm mb-2"><span>{{ t('finance.settle.totalAmount') }}</span><span class="font-semibold">{{ formatMoney(current.total_amount) }}</span></div>
+        <div class="flex justify-between text-sm mb-2"><span>{{ t('finance.settle.alreadyPaid') }}</span><span>{{ formatMoney(current.paid_amount) }}</span></div>
+        <div class="flex justify-between text-sm mb-4"><span>{{ t('finance.settle.balance') }}</span><span class="font-semibold text-red-500">{{ formatMoney(current.balance) }}</span></div>
+        <el-form label-width="110px">
+          <el-form-item :label="t('finance.settle.amount')" required>
+            <el-input-number v-model="settleForm.amount" :min="0.01" :max="current.balance" :precision="2" :step="100" style="width: 100%" />
+          </el-form-item>
+          <el-form-item :label="t('finance.settle.paidDate')">
+            <el-date-picker v-model="settleForm.paid_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+          </el-form-item>
+          <el-form-item :label="t('finance.settle.method')">
+            <el-select v-model="settleForm.method" clearable style="width: 100%">
+              <el-option :label="t('finance.settle.methodTransfer')" value="transfer" />
+              <el-option :label="t('finance.settle.methodCash')" value="cash" />
+              <el-option :label="t('finance.settle.methodAcceptance')" value="acceptance" />
+              <el-option :label="t('finance.settle.methodOther')" value="other" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('finance.settle.remark')">
+            <el-input v-model="settleForm.remark" type="textarea" :rows="2" maxlength="500" />
+          </el-form-item>
+        </el-form>
+        <div class="mt-2">
+          <div class="text-sm font-semibold mb-1">{{ t('finance.settle.history') }}</div>
+          <el-table :data="payments" size="small" border v-loading="paymentsLoading" max-height="180">
+            <el-table-column prop="paid_date" :label="t('finance.settle.paidDate')" width="120" />
+            <el-table-column :label="t('finance.settle.amount')" align="right"><template #default="{ row }">{{ formatMoney(row.amount) }}</template></el-table-column>
+            <el-table-column :label="t('finance.settle.reverse')" width="90"><template #default="{ row }"><el-button size="small" type="danger" text @click="doReverse(row.id)">{{ t('finance.settle.reverse') }}</el-button></template></el-table-column>
+          </el-table>
+          <div v-if="!paymentsLoading && !payments.length" class="text-xs text-el-placeholder mt-1">{{ t('finance.settle.noPayments') }}</div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="settleVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="settling" @click="doSettle">{{ t('finance.settle.submit') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="agingVisible" :title="t('finance.aging.title')" width="720px">
+      <div v-loading="agingLoading">
+        <div class="mb-2">
+          <el-radio-group v-model="agingDirection" size="small" @change="loadAging">
+            <el-radio-button label="ar">{{ t('finance.aging.ar') }}</el-radio-button>
+            <el-radio-button label="ap">{{ t('finance.aging.ap') }}</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="text-xs text-el-placeholder mb-3">{{ t('finance.aging.asOf') }} {{ aging.as_of }}</div>
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="p-2 rounded bg-gray-50"><div class="text-xs text-el-placeholder">{{ t('finance.aging.totalBalance') }}</div><div class="font-semibold">{{ formatMoney(aging.total_balance) }}</div></div>
+          <div class="p-2 rounded bg-gray-50"><div class="text-xs text-el-placeholder">{{ t('finance.aging.overdueBalance') }}</div><div class="font-semibold text-red-500">{{ formatMoney(aging.overdue_balance) }}</div></div>
+        </div>
+        <el-table :data="aging.buckets" size="small" border class="mb-3">
+          <el-table-column :label="t('finance.aging.title')"><template #default="{ row }">{{ bucketLabel(row.bucket) }}</template></el-table-column>
+          <el-table-column prop="count" :label="t('finance.aging.count')" width="80" align="right" />
+          <el-table-column :label="t('finance.aging.balance')" width="140" align="right"><template #default="{ row }">{{ formatMoney(row.balance) }}</template></el-table-column>
+        </el-table>
+        <el-table :data="aging.items" size="small" border max-height="240">
+          <el-table-column prop="code" :label="t('finance.aging.code')" width="180" />
+          <el-table-column :label="t('finance.aging.balance')" width="120" align="right"><template #default="{ row }">{{ formatMoney(row.balance) }}</template></el-table-column>
+          <el-table-column prop="due_date" :label="t('finance.aging.dueDate')" width="120" />
+          <el-table-column :label="t('finance.aging.daysOverdue')" width="110" align="right"><template #default="{ row }">{{ row.days_overdue }}</template></el-table-column>
+        </el-table>
+        <div v-if="!agingLoading && !aging.items.length" class="text-xs text-el-placeholder mt-2">{{ t('finance.aging.noData') }}</div>
+      </div>
+      <template #footer><el-button @click="agingVisible = false">{{ t('finance.aging.close') }}</el-button></template>
+    </el-dialog>
   </AdminPage>
 </template>
 
@@ -143,12 +230,13 @@
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { financeApi, type SupplierStatementOut } from '@/api/finance'
+import { financeApi, type SupplierStatementOut, type AgingResp, type StatementPaymentOut } from '@/api/finance'
 import { purchaseApi } from '@/api/purchase'
 import { materialsApi, type SupplierOut } from '@/api/materials'
 import { useI18n } from 'vue-i18n'
 import { useStatus } from '@/utils/status-maps'
 import { ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -171,6 +259,7 @@ const createForm = reactive({
   supplier_id: null as number | null,
   order_ids: [] as number[],
   period: null as [string, string] | null,
+  due_date: '',
   remark: '',
 })
 
@@ -239,6 +328,7 @@ async function doCreate() {
       order_ids: createForm.order_ids,
       period_start: createForm.period?.[0] ?? null,
       period_end: createForm.period?.[1] ?? null,
+      due_date: createForm.due_date || null,
       remark: createForm.remark || null,
     })
     ElMessage.success(t('finance.supplierStatements.created'))
@@ -246,6 +336,7 @@ async function doCreate() {
     createForm.supplier_id = null
     createForm.order_ids = []
     createForm.period = null
+    createForm.due_date = ''
     createForm.remark = ''
     router.push(`/finance/supplier-statements/${res.id}`)
   } finally {
@@ -257,4 +348,72 @@ onMounted(async () => {
   await loadSuppliers()
   await reload(true)
 })
+
+const settleVisible = ref(false)
+const settling = ref(false)
+const current = ref<SupplierStatementOut | null>(null)
+const payments = ref<StatementPaymentOut[]>([])
+const paymentsLoading = ref(false)
+const settleForm = reactive({ amount: 0, paid_date: '', method: '', remark: '' })
+
+const agingVisible = ref(false)
+const agingLoading = ref(false)
+const agingDirection = ref<'ar' | 'ap'>('ap')
+const aging = ref<AgingResp>({ direction: 'ap', as_of: '', total_balance: 0, overdue_balance: 0, buckets: [], items: [] })
+
+const BUCKET_LABEL: Record<string, string> = {
+  not_due: 'finance.aging.bucketNotDue',
+  '1_30': 'finance.aging.bucket1_30',
+  '31_60': 'finance.aging.bucket31_60',
+  '61_90': 'finance.aging.bucket61_90',
+  '90_plus': 'finance.aging.bucket90_plus',
+}
+function bucketLabel(b: string) { return t(BUCKET_LABEL[b] || 'finance.aging.bucketNotDue') }
+
+async function openSettle(row: SupplierStatementOut) {
+  current.value = row
+  settleForm.amount = Number(row.balance) || 0
+  settleForm.paid_date = new Date().toISOString().slice(0, 10)
+  settleForm.method = ''
+  settleForm.remark = ''
+  settleVisible.value = true
+  await loadPayments()
+}
+async function loadPayments() {
+  if (!current.value) return
+  paymentsLoading.value = true
+  try {
+    const res = await financeApi.listSupplierStatementPayments(current.value.id)
+    payments.value = res.items
+  } finally { paymentsLoading.value = false }
+}
+async function doSettle() {
+  if (!current.value) return
+  if (!settleForm.amount || settleForm.amount <= 0) { ElMessage.warning(t('finance.settle.amountRequired')); return }
+  settling.value = true
+  try {
+    await financeApi.createSupplierStatementPayment(current.value.id, {
+      amount: settleForm.amount,
+      paid_date: settleForm.paid_date || null,
+      method: settleForm.method || null,
+      remark: settleForm.remark || null,
+    })
+    ElMessage.success(t('finance.settle.success'))
+    settleVisible.value = false
+    await reload(false)
+  } finally { settling.value = false }
+}
+async function doReverse(pid: number) {
+  await ElMessageBox.confirm(t('finance.settle.reverseConfirm'), { type: 'warning' })
+  await financeApi.reversePayment(pid)
+  ElMessage.success(t('finance.settle.reversed'))
+  await loadPayments()
+  await reload(false)
+}
+function openAging(dir: 'ar' | 'ap') { agingDirection.value = dir; agingVisible.value = true; loadAging() }
+async function loadAging() {
+  agingLoading.value = true
+  try { aging.value = await financeApi.getAging(agingDirection.value) }
+  finally { agingLoading.value = false }
+}
 </script>

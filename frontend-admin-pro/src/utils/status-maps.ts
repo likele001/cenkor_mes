@@ -71,11 +71,13 @@ const DOMAIN_CONFIG: Record<StatusDomain, Record<string, StatusDef>> = {
   purchase_statement: {
     draft:     { label: 'purchase.statements.statusDraft',     type: 'info' },
     confirmed: { label: 'purchase.statements.statusConfirmed', type: 'warning' },
+    partial:   { label: 'finance.supplierStatements.partial',  type: 'primary' },
     paid:      { label: 'purchase.statements.statusPaid',      type: 'success' },
   },
   customer_statement: {
     draft:     { label: 'finance.statements.draft',     type: 'info' },
     confirmed: { label: 'finance.statements.confirmed', type: 'warning' },
+    partial:   { label: 'finance.statements.partial',   type: 'primary' },
     paid:      { label: 'finance.statements.paid',      type: 'success' },
   },
   crm_opportunity: {

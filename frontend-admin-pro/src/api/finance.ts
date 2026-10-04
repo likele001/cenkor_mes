@@ -12,6 +12,9 @@ export type CustomerStatementOut = {
   period_end: string | null
   total_amount: number
   status: string
+  paid_amount: number
+  balance: number
+  due_date: string | null
   remark: string | null
   created_at: string
   updated_at: string
@@ -65,6 +68,9 @@ export type SupplierStatementOut = {
   period_end: string | null
   total_amount: number
   status: string
+  paid_amount: number
+  balance: number
+  due_date: string | null
   remark: string | null
   created_at: string
   updated_at: string
@@ -86,6 +92,7 @@ export type SupplierStatementCreateIn = {
   order_ids: number[]
   period_start?: string | null
   period_end?: string | null
+  due_date?: string | null
   remark?: string | null
 }
 
@@ -108,6 +115,46 @@ export type ProfitOut = {
     customers: { customer_id: number; customer_name: string; amount: number }[]
     suppliers: { supplier_id: number; supplier_name: string; amount: number }[]
   }
+}
+
+export type StatementPaymentOut = {
+  id: number
+  statement_type?: string
+  statement_id: number
+  amount: number
+  paid_date: string | null
+  method: string | null
+  remark: string | null
+  created_by: number | null
+  created_at: string
+}
+
+export type StatementPaymentCreateIn = {
+  amount: number
+  paid_date?: string | null
+  method?: string | null
+  remark?: string | null
+}
+
+export type AgingBucket = { bucket: string; count: number; balance: number }
+export type AgingItem = {
+  statement_id: number
+  code: string
+  amount: number
+  paid_amount: number
+  balance: number
+  due_date: string | null
+  days_overdue: number
+  bucket: string
+  status: string
+}
+export type AgingResp = {
+  direction: string
+  as_of: string
+  total_balance: number
+  overdue_balance: number
+  buckets: AgingBucket[]
+  items: AgingItem[]
 }
 
 export const financeApi = {
@@ -169,5 +216,24 @@ export const financeApi = {
   },
   getSupplierPayables() {
     return http.request<ListResp<PayableOut>>({ url: '/admin/finance/supplier-statements/payables', method: 'GET' })
+  },
+
+  listCustomerStatementPayments(id: number) {
+    return http.request<{ items: StatementPaymentOut[] }>({ url: `/admin/finance/${id}/payments`, method: 'GET' })
+  },
+  createCustomerStatementPayment(id: number, data: StatementPaymentCreateIn) {
+    return http.request<{ payment: StatementPaymentOut; statement: CustomerStatementOut }>({ url: `/admin/finance/${id}/payments`, method: 'POST', data })
+  },
+  listSupplierStatementPayments(id: number) {
+    return http.request<{ items: StatementPaymentOut[] }>({ url: `/admin/finance/supplier-statements/${id}/payments`, method: 'GET' })
+  },
+  createSupplierStatementPayment(id: number, data: StatementPaymentCreateIn) {
+    return http.request<{ payment: StatementPaymentOut; statement: SupplierStatementOut }>({ url: `/admin/finance/supplier-statements/${id}/payments`, method: 'POST', data })
+  },
+  reversePayment(paymentId: number) {
+    return http.request<{ reversed: number }>({ url: `/admin/finance/payments/${paymentId}`, method: 'DELETE' })
+  },
+  getAging(direction: 'ar' | 'ap') {
+    return http.request<AgingResp>({ url: '/admin/finance/aging', method: 'GET', params: { direction } })
   },
 }

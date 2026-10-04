@@ -128,18 +128,6 @@ __all__ = [
     "CrmDataImportError",
     "TaskAssignment",
     "SystemVersion",
-    "Invoice",
-    "InvoiceItem",
-    "AccountSubject",
-    "Voucher",
-    "VoucherEntry",
-    "PeriodClosing",
-    "WorkOrderCost",
-    "WorkOrderCostItem",
-    "FixedAsset",
-    "DepreciationRecord",
-    "AssetCheck",
-    "AssetCheckItem",
     "Warehouse",
     "Stock",
     "StockLog",
@@ -147,20 +135,17 @@ __all__ = [
     "PurchaseOrderItem",
     "Statement",
     "StatementItem",
+    "StatementPayment",
 ]
 
 from app.models.supplier_statement import SupplierStatement, SupplierStatementItem
 
 from app.models.material_issue import MaterialIssue, MaterialIssueItem, MaterialReturn, MaterialReturnItem
 from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
-from app.models.erp_invoice import Invoice, InvoiceItem
-from app.models.erp_ledger import AccountSubject, Voucher, VoucherEntry, PeriodClosing
-from app.models.erp_cost import WorkOrderCost, WorkOrderCostItem
-from app.models.erp_asset import FixedAsset, DepreciationRecord, AssetCheck, AssetCheckItem
 # warehouse_entry / material_issue / supplier_statement 用字符串 relationship 引用了这两个模块的类，
 # 不在这里导入的话，只 import app.models 的脚本（demo_data、alembic、pytest）会 configure_mappers 失败
 from app.models.warehouse import Warehouse, Stock, StockLog
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
-# erp_invoice 用 ForeignKey("statements.id") 指向 finance.Statement，同理必须注册，
-# 否则 create_all 会 NoReferencedTableError
+# finance（客户对账单/总账）为独立业务域，需注册进 metadata
 from app.models.finance import Statement, StatementItem
+from app.models.statement_payment import StatementPayment
