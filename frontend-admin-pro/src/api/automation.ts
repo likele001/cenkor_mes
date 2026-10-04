@@ -11,5 +11,5 @@ export type AutomationSettings = {
 }
 
 export const automationApi = {
-  getAutomationSettings: () => http.request<any>({ url: '/automation/settings', method: 'GET' }),
+  getAutomationSettings: () => http.request<any>({ url: '/admin/automation/settings', method: 'GET' }),
 }
