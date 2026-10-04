@@ -6,6 +6,7 @@ DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("permission.manage", "权限点管理"),
     ("department.manage", "部门管理"),
     ("setting.manage", "系统设置"),
+    ("cloud_storage.manage", "云存储配置"),
     ("print_template.manage", "打印模板"),
     ("notification.view", "消息通知"),
     ("attendance.manage", "考勤管理"),

@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.admin.system.attachments import router as attachments_router
+from app.api.admin.system.cloud_storage import router as cloud_storage_router
 from app.api.admin.system.attendance_records import router as attendance_records_router
 from app.api.admin.system.departments import router as departments_router
 from app.api.admin.system.notifications import router as notifications_router
@@ -43,5 +44,6 @@ router.include_router(notifications_router, prefix="/notifications", tags=["admi
 router.include_router(attendance_records_router, prefix="/attendance-records", tags=["admin-system-attendance-records"])
 router.include_router(skills_router, prefix="/skills", tags=["admin-system-skills"])
 router.include_router(attachments_router, prefix="/attachments", tags=["admin-system-attachments"])
+router.include_router(cloud_storage_router, prefix="/cloud-storage", tags=["admin-system-cloud-storage"])
 router.include_router(operation_logs_router, prefix="/operation-logs", tags=["admin-system-operation-logs"])
 router.include_router(version_router, tags=["admin-system-version"])

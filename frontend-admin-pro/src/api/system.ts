@@ -101,6 +101,35 @@ export type PrintTemplateOut = {
   updated_at: string
 }
 
+export type CloudCredsPayload = {
+  endpoint?: string
+  region?: string
+  bucket?: string
+  access_key?: string
+  secret_key?: string
+  custom_domain?: string
+  prefix?: string
+}
+
+export type CloudProviderView = {
+  configured: boolean
+  credentials: Record<string, any>
+}
+
+export type CloudStorageConfigView = {
+  active_provider: string
+  keep_local_backup: boolean
+  supported_drivers: string[]
+  providers: Record<string, CloudProviderView>
+}
+
+export type CloudHealthResult = {
+  ok: boolean
+  provider: string
+  detail?: Record<string, any>
+  error?: string
+}
+
 export const systemApi = {
   listUsers(params: any) {
     return http.request<ListResp<UserOut>>({ url: '/admin/system/users', method: 'GET', params })
@@ -362,6 +391,44 @@ export const systemApi = {
       url: '/admin/system/codes/next',
       method: 'GET',
       params: { biz_type: bizType },
+    })
+  },
+
+  // ── 云存储配置 ──
+  getCloudStorage() {
+    return http.request<CloudStorageConfigView>({ url: '/admin/system/cloud-storage', method: 'GET' })
+  },
+  saveCloudCredentials(provider: string, data: CloudCredsPayload) {
+    return http.request<CloudStorageConfigView>({
+      url: `/admin/system/cloud-storage/providers/${encodeURIComponent(provider)}/credentials`,
+      method: 'PUT',
+      data,
+    })
+  },
+  clearCloudCredentials(provider: string) {
+    return http.request<CloudStorageConfigView>({
+      url: `/admin/system/cloud-storage/providers/${encodeURIComponent(provider)}/credentials`,
+      method: 'DELETE',
+    })
+  },
+  activateCloudProvider(provider: string) {
+    return http.request<CloudStorageConfigView>({
+      url: `/admin/system/cloud-storage/providers/${encodeURIComponent(provider)}/activate`,
+      method: 'POST',
+      data: { provider },
+    })
+  },
+  testCloudProvider(provider: string) {
+    return http.request<CloudHealthResult>({
+      url: `/admin/system/cloud-storage/providers/${encodeURIComponent(provider)}/test`,
+      method: 'POST',
+    })
+  },
+  updateCloudSettings(keep_local_backup: boolean) {
+    return http.request<CloudStorageConfigView>({
+      url: '/admin/system/cloud-storage/settings',
+      method: 'PUT',
+      data: { keep_local_backup },
     })
   },
 }

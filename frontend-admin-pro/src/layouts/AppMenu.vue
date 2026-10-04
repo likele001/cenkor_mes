@@ -97,6 +97,7 @@ import {
   Files,
   SetUp,
   Tickets,
+  Cloudy,
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
@@ -318,6 +319,7 @@ const groups: Group[] = [
           { path: '/system/notifications', i18nKey: 'menu.notifications', permissions: ['notification.view'], icon: Bell },
           { path: '/system/print-templates', i18nKey: 'menu.printTemplates', permissions: ['print_template.manage'], icon: Document },
           { path: '/system/attachments', i18nKey: 'menu.attachments', permissions: ['attachment.view'], icon: FolderOpened },
+          { path: '/system/cloud-storage', i18nKey: 'menu.cloudStorage', permissions: ['cloud_storage.manage'], icon: Cloudy },
           { path: '/system/crm-adapter', i18nKey: 'menu.crmAdapter', permissions: ['setting.manage'], icon: Connection },
           { path: '/system/crm-orders', i18nKey: 'menu.crmOrders', permissions: ['setting.manage'], icon: List },
         ],
