@@ -163,5 +163,10 @@
     "version": "v2.0.4",
     "release_date": "2026-10-04",
     "description": "历史附件批量迁移功能上线(CS-6): 本地存量附件迁移到云后端/进度跟踪/完整性校验"
+  },
+  {
+    "version": "v2.0.5",
+    "release_date": "2026-10-04",
+    "description": "新增核心闭环HTTP集成测试、CI质量门禁与请求可观测性(访问日志/慢查询/X-Request-ID)"
   }
 ]
