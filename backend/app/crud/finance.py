@@ -57,6 +57,7 @@ def create_statement(
     period_start: date | None = None,
     period_end: date | None = None,
     remark: str | None = None,
+    due_date: date | None = None,
 ) -> Statement:
     total = sum(amt for _, amt in order_amounts)
     stmt = Statement(
@@ -66,6 +67,7 @@ def create_statement(
         period_end=period_end,
         total_amount=total,
         remark=remark,
+        due_date=due_date,
         status="draft",
     )
     stmt.items = [

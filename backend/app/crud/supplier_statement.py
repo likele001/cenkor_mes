@@ -52,6 +52,7 @@ def create_supplier_statement(
     period_end: date | None = None,
     remark: str | None = None,
     created_by: int | None = None,
+    due_date: date | None = None,
 ) -> SupplierStatement:
     total = sum(amt for _, amt in order_amounts)
     stmt = SupplierStatement(
@@ -61,6 +62,7 @@ def create_supplier_statement(
         period_end=period_end,
         total_amount=total,
         remark=remark,
+        due_date=due_date,
         status="draft",
         created_by=created_by,
     )

@@ -12,12 +12,14 @@ from app.core.response import ok
 from app.crud.customer import get_customer_by_id
 from app.crud.finance import calc_order_statement_amount, create_statement, get_statement_by_id, list_statements, update_statement_status
 from app.crud.finance_ledger import create_ledger, list_ledgers
+from app.crud import statement_payment as sp_crud
 from app.crud.notification import create_notification
 from app.models.customer import Customer
 from app.models.finance_ledger import FinanceLedger
 from app.models.material import Supplier
 from app.models.user import User
 from app.schemas.finance_ledger import FinanceLedgerCreateIn
+from app.schemas.statement_payment import StatementPaymentCreateIn
 from app.services.code_generator import BizType, resolve_code
 from app.models.finance import Statement
 
@@ -33,6 +35,9 @@ def _out(x) -> dict:
         "period_start": str(x.period_start) if x.period_start else None,
         "period_end": str(x.period_end) if x.period_end else None,
         "total_amount": float(x.total_amount),
+        "paid_amount": float(x.paid_amount or 0),
+        "balance": float(Decimal(str(x.total_amount)) - Decimal(str(x.paid_amount or 0))),
+        "due_date": str(x.due_date) if x.due_date else None,
         "status": x.status,
         "remark": x.remark,
         "created_at": x.created_at,
@@ -211,6 +216,7 @@ def create_api(
     code: str | None = Query(default=None),
     period_start: str | None = Query(default=None),
     period_end: str | None = Query(default=None),
+    due_date: str | None = Query(default=None, description="到期日 YYYY-MM-DD，用于账龄"),
     remark: str | None = Query(default=None, max_length=500),
     order_ids: str = Query(min_length=1, description="逗号分隔的订单ID"),
     db: Session = Depends(get_db),
@@ -238,6 +244,7 @@ def create_api(
     import datetime as dt
     ps = dt.date.fromisoformat(period_start) if period_start else None
     pe = dt.date.fromisoformat(period_end) if period_end else None
+    dd = dt.date.fromisoformat(due_date) if due_date else None
 
     stmt_code = resolve_code(
         db,
@@ -256,6 +263,7 @@ def create_api(
         period_start=ps,
         period_end=pe,
         remark=remark,
+        due_date=dd,
     )
     cust = get_customer_by_id(db, customer_id=customer_id)
     if cust and cust.user_id:
@@ -314,13 +322,88 @@ def mark_paid_api(
         raise HTTPException(status_code=400, detail="对账单不存在")
     if item.status == "paid":
         return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
-    if item.status != "confirmed":
+    if item.status not in ("confirmed", "partial"):
         raise HTTPException(status_code=400, detail="状态不允许标记已收款")
+    item.paid_amount = item.total_amount
     update_statement_status(db, item, "paid")
     db.commit()
     db.refresh(item)
     return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
 
+
+
+def _payment_out(p) -> dict:
+    return {
+        "id": p.id,
+        "statement_type": p.statement_type,
+        "statement_id": p.statement_id,
+        "party_type": p.party_type,
+        "party_id": p.party_id,
+        "amount": float(p.amount),
+        "paid_date": str(p.paid_date) if p.paid_date else None,
+        "method": p.method,
+        "remark": p.remark,
+        "created_by": p.created_by,
+        "created_at": p.created_at,
+    }
+
+
+@router.get("/aging")
+def aging_api(
+    direction: str = Query(default="ar", pattern="^(ar|ap)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return ok(sp_crud.get_aging(db, direction))
+
+
+@router.post("/{statement_id}/payments")
+def create_payment_api(
+    statement_id: int,
+    payload: StatementPaymentCreateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        p = sp_crud.create_payment(
+            db,
+            statement_type="statement",
+            statement_id=statement_id,
+            amount=payload.amount,
+            paid_date=payload.paid_date,
+            method=payload.method,
+            remark=payload.remark,
+            created_by=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    item = get_statement_by_id(db, statement_id=statement_id)
+    return ok({"payment": _payment_out(p), "statement": _out(item)})
+
+
+@router.get("/{statement_id}/payments")
+def list_payments_api(
+    statement_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = sp_crud.list_payments(db, "statement", statement_id)
+    return ok({"items": [_payment_out(p) for p in rows]})
+
+
+@router.delete("/payments/{payment_id}")
+def reverse_payment_api(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        sp_crud.reverse_payment(db, payment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    return ok({"reversed": payment_id})
 
 
 from app.api.admin.finance.supplier_statements import router as supplier_statements_router

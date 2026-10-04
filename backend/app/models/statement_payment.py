@@ -1,0 +1,34 @@
+# Copyright (C) 2026 CenkorMES Project
+# SPDX-License-Identifier: AGPL-3.0
+"""对账单核销流水（AR/AP 部分核销）
+
+独立于 FinanceLedger 总账，仅记录每张对账单的逐笔收款/付款，累计回写
+statement.paid_amount 并推进状态（confirmed → partial → paid）。支持冲销（删除）。
+statement_type 作为多态判别：statement(客户应收) | supplier_statement(供应商应付)。
+"""
+from datetime import date, datetime
+from decimal import Decimal
+
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base
+
+
+class StatementPayment(Base):
+    __tablename__ = "statement_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    statement_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)  # statement | supplier_statement
+    statement_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    party_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # customer | supplier
+    party_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    paid_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)  # 核销日期（CRUD 显式供给）
+    method: Mapped[str | None] = mapped_column(String(32), nullable=True)  # transfer/cash/acceptance/other
+    remark: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    created_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())

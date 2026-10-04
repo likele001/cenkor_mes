@@ -12,6 +12,7 @@ from app.core.response import ok
 from app.crud.supplier import get_supplier_by_id
 from app.crud.purchase_order import get_purchase_order_by_id
 from app.crud.finance_ledger import create_ledger
+from app.crud import statement_payment as sp_crud
 from app.crud.supplier_statement import (
     calc_purchase_order_amount,
     create_supplier_statement,
@@ -24,6 +25,7 @@ from app.crud.supplier_statement import (
 from app.models.supplier_statement import SupplierStatement
 from app.models.user import User
 from app.schemas.supplier_statement import SupplierStatementCreateIn
+from app.schemas.statement_payment import StatementPaymentCreateIn
 from app.services.code_generator import BizType, resolve_code
 
 router = APIRouter(dependencies=[Depends(require_permissions(["finance.manage"]))])
@@ -40,6 +42,9 @@ def _out(x: SupplierStatement) -> dict:
         "period_start": str(x.period_start) if x.period_start else None,
         "period_end": str(x.period_end) if x.period_end else None,
         "total_amount": float(x.total_amount),
+        "paid_amount": float(x.paid_amount or 0),
+        "balance": float(Decimal(str(x.total_amount)) - Decimal(str(x.paid_amount or 0))),
+        "due_date": str(x.due_date) if x.due_date else None,
         "status": x.status,
         "remark": x.remark,
         "created_at": x.created_at,
@@ -107,6 +112,7 @@ def create_api(
         period_end=payload.period_end,
         remark=payload.remark,
         created_by=user.id,
+        due_date=payload.due_date,
     )
     db.commit()
     stmt2 = get_supplier_statement_by_id(db, statement_id=stmt.id)
@@ -154,8 +160,9 @@ def mark_paid_api(
         raise HTTPException(status_code=400, detail="供应商对账单不存在")
     if item.status == "paid":
         return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
-    if item.status != "confirmed":
+    if item.status not in ("confirmed", "partial"):
         raise HTTPException(status_code=400, detail="状态不允许标记已付款")
+    item.paid_amount = item.total_amount
     update_supplier_statement_status(db, item, "paid")
     today = datetime.now().date()
     create_ledger(
@@ -196,3 +203,51 @@ def get_api(
         for si in item.items
     ]
     return ok(data)
+
+
+def _ap_payment_out(p) -> dict:
+    return {
+        "id": p.id,
+        "statement_id": p.statement_id,
+        "amount": float(p.amount),
+        "paid_date": str(p.paid_date) if p.paid_date else None,
+        "method": p.method,
+        "remark": p.remark,
+        "created_by": p.created_by,
+        "created_at": p.created_at,
+    }
+
+
+@router.post("/supplier-statements/{statement_id}/payments")
+def ap_create_payment_api(
+    statement_id: int,
+    payload: StatementPaymentCreateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        p = sp_crud.create_payment(
+            db,
+            statement_type="supplier_statement",
+            statement_id=statement_id,
+            amount=payload.amount,
+            paid_date=payload.paid_date,
+            method=payload.method,
+            remark=payload.remark,
+            created_by=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    item = get_supplier_statement_by_id(db, statement_id=statement_id)
+    return ok({"payment": _ap_payment_out(p), "statement": _out(item)})
+
+
+@router.get("/supplier-statements/{statement_id}/payments")
+def ap_list_payments_api(
+    statement_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = sp_crud.list_payments(db, "supplier_statement", statement_id)
+    return ok({"items": [_ap_payment_out(p) for p in rows]})

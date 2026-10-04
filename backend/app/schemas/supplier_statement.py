@@ -15,5 +15,6 @@ class SupplierStatementCreateIn(BaseModel):
     code: str | None = Field(default=None, max_length=64)
     period_start: date | None = None
     period_end: date | None = None
+    due_date: date | None = None
     remark: str | None = Field(default=None, max_length=500)
     order_ids: list[int] = Field(min_length=1, description="采购单ID列表")

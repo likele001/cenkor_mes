@@ -21,7 +21,9 @@ class Statement(Base):
     period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")  # draft → confirmed → paid
+    paid_amount: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False, server_default="0")  # 已核销金额（AR 为已收款）
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")  # draft → confirmed → partial → paid
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)  # 到期日（账龄基准，缺省回退 period_end/创建日）
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
