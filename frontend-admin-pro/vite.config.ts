@@ -15,13 +15,10 @@ function manualChunks(id: string): string | undefined {
   if (seg('zrender')) return 'vendor-zrender'
   if (seg('echarts') || seg('vue-echarts')) return 'vendor-echarts'
   if (seg('@element-plus/icons-vue')) return 'vendor-ep-icons'
-  // Element Plus 按功能族进一步拆分，避免单个 vendor 块原始体积过大
-  if (seg('element-plus')) {
-    if (/\/element-plus\/es\/components\/(table|table-v2|virtual-list|pagination|auto-resizer)\//.test(id)) return 'vendor-ep-table'
-    if (/\/element-plus\/es\/components\/(date-picker|date-picker-panel|time-picker|time-select|calendar|date-view|time-view)\//.test(id)) return 'vendor-ep-datetime'
-    if (/\/element-plus\/es\/components\/(select|select-v2|cascader|cascader-panel|tree|tree-v2|transfer)\//.test(id)) return 'vendor-ep-form'
-    return 'vendor-element-plus'
-  }
+  // Element Plus 必须整体归入单一 chunk：
+  // 若按组件族二次拆分（form/table/datetime），子 chunk 之间会与 element-plus 核心相互 import，
+  // Rollup 无法排出无环求值顺序，运行时触发 TDZ 报错（Cannot access 'xx' before initialization）导致白屏。
+  if (seg('element-plus')) return 'vendor-element-plus'
   if (seg('lucide-vue-next')) return 'vendor-icons'
   if (seg('vue') || seg('@vue') || seg('vue-router') || seg('pinia') || seg('vue-i18n')) return 'vendor-vue'
   return 'vendor'
