@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/permissions_tenant_system
+title: 权限、角色与用户管理页面
+scope:
+    - frontend-admin-pro/src/pages/system/PermissionsPage.vue
+    - frontend-admin-pro/src/pages/system/RolesPage.vue
+    - frontend-admin-pro/src/pages/system/UsersPage.vue
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,17 @@
+schema_version: 1
+module_path: lightmes_miniapp/shared_infra
+title: 小程序共享基础设施（API/状态/权限/国际化）
+scope:
+    - lightmes-miniapp/src/api/
+    - lightmes-miniapp/src/composables/
+    - lightmes-miniapp/src/stores/
+    - lightmes-miniapp/src/utils/
+    - lightmes-miniapp/src/constants/
+    - lightmes-miniapp/src/locales/
+    - lightmes-miniapp/src/types/
+source_files: []
+depends_on: []
+related_to:
+    - path: lightmes_miniapp/admin_area
+    - path: lightmes_miniapp/customer_area
+    - path: lightmes_miniapp/employee_area

@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_admin_reports_shift
+title: 管理端报表与班次排班 API
+scope:
+    - backend/app/api/admin/reports/
+    - backend/app/api/admin/shift/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_models_schemas_crud/reporting_auto_salary
+    - path: frontend_admin_pro/reports_dashboard

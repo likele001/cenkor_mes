@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: frontend_admin_pro/finance
+title: 财务对账与报表前端页面
+scope:
+    - frontend-admin-pro/src/pages/finance/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_finance

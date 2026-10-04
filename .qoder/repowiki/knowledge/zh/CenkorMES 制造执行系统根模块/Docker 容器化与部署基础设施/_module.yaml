@@ -1,0 +1,15 @@
+schema_version: 1
+module_path: docker_infra
+title: Docker 容器化与部署基础设施
+scope:
+    - docker/
+    - backend/Dockerfile
+    - backend/.htaccess
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_core
+    - path: backend_services_tasks/task_workers
+    - path: frontend_admin_pro
+    - path: frontend_h5
+    - path: lightmes_miniapp

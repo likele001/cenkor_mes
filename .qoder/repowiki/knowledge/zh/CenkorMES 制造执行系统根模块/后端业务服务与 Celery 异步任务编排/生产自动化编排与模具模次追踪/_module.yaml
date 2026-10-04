@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: backend_services_tasks/production_automation
+title: 生产自动化编排与模具模次追踪
+scope:
+    - backend/app/services/production_automation.py
+    - backend/app/services/production_automation_settings.py
+    - backend/app/services/mold_shot_tracker.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_approval_automation
+    - path: backend_admin_production

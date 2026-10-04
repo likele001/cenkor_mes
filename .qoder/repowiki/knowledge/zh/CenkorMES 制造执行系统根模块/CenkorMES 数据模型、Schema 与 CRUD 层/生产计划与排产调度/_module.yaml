@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/production_plan_scheduling
+title: 生产计划与排产调度
+scope:
+    - backend/app/models/production_plan.py
+    - backend/app/schemas/production_plan.py
+    - backend/app/crud/production_plan.py
+source_files: []
+depends_on: []
+related_to: []

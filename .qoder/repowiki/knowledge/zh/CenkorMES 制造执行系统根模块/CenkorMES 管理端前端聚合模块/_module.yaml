@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: frontend_admin_pro
+title: CenkorMES 管理端前端聚合模块
+scope:
+    - frontend-admin-pro/
+source_files: []
+depends_on: []
+related_to:
+    - path: docker_infra

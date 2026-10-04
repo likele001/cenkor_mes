@@ -1,0 +1,20 @@
+schema_version: 1
+module_path: ""
+title: CenkorMES 制造执行系统根模块
+scope:
+    - README.md
+    - SECURITY.md
+    - THIRD_PARTY_NOTICES.md
+    - .gitignore
+    - .dockerignore
+    - docker-compose.yml
+    - start.sh
+    - scripts/
+    - docs/
+    - .trae/documents/
+    - .env.example
+    - LICENSE
+    - VERSION
+source_files: []
+depends_on: []
+related_to: []
