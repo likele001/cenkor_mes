@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/rbac_tenant
+title: RBAC 权限与租户模型层
+scope:
+    - backend/app/models/permission.py
+    - backend/app/schemas/system_rbac.py
+    - backend/app/crud/rbac.py
+source_files: []
+depends_on: []
+related_to: []

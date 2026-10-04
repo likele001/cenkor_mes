@@ -4,6 +4,28 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import Inspector from 'unplugin-vue-dev-locator/vite'
+import Components from 'unplugin-vue-components/vite'
+import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+
+// 将第三方依赖按模块拆分为独立 chunk，避免单个 chunk 过大（目标 gzip 与原始体积均 < 500kB）
+function manualChunks(id: string): string | undefined {
+  if (!id.includes('node_modules')) return undefined
+  // 用路径分段精确匹配，避免 vue 误吞 vue-router / vue-i18n / vue-echarts 等
+  const seg = (pkg: string) => id.includes(`/node_modules/${pkg}/`) || id.includes(`\\node_modules\\${pkg}\\`)
+  if (seg('zrender')) return 'vendor-zrender'
+  if (seg('echarts') || seg('vue-echarts')) return 'vendor-echarts'
+  if (seg('@element-plus/icons-vue')) return 'vendor-ep-icons'
+  // Element Plus 按功能族进一步拆分，避免单个 vendor 块原始体积过大
+  if (seg('element-plus')) {
+    if (/\/element-plus\/es\/components\/(table|table-v2|virtual-list|pagination|auto-resizer)\//.test(id)) return 'vendor-ep-table'
+    if (/\/element-plus\/es\/components\/(date-picker|date-picker-panel|time-picker|time-select|calendar|date-view|time-view)\//.test(id)) return 'vendor-ep-datetime'
+    if (/\/element-plus\/es\/components\/(select|select-v2|cascader|cascader-panel|tree|tree-v2|transfer)\//.test(id)) return 'vendor-ep-form'
+    return 'vendor-element-plus'
+  }
+  if (seg('lucide-vue-next')) return 'vendor-icons'
+  if (seg('vue') || seg('@vue') || seg('vue-router') || seg('pinia') || seg('vue-i18n')) return 'vendor-vue'
+  return 'vendor'
+}
 
 export default defineConfig(({ mode }) => {
   // 允许通过 VITE_API_PROXY 指定后端地址，默认 8000（开发启动脚本/手动可覆盖，避免端口被占用时串到其它服务）
@@ -12,6 +34,12 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       sourcemap: false,
+      chunkSizeWarningLimit: 500,
+      rollupOptions: {
+        output: {
+          manualChunks,
+        },
+      },
     },
     server: {
       proxy: {
@@ -23,6 +51,12 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       vue(),
+      // Element Plus 按需引入：模板中的 <el-*> 组件与 v-loading 等指令自动按需引入并注入样式。
+      // dts 关闭：项目 tsconfig 未纳入 Element Plus 全局类型，保持与其它构建一致的模板类型检查行为。
+      Components({
+        resolvers: [ElementPlusResolver()],
+        dts: false,
+      }),
       Inspector(),
     ],
     resolve: {

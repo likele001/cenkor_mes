@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend_admin_pro/production/work_orders_tasks
+title: work_orders_tasks
+scope:
+    - frontend-admin-pro/src/pages/production/WorkOrdersPage.vue
+    - frontend-admin-pro/src/pages/production/TasksPage.vue
+    - frontend-admin-pro/src/pages/production/AssignmentsPage.vue
+source_files: []
+depends_on: []
+related_to: []

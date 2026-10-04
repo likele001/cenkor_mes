@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend_h5/customer_order_pages
+title: customer_order_pages
+scope:
+    - frontend-h5/src/pages/CustomerOrderPage.vue
+    - frontend-h5/src/pages/CustomerOrderDetailPage.vue
+    - frontend-h5/src/pages/CustomerOrderProgressPage.vue
+source_files: []
+depends_on: []
+related_to: []

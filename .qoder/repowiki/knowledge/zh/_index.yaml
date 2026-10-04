@@ -1,0 +1,744 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+nodes_managed: true
+exported_at: "2026-10-04T04:49:55Z"
+modules:
+    backend_admin_approval_automation:
+        dir_name: 管理端审批流、自动化与经营看板 API
+        title: 管理端审批流、自动化与经营看板 API
+        scope:
+            - backend/app/api/admin/approval/
+            - backend/app/api/admin/automation/
+            - backend/app/api/admin/exec_dashboard/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_finance:
+        dir_name: 财务与 ERP 管理 API
+        title: 财务与 ERP 管理 API
+        scope:
+            - backend/app/api/admin/finance/
+            - backend/app/api/admin/erp/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_master_data:
+        dir_name: 基础数据管理 API（产品_物料_BOM_工序_SKU_供应商）
+        title: 基础数据管理 API（产品/物料/BOM/工序/SKU/供应商）
+        scope:
+            - backend/app/api/admin/master/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_production:
+        dir_name: 生产管理与委外_采购计划后端 API
+        title: 生产管理与委外/采购计划后端 API
+        scope:
+            - backend/app/api/admin/production/
+            - backend/app/api/admin/mrp/
+            - backend/app/api/admin/subcontract/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_purchase:
+        dir_name: 采购订单管理 API
+        title: 采购订单管理 API
+        scope:
+            - backend/app/api/admin/purchase/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_quality_equipment:
+        dir_name: 设备管理与产品追溯管理
+        title: 设备管理与产品追溯管理
+        scope:
+            - backend/app/api/admin/equipment/
+            - backend/app/api/admin/trace/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_reports_shift:
+        dir_name: 管理端报表与班次排班 API
+        title: 管理端报表与班次排班 API
+        scope:
+            - backend/app/api/admin/reports/
+            - backend/app/api/admin/shift/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_system_rbac:
+        dir_name: 后台管理系统 RBAC 与字典接口
+        title: 后台管理系统 RBAC 与字典接口
+        scope:
+            - backend/app/api/admin/system/
+            - backend/app/api/admin/dictionary/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_admin_warehouse:
+        dir_name: 仓库管理后台 API（仓储_发货_领退料_入库单）
+        title: 仓库管理后台 API（仓储/发货/领退料/入库单）
+        scope:
+            - backend/app/api/admin/warehouse/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_api_router:
+        dir_name: API 路由聚合与基础公共接口
+        title: API 路由聚合与基础公共接口
+        scope:
+            - backend/app/api/router.py
+            - backend/app/api/__init__.py
+            - backend/app/api/v1/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_core:
+        dir_name: 后端核心基础设施（配置_认证_存储_调度）
+        title: 后端核心基础设施（配置/认证/存储/调度）
+        scope:
+            - backend/app/core/
+            - backend/app/storage/
+            - backend/app/utils/
+            - backend/app/schedulers/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_h5_miniapp_api:
+        dir_name: H5_小程序_看板 WebSocket 前端 API
+        title: H5/小程序/看板 WebSocket 前端 API
+        scope:
+            - backend/app/api/h5/
+            - backend/app/api/miniapp/
+            - backend/app/api/ws/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_integrations:
+        dir_name: 外部系统集成适配层（CRM _ 飞书 _ AI 兼容）
+        title: 外部系统集成适配层（CRM / 飞书 / AI 兼容）
+        scope:
+            - backend/app/integration/
+            - backend/app/api/feishu/
+            - backend/app/api/ai_compat/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_migrations_scripts_tests:
+        dir_name: 数据库迁移、演示数据脚本与单元测试
+        title: 数据库迁移、演示数据脚本与单元测试
+        scope:
+            - backend/alembic/
+            - backend/scripts/
+            - backend/tests/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud:
+        dir_name: backend_models_schemas_crud
+        title: backend_models_schemas_crud
+        scope:
+            - backend/app/models/
+            - backend/app/schemas/
+            - backend/app/crud/
+        source_files: []
+        children:
+            - backend_models_schemas_crud/async_tasks_automation
+            - backend_models_schemas_crud/equipment_management
+            - backend_models_schemas_crud/master_data_material_process
+            - backend_models_schemas_crud/procurement_finance
+            - backend_models_schemas_crud/production_plan_scheduling
+            - backend_models_schemas_crud/quality_inspection
+            - backend_models_schemas_crud/rbac_tenant
+            - backend_models_schemas_crud/reporting_auto_salary
+            - backend_models_schemas_crud/warehouse_inventory
+            - backend_models_schemas_crud/work_order_dispatch
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/async_tasks_automation:
+        dir_name: 自动化任务日志与设置
+        title: 自动化任务日志与设置
+        scope:
+            - backend/app/models/automation_log.py
+            - backend/app/schemas/automation.py
+            - backend/app/crud/automation_log.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/equipment_management:
+        dir_name: 设备管理数据模型与 CRUD
+        title: 设备管理数据模型与 CRUD
+        scope:
+            - backend/app/models/equipment.py
+            - backend/app/schemas/equipment.py
+            - backend/app/crud/equipment.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/master_data_material_process:
+        dir_name: 物料主数据与 BOM 模型
+        title: 物料主数据与 BOM 模型
+        scope:
+            - backend/app/models/material.py
+            - backend/app/schemas/material.py
+            - backend/app/crud/material.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/procurement_finance:
+        dir_name: 采购订单与财务模型
+        title: 采购订单与财务模型
+        scope:
+            - backend/app/models/purchase.py
+            - backend/app/schemas/purchase_order.py
+            - backend/app/crud/purchase_order.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/production_plan_scheduling:
+        dir_name: 生产计划与排产调度
+        title: 生产计划与排产调度
+        scope:
+            - backend/app/models/production_plan.py
+            - backend/app/schemas/production_plan.py
+            - backend/app/crud/production_plan.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/quality_inspection:
+        dir_name: 质量检测（质检模板_缺陷代码_检测记录）
+        title: 质量检测（质检模板/缺陷代码/检测记录）
+        scope:
+            - backend/app/models/quality.py
+            - backend/app/schemas/quality.py
+            - backend/app/crud/quality.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/rbac_tenant:
+        dir_name: RBAC 权限与租户模型层
+        title: RBAC 权限与租户模型层
+        scope:
+            - backend/app/models/permission.py
+            - backend/app/schemas/system_rbac.py
+            - backend/app/crud/rbac.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/reporting_auto_salary:
+        dir_name: 报工与自动算薪
+        title: 报工与自动算薪
+        scope:
+            - backend/app/models/report.py
+            - backend/app/schemas/report.py
+            - backend/app/crud/report.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/warehouse_inventory:
+        dir_name: 仓库与库存管理
+        title: 仓库与库存管理
+        scope:
+            - backend/app/models/warehouse.py
+            - backend/app/schemas/platform.py
+            - backend/app/crud/warehouse.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_models_schemas_crud/work_order_dispatch:
+        dir_name: 生产工单与派工数据层
+        title: 生产工单与派工数据层
+        scope:
+            - backend/app/models/work_order.py
+            - backend/app/schemas/work_order.py
+            - backend/app/crud/work_order.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks:
+        dir_name: backend_services_tasks
+        title: backend_services_tasks
+        scope:
+            - backend/app/services/
+            - backend/app/tasks/
+            - backend/app/celery_app.py
+        source_files: []
+        children:
+            - backend_services_tasks/attendance_geofence
+            - backend_services_tasks/crm_scope
+            - backend_services_tasks/feishu_integration
+            - backend_services_tasks/notification_pipeline
+            - backend_services_tasks/order_import
+            - backend_services_tasks/planning_and_dispatch
+            - backend_services_tasks/production_automation
+            - backend_services_tasks/reporting_and_labels
+            - backend_services_tasks/shared_services
+            - backend_services_tasks/task_workers
+        depends_on: []
+        related_to: []
+    backend_services_tasks/attendance_geofence:
+        dir_name: 考勤地理围栏、登录验证码与用户资料服务
+        title: 考勤地理围栏、登录验证码与用户资料服务
+        scope:
+            - backend/app/services/attendance_geofence.py
+            - backend/app/services/profile.py
+            - backend/app/services/login_captcha.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/crm_scope:
+        dir_name: CRM 数据域与关联实体展示服务
+        title: CRM 数据域与关联实体展示服务
+        scope:
+            - backend/app/services/crm_scope.py
+            - backend/app/services/customer_account.py
+            - backend/app/services/entity_refs.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/feishu_integration:
+        dir_name: 飞书集成与消息推送服务
+        title: 飞书集成与消息推送服务
+        scope:
+            - backend/app/services/feishu/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/notification_pipeline:
+        dir_name: 统一消息通知与 WebSocket 推送
+        title: 统一消息通知与 WebSocket 推送
+        scope:
+            - backend/app/services/notify_dispatcher.py
+            - backend/app/services/notify_channels.py
+            - backend/app/services/ws_hub.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/order_import:
+        dir_name: 订单导入与 SKU 批量管理
+        title: 订单导入与 SKU 批量管理
+        scope:
+            - backend/app/services/order_import.py
+            - backend/app/services/sku_batch.py
+            - backend/app/services/sku_scope.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/planning_and_dispatch:
+        dir_name: 排产优化与自动派工服务
+        title: 排产优化与自动派工服务
+        scope:
+            - backend/app/services/planning_optimizer.py
+            - backend/app/services/plan_auto_dispatch.py
+            - backend/app/services/dispatch_candidates.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/production_automation:
+        dir_name: 生产自动化编排与模具模次追踪
+        title: 生产自动化编排与模具模次追踪
+        scope:
+            - backend/app/services/production_automation.py
+            - backend/app/services/production_automation_settings.py
+            - backend/app/services/mold_shot_tracker.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/reporting_and_labels:
+        dir_name: 报工审核与标签展示服务
+        title: 报工审核与标签展示服务
+        scope:
+            - backend/app/services/report_audit_actions.py
+            - backend/app/services/product_label_print.py
+            - backend/app/services/display_label.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/shared_services:
+        dir_name: 共享服务层与飞书集成
+        title: 共享服务层与飞书集成
+        scope:
+            - backend/app/services/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend_services_tasks/task_workers:
+        dir_name: Celery 异步任务与定时调度
+        title: Celery 异步任务与定时调度
+        scope:
+            - backend/app/tasks/
+            - backend/app/celery_app.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    docker_infra:
+        dir_name: docker_infra
+        title: docker_infra
+        scope:
+            - docker/
+            - backend/Dockerfile
+            - backend/.htaccess
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro:
+        dir_name: frontend_admin_pro
+        title: frontend_admin_pro
+        scope:
+            - frontend-admin-pro/
+        source_files: []
+        children:
+            - frontend_admin_pro/erp
+            - frontend_admin_pro/finance
+            - frontend_admin_pro/master_data
+            - frontend_admin_pro/production
+            - frontend_admin_pro/purchase
+            - frontend_admin_pro/reports_dashboard
+            - frontend_admin_pro/system_admin
+            - frontend_admin_pro/warehouse
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/erp:
+        dir_name: erp
+        title: erp
+        scope:
+            - frontend-admin-pro/src/pages/erp/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/finance:
+        dir_name: finance
+        title: finance
+        scope:
+            - frontend-admin-pro/src/pages/finance/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/master_data:
+        dir_name: master_data
+        title: master_data
+        scope:
+            - frontend-admin-pro/src/pages/master/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production:
+        dir_name: production
+        title: production
+        scope:
+            - frontend-admin-pro/src/pages/production/
+        source_files: []
+        children:
+            - frontend_admin_pro/production/customer_management
+            - frontend_admin_pro/production/order_management
+            - frontend_admin_pro/production/planning_scheduling
+            - frontend_admin_pro/production/salary_reporting
+            - frontend_admin_pro/production/trace_mrp
+            - frontend_admin_pro/production/work_orders_tasks
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/customer_management:
+        dir_name: 客户管理（CRM）前端页面
+        title: 客户管理（CRM）前端页面
+        scope:
+            - frontend-admin-pro/src/pages/production/customers/
+            - frontend-admin-pro/src/pages/production/CustomerDetailPage.vue
+            - frontend-admin-pro/src/pages/production/CustomersPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/order_management:
+        dir_name: order_management
+        title: order_management
+        scope:
+            - frontend-admin-pro/src/pages/production/orders/
+            - frontend-admin-pro/src/pages/production/OrdersPage.vue
+            - frontend-admin-pro/src/pages/production/OrderImportPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/planning_scheduling:
+        dir_name: planning_scheduling
+        title: planning_scheduling
+        scope:
+            - frontend-admin-pro/src/pages/production/plans/
+            - frontend-admin-pro/src/pages/production/PlansPage.vue
+            - frontend-admin-pro/src/pages/production/PlanFormPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/salary_reporting:
+        dir_name: salary_reporting
+        title: salary_reporting
+        scope:
+            - frontend-admin-pro/src/pages/production/SalaryPage.vue
+            - frontend-admin-pro/src/pages/production/SalarySlipsPage.vue
+            - frontend-admin-pro/src/pages/production/ReportsPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/trace_mrp:
+        dir_name: trace_mrp
+        title: trace_mrp
+        scope:
+            - frontend-admin-pro/src/pages/production/TracePage.vue
+            - frontend-admin-pro/src/pages/production/TraceTreePage.vue
+            - frontend-admin-pro/src/pages/production/MrpPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/production/work_orders_tasks:
+        dir_name: work_orders_tasks
+        title: work_orders_tasks
+        scope:
+            - frontend-admin-pro/src/pages/production/WorkOrdersPage.vue
+            - frontend-admin-pro/src/pages/production/TasksPage.vue
+            - frontend-admin-pro/src/pages/production/AssignmentsPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/purchase:
+        dir_name: purchase
+        title: purchase
+        scope:
+            - frontend-admin-pro/src/pages/purchase/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/reports_dashboard:
+        dir_name: reports_dashboard
+        title: reports_dashboard
+        scope:
+            - frontend-admin-pro/src/pages/reports/
+            - frontend-admin-pro/src/pages/dashboard/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/system_admin:
+        dir_name: system_admin
+        title: system_admin
+        scope:
+            - frontend-admin-pro/src/pages/system/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_admin_pro/warehouse:
+        dir_name: warehouse
+        title: warehouse
+        scope:
+            - frontend-admin-pro/src/pages/warehouse/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5:
+        dir_name: frontend_h5
+        title: frontend_h5
+        scope:
+            - frontend-h5/
+        source_files: []
+        children:
+            - frontend_h5/app_shell_and_shared
+            - frontend_h5/attendance_pages
+            - frontend_h5/customer_order_pages
+            - frontend_h5/reporting_pages
+            - frontend_h5/shared_ui_layers
+            - frontend_h5/task_management_pages
+            - frontend_h5/wages_pages
+        depends_on: []
+        related_to: []
+    frontend_h5/app_shell_and_shared:
+        dir_name: app_shell_and_shared
+        title: app_shell_and_shared
+        scope:
+            - frontend-h5/src/api/
+            - frontend-h5/src/router/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/attendance_pages:
+        dir_name: attendance_pages
+        title: attendance_pages
+        scope:
+            - frontend-h5/src/pages/AttendancePage.vue
+            - frontend-h5/src/pages/ReportHistoryPage.vue
+            - frontend-h5/src/pages/ReportManualPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/customer_order_pages:
+        dir_name: customer_order_pages
+        title: customer_order_pages
+        scope:
+            - frontend-h5/src/pages/CustomerOrderPage.vue
+            - frontend-h5/src/pages/CustomerOrderDetailPage.vue
+            - frontend-h5/src/pages/CustomerOrderProgressPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/reporting_pages:
+        dir_name: reporting_pages
+        title: reporting_pages
+        scope:
+            - frontend-h5/src/pages/ReportWorkPage.vue
+            - frontend-h5/src/pages/ReportUnitPage.vue
+            - frontend-h5/src/pages/ScreenPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/shared_ui_layers:
+        dir_name: shared_ui_layers
+        title: shared_ui_layers
+        scope:
+            - frontend-h5/src/components/
+            - frontend-h5/src/composables/
+            - frontend-h5/src/utils/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/task_management_pages:
+        dir_name: task_management_pages
+        title: task_management_pages
+        scope:
+            - frontend-h5/src/pages/TasksPage.vue
+            - frontend-h5/src/pages/TaskDetailPage.vue
+            - frontend-h5/src/pages/GuidePage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_h5/wages_pages:
+        dir_name: wages_pages
+        title: wages_pages
+        scope:
+            - frontend-h5/src/pages/WagesPage.vue
+            - frontend-h5/src/pages/SalarySlipPage.vue
+            - frontend-h5/src/pages/CustomerStatementsPage.vue
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lightmes_miniapp:
+        dir_name: lightmes_miniapp
+        title: lightmes_miniapp
+        scope:
+            - lightmes-miniapp/
+        source_files: []
+        children:
+            - lightmes_miniapp/admin_area
+            - lightmes_miniapp/app_shell_and_theme
+            - lightmes_miniapp/customer_area
+            - lightmes_miniapp/employee_area
+            - lightmes_miniapp/shared_infra
+        depends_on: []
+        related_to: []
+    lightmes_miniapp/admin_area:
+        dir_name: admin_area
+        title: admin_area
+        scope:
+            - lightmes-miniapp/src/pages-admin/
+            - lightmes-miniapp/src/components/admin-ui/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lightmes_miniapp/app_shell_and_theme:
+        dir_name: app_shell_and_theme
+        title: app_shell_and_theme
+        scope:
+            - lightmes-miniapp/src/styles/
+            - lightmes-miniapp/src/custom-tab-bar/
+            - lightmes-miniapp/src/mixins/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lightmes_miniapp/customer_area:
+        dir_name: customer_area
+        title: customer_area
+        scope:
+            - lightmes-miniapp/src/pages-customer/
+            - lightmes-miniapp/src/components/customer-ui/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lightmes_miniapp/employee_area:
+        dir_name: employee_area
+        title: employee_area
+        scope:
+            - lightmes-miniapp/src/pages-employee/
+            - lightmes-miniapp/src/components/employee-ui/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lightmes_miniapp/shared_infra:
+        dir_name: shared_infra
+        title: shared_infra
+        scope:
+            - lightmes-miniapp/src/api/
+            - lightmes-miniapp/src/composables/
+            - lightmes-miniapp/src/stores/
+            - lightmes-miniapp/src/utils/
+            - lightmes-miniapp/src/constants/
+            - lightmes-miniapp/src/locales/
+            - lightmes-miniapp/src/types/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
