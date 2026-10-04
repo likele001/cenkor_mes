@@ -102,11 +102,47 @@
         </template>
       </el-tab-pane>
     </el-tabs>
+
+    <el-card class="mt-4" shadow="never">
+      <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+        <div>
+          <div class="text-[15px] font-semibold">{{ t('system.cloudStorage.migration.title') }}</div>
+          <div class="text-xs text-zinc-500 mt-1">{{ t('system.cloudStorage.migration.subtitle') }}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <el-select
+            v-model="migrationTarget"
+            :placeholder="t('system.cloudStorage.migration.pickTarget')"
+            style="width: 180px"
+          >
+            <el-option v-for="p in migrationTargets" :key="p" :label="providerLabel(p)" :value="p" />
+          </el-select>
+          <el-button
+            type="primary"
+            :loading="migrating"
+            :disabled="!migrationTarget || !!runningJob"
+            @click="onStartMigration"
+          >{{ t('system.cloudStorage.migration.start') }}</el-button>
+        </div>
+      </div>
+
+      <div v-if="migrationJob">
+        <div class="flex items-center gap-2 mb-2">
+          <el-tag :type="migrationStatusType" size="small">{{ t(`system.cloudStorage.migration.status.${migrationJob.status}`) }}</el-tag>
+          <span class="text-xs text-zinc-500">
+            {{ migrationJob.done }}/{{ migrationJob.total }} · {{ t('system.cloudStorage.migration.failed') }} {{ migrationJob.failed }}
+          </span>
+        </div>
+        <el-progress :percentage="migrationPercent" :status="migrationProgressStatus" />
+        <el-alert v-if="migrationJob.error" class="mt-2" type="error" :closable="false" :title="migrationJob.error" />
+      </div>
+      <p v-else class="text-xs text-zinc-400">{{ t('system.cloudStorage.migration.noJob') }}</p>
+    </el-card>
   </AdminPage>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AdminPage from '@/components/admin/AdminPage.vue'
@@ -114,6 +150,7 @@ import {
   systemApi,
   type CloudCredsPayload,
   type CloudHealthResult,
+  type CloudMigrationJob,
   type CloudStorageConfigView,
 } from '@/api/system'
 
@@ -304,5 +341,93 @@ async function onToggleBackup(val: boolean) {
   }
 }
 
-onMounted(reload)
+// ── 历史附件迁移 (CS-6) ──
+const migrationTarget = ref('')
+const migrating = ref(false)
+const migrationJob = ref<CloudMigrationJob | null>(null)
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+// 仅可将存量本地附件迁往「已配置且驱动已内置」的 provider
+const migrationTargets = computed(() =>
+  CLOUD_ORDER.filter((p) => view.providers[p]?.configured && isSupported(p)),
+)
+const runningJob = computed(() => {
+  const s = migrationJob.value?.status
+  return s === 'running' || s === 'pending'
+})
+const migrationPercent = computed(() => {
+  const j = migrationJob.value
+  if (!j) return 0
+  if (!j.total) return j.status === 'done' ? 100 : 0
+  return Math.min(100, Math.round(((j.done + j.failed) / j.total) * 100))
+})
+const migrationStatusType = computed<'success' | 'danger' | 'warning' | 'info'>(() => {
+  const s = migrationJob.value?.status
+  if (s === 'done') return 'success'
+  if (s === 'failed') return 'danger'
+  if (s === 'running') return 'warning'
+  return 'info'
+})
+const migrationProgressStatus = computed<'success' | 'exception' | 'warning' | ''>(() => {
+  const s = migrationJob.value?.status
+  if (s === 'done') return 'success'
+  if (s === 'failed') return 'exception'
+  return ''
+})
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    try {
+      migrationJob.value = await systemApi.getLatestCloudMigration()
+    } catch {
+      /* 忽略瞬时抖动，下轮重试 */
+    }
+    if (!runningJob.value) stopPolling()
+  }, 2500)
+}
+
+async function loadLatestMigration() {
+  try {
+    migrationJob.value = await systemApi.getLatestCloudMigration()
+    if (runningJob.value) startPolling()
+  } catch {
+    /* 首次无任务 */
+  }
+}
+
+async function onStartMigration() {
+  if (!migrationTarget.value) return
+  try {
+    await ElMessageBox.confirm(
+      t('system.cloudStorage.migration.confirm', { name: providerLabel(migrationTarget.value) }),
+      t('system.cloudStorage.migration.start'),
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  migrating.value = true
+  try {
+    migrationJob.value = await systemApi.startCloudMigration(migrationTarget.value)
+    startPolling()
+  } catch (e: unknown) {
+    ElMessage.error(String(e))
+  } finally {
+    migrating.value = false
+  }
+}
+
+onMounted(() => {
+  reload()
+  loadLatestMigration()
+})
+onBeforeUnmount(stopPolling)
 </script>

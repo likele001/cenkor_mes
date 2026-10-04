@@ -27,3 +27,10 @@ class ActivateIn(BaseModel):
 
 class SettingsIn(BaseModel):
     keep_local_backup: bool
+
+
+class MigrationIn(BaseModel):
+    """历史附件迁移：把 source（当前仅 local）的存量附件批量搬到目标云 provider。"""
+
+    target: str = Field(min_length=1, max_length=20)
+    source: str = Field(default="local", max_length=20)
