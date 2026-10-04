@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: frontend_admin_pro/reports_dashboard
-title: reports_dashboard
-scope:
-    - frontend-admin-pro/src/pages/reports/
-    - frontend-admin-pro/src/pages/dashboard/
-source_files: []
-depends_on: []
-related_to: []

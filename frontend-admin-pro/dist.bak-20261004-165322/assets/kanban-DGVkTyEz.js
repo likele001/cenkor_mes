@@ -1,0 +1,1 @@
+import{h as e}from"./index-CO6g8Awh.js";const a={listOrders(r){return e.request({url:"/dashboard/kanban/orders",method:"GET",params:r})},getOrder(r){return e.request({url:`/dashboard/kanban/orders/${r}`,method:"GET"})}};export{a as k};
