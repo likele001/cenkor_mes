@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_admin_pro/reports_dashboard
+title: 报表与看板仪表盘前端页面
+scope:
+    - frontend-admin-pro/src/pages/reports/
+    - frontend-admin-pro/src/pages/dashboard/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_reports_shift
+    - path: backend_services_tasks/notification_pipeline

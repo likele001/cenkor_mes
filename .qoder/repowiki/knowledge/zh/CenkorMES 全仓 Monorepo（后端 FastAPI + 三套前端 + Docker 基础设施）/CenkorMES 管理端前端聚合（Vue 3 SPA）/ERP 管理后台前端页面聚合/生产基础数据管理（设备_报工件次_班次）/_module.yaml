@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/equipment_management
+title: 生产基础数据管理（设备/报工件次/班次）
+scope:
+    - frontend-admin-pro/src/pages/production/EquipmentPage.vue
+    - frontend-admin-pro/src/pages/production/ReportUnitsPage.vue
+    - frontend-admin-pro/src/pages/production/ShiftsPage.vue
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_quality_equipment

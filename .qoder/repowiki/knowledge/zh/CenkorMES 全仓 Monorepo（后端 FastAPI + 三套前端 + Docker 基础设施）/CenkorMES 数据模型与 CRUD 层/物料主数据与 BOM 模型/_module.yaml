@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/master_data_material_process
+title: 物料主数据与 BOM 模型
+scope:
+    - backend/app/models/material.py
+    - backend/app/schemas/material.py
+    - backend/app/crud/material.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_master_data

@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend_h5/customer_order_pages
+title: 客户订单前端页面（下单、详情、进度）
+scope:
+    - frontend-h5/src/pages/CustomerOrderPage.vue
+    - frontend-h5/src/pages/CustomerOrderDetailPage.vue
+    - frontend-h5/src/pages/CustomerOrderProgressPage.vue
+source_files: []
+depends_on: []
+related_to: []

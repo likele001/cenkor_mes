@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: lightmes_miniapp
+title: CenkorMES 多角色小程序前端（uni-app）
+scope:
+    - lightmes-miniapp/
+source_files: []
+depends_on: []
+related_to: []

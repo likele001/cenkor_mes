@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_admin_pro/erp/finance_accounting
+title: 财务与会计前端页面（应收应付、总账、利润）
+scope:
+    - frontend-admin-pro/src/pages/finance/
+source_files: []
+depends_on: []
+related_to: []

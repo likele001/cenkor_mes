@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_admin_system_rbac
+title: 后台管理端 RBAC 与字典管理接口
+scope:
+    - backend/app/api/admin/system/
+    - backend/app/api/admin/dictionary/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_models_schemas_crud/rbac_tenant
+    - path: frontend_admin_pro/system_admin

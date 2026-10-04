@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: backend_models_schemas_crud/async_tasks_automation
+title: 自动化任务日志与设置
+scope:
+    - backend/app/models/automation_log.py
+    - backend/app/schemas/automation.py
+    - backend/app/crud/automation_log.py
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_admin_approval_automation

@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: backend_services_tasks/feishu_integration
+title: 飞书集成与消息推送服务
+scope:
+    - backend/app/services/feishu/
+source_files: []
+depends_on: []
+related_to:
+    - path: backend_integrations
+    - path: backend_services_tasks/notification_pipeline
