@@ -5,3 +5,16 @@
 <template>
   <router-view />
 </template>
+
+<script setup lang="ts">
+import { onMounted, watch } from 'vue'
+import { useAppConfigStore } from '@/stores/app-config'
+
+const appConfig = useAppConfigStore()
+
+onMounted(() => appConfig.load())
+
+watch(() => appConfig.browserTitle, (title) => {
+  document.title = title
+})
+</script>

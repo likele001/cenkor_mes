@@ -4,6 +4,51 @@
 -->
 <template>
   <AdminPage :title="t('system.settings.title')">
+    <el-card class="mb-4" v-loading="companyLoading">
+      <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.companyInfo') }}</div>
+      <div class="text-xs text-zinc-500 mb-4">
+        {{ t('system.settings.companyInfoHint') }}
+      </div>
+      <el-form :model="companyForm" label-width="140px" class="max-w-xl">
+        <el-form-item :label="t('system.settings.companyName')">
+          <el-input v-model="companyForm.name" maxlength="128" show-word-limit />
+        </el-form-item>
+        <el-form-item :label="t('system.settings.companyPhone')">
+          <el-input v-model="companyForm.phone" maxlength="32" />
+        </el-form-item>
+        <el-form-item :label="t('system.settings.companyAddress')">
+          <el-input v-model="companyForm.address" type="textarea" :rows="2" maxlength="256" show-word-limit />
+        </el-form-item>
+        <el-form-item :label="t('system.settings.companyLogo')">
+          <div class="flex items-center gap-3">
+            <div
+              class="w-14 h-14 rounded-lg overflow-hidden border shrink-0"
+              :class="companyLogoUrl ? 'border-zinc-200 bg-white' : 'border-dashed border-zinc-300 flex items-center justify-center'"
+            >
+              <img v-if="companyLogoUrl" :src="companyLogoUrl" class="w-full h-full object-contain" />
+              <span v-else class="text-xs text-zinc-400">{{ t('system.settings.noLogo') }}</span>
+            </div>
+            <el-upload
+              :show-file-list="false"
+              :http-request="onLogoUpload"
+              :before-upload="beforeLogoUpload"
+              :disabled="logoUploading"
+              accept="image/*"
+            >
+              <el-button :loading="logoUploading">{{ t('system.settings.uploadLogo') }}</el-button>
+            </el-upload>
+            <el-button v-if="companyLogoUrl" link type="danger" :disabled="logoUploading" @click="removeCompanyLogo">
+              {{ t('system.settings.removeLogo') }}
+            </el-button>
+          </div>
+          <div class="text-xs text-zinc-500 mt-1">{{ t('system.settings.logoHint') }}</div>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="companySaving" @click="saveCompanyInfo">{{ t('system.settings.saveCompanyInfo') }}</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-card class="mb-4" v-loading="modeLoading">
       <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.reportMode') }}</div>
       <div class="text-xs text-zinc-500 mb-4">
@@ -203,13 +248,21 @@
 <script setup lang="ts">
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
+import type { FormInstance, FormRules, UploadRequestOptions } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { systemApi, type SettingOut } from '@/api/system'
 import { aiApi } from '@/api/ai'
+import { useAppConfigStore } from '@/stores/app-config'
 
 const { t } = useI18n()
+const appConfig = useAppConfigStore()
+
+const companyLoading = ref(false)
+const companySaving = ref(false)
+const logoUploading = ref(false)
+const companyForm = reactive({ name: '', phone: '', address: '' })
+const companyLogoUrl = ref('')
 
 const loading = ref(false)
 const items = ref<SettingOut[]>([])
@@ -326,6 +379,69 @@ async function onSave() {
 async function onDelete(row: SettingOut) {
   await systemApi.deleteSetting(row.key)
   await reload()
+}
+
+async function loadCompanyInfo() {
+  companyLoading.value = true
+  try {
+    const cfg = await systemApi.getCompanyInfo()
+    companyForm.name = cfg.name || ''
+    companyForm.phone = cfg.phone || ''
+    companyForm.address = cfg.address || ''
+    companyLogoUrl.value = cfg.logo_url || ''
+  } finally {
+    companyLoading.value = false
+  }
+}
+
+async function saveCompanyInfo() {
+  companySaving.value = true
+  try {
+    const cfg = await systemApi.saveCompanyInfo({
+      name: companyForm.name.trim(),
+      phone: companyForm.phone.trim(),
+      address: companyForm.address.trim(),
+    })
+    companyLogoUrl.value = cfg.logo_url || ''
+    ElMessage.success(t('system.settings.companySaved'))
+    await appConfig.load(true)
+  } finally {
+    companySaving.value = false
+  }
+}
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024
+
+function beforeLogoUpload(file: File) {
+  if (file.size > MAX_LOGO_BYTES) {
+    ElMessage.warning(t('system.settings.logoTooLarge'))
+    return false
+  }
+  return true
+}
+
+async function onLogoUpload(options: UploadRequestOptions) {
+  logoUploading.value = true
+  try {
+    const att = await systemApi.uploadAttachment(options.file as File)
+    const cfg = await systemApi.saveCompanyInfo({ logo_attachment_id: att.id })
+    companyLogoUrl.value = cfg.logo_url || ''
+    ElMessage.success(t('system.settings.logoUploaded'))
+    await appConfig.load(true)
+  } finally {
+    logoUploading.value = false
+  }
+}
+
+async function removeCompanyLogo() {
+  logoUploading.value = true
+  try {
+    await systemApi.saveCompanyInfo({ clear_logo: true })
+    companyLogoUrl.value = ''
+    await appConfig.load(true)
+  } finally {
+    logoUploading.value = false
+  }
 }
 
 async function loadModeSettings() {
@@ -465,6 +581,7 @@ async function saveAiPrompt() {
 }
 
 onMounted(() => {
+  loadCompanyInfo()
   loadModeSettings()
   loadWxSettings()
   loadMediaSettings()

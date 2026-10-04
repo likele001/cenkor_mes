@@ -39,7 +39,7 @@ const captcha = reactive({
 
 async function loadPublicConfig() {
   try {
-    const cfg = await apiGet<{ login_captcha_enabled?: boolean }>('/platform/public-config')
+    const cfg = await apiGet<{ login_captcha_enabled?: boolean }>('/public-config')
     captchaEnabled.value = Boolean(cfg.login_captcha_enabled)
   } catch {
     captchaEnabled.value = false

@@ -4,8 +4,8 @@
 -->
 <template>
   <div class="admin-brand flex items-center gap-3 min-w-0" :class="{ 'admin-brand--compact': compact }">
-    <div v-if="logoUrl" class="admin-brand__logo-img shrink-0 overflow-hidden rounded-lg border border-[var(--admin-brand-mark-border)]">
-      <img :src="logoUrl" :alt="displayTitle" class="w-full h-full object-cover" />
+    <div v-if="resolvedLogo" class="admin-brand__logo-img shrink-0 overflow-hidden rounded-lg border border-[var(--admin-brand-mark-border)]">
+      <img :src="resolvedLogo" :alt="displayTitle" class="w-full h-full object-cover" />
     </div>
     <div
       v-else
@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
+import { useAppConfigStore } from '@/stores/app-config'
 
 const { t } = useI18n()
 
@@ -33,41 +33,27 @@ const props = withDefaults(
     subtitle?: string
     logoUrl?: string | null
     compact?: boolean
-    useTenant?: boolean
   }>(),
   {
-    subtitle: '企业生产管理',
     compact: false,
-    useTenant: true,
   }
 )
 
-const auth = useAuthStore()
+const appConfig = useAppConfigStore()
 
-const resolvedLogo = computed(() => {
-  if (props.logoUrl !== undefined) return props.logoUrl
-  if (props.useTenant) return auth.me?.logo_url ?? null
-  return null
-})
+// 后台「系统设置 → 企业信息」是品牌名与 logo 的唯一来源；登录前也能读到
+const resolvedLogo = computed(() => (props.logoUrl !== undefined ? props.logoUrl : appConfig.logoUrl || null))
 
-const logoUrl = computed(() => resolvedLogo.value || null)
-
-const displayTitle = computed(() => {
-  if (props.title) return props.title
-  if (props.useTenant && auth.me?.tenant_name) return auth.me.tenant_name
-  return '辰科MES'
-})
+const displayTitle = computed(() => props.title || appConfig.brandTitle)
 
 const markText = computed(() => {
-  const t = displayTitle.value.trim()
-  if (!t) return 'LM'
-  if (t.length <= 2) return t.toUpperCase()
-  return t.slice(0, 2).toUpperCase()
+  const s = displayTitle.value.trim()
+  if (!s) return 'LM'
+  if (s.length <= 2) return s.toUpperCase()
+  return s.slice(0, 2).toUpperCase()
 })
 
-const resolvedSubtitle = computed(() => {
-  return props.subtitle || t('common.enterpriseManagement')
-})
+const resolvedSubtitle = computed(() => props.subtitle || t('common.enterpriseManagement'))
 </script>
 
 <style scoped>

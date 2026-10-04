@@ -17,6 +17,7 @@ from app.api.dashboard.router import router as dashboard_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.captcha import router as captcha_router
 from app.api.v1.files import router as files_router
+from app.api.v1.public_config import router as public_config_router
 from app.api.admin.shift.router import router as admin_shift_router
 from app.api.admin.exec_dashboard.router import router as admin_exec_dashboard_router
 from app.api.ws.dashboard import router as ws_dashboard_router
@@ -37,6 +38,7 @@ _admin_deps = [Depends(get_current_user)]
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(captcha_router, prefix="/auth/captcha", tags=["auth-captcha"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])
+api_router.include_router(public_config_router, prefix="/public-config", tags=["public-config"])
 api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"], dependencies=_admin_deps)
 api_router.include_router(admin_master_router, prefix="/admin/master", tags=["admin-master"], dependencies=_admin_deps)
 api_router.include_router(admin_production_router, prefix="/admin/production", tags=["admin-production"], dependencies=_admin_deps)

@@ -20,6 +20,7 @@ from app.api.admin.system.message_center import router as message_center_router
 from app.api.admin.system.users import router as users_router
 from app.api.admin.system.invites import router as invites_router
 from app.api.admin.system.codes import router as codes_router
+from app.api.admin.system.company_info import router as company_info_router
 from app.api.admin.system.version import router as version_router
 
 
@@ -34,6 +35,7 @@ router.include_router(settings_router, prefix="/settings", tags=["admin-system-s
 router.include_router(report_media_router, tags=["admin-system-report-media"])
 router.include_router(report_mode_router, tags=["admin-system-report-mode"])
 router.include_router(wechat_miniapp_router, tags=["admin-system-wechat-miniapp"])
+router.include_router(company_info_router, tags=["admin-system-company-info"])
 router.include_router(feishu_router, tags=["admin-system-feishu"])
 router.include_router(message_center_router, prefix="/message-center", tags=["admin-system-message-center"])
 router.include_router(print_templates_router, prefix="/print-templates", tags=["admin-system-print-templates"])

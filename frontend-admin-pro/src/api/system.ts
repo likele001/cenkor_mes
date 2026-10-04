@@ -41,6 +41,22 @@ export type UserOut = {
 
 export type SettingOut = { id: number; tenant_id: number; key: string; value: any; updated_at: string }
 
+export type CompanyInfoOut = {
+  name: string
+  phone: string
+  address: string
+  logo_attachment_id: number | null
+  logo_url: string
+}
+
+export type CompanyInfoIn = {
+  name?: string
+  phone?: string
+  address?: string
+  logo_attachment_id?: number
+  clear_logo?: boolean
+}
+
 export type AttachmentOut = {
   id: number
   tenant_id: number
@@ -181,6 +197,12 @@ export const systemApi = {
   },
   saveWechatMiniappSettings(data: { app_id: string; app_secret?: string }) {
     return http.request({ url: '/admin/system/wechat-miniapp', method: 'PUT', data })
+  },
+  getCompanyInfo() {
+    return http.request<CompanyInfoOut>({ url: '/admin/system/company-info', method: 'GET' })
+  },
+  saveCompanyInfo(data: CompanyInfoIn) {
+    return http.request<CompanyInfoOut>({ url: '/admin/system/company-info', method: 'PUT', data })
   },
   listSettings(params: any) {
     return http.request<ListResp<SettingOut>>({ url: '/admin/system/settings', method: 'GET', params })
