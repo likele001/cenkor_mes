@@ -12,7 +12,7 @@
     <div
       class="admin-login-card relative w-full max-w-[420px] rounded-lg border p-8 sm:p-9 shadow-[var(--el-box-shadow)] admin-interactive"
     >
-      <AdminBrand subtitle="CenkorMES" :use-tenant="false" class="mb-1" />
+      <AdminBrand :subtitle="t('auth.login.enterpriseAdmin')" class="mb-1" />
       <p class="text-[13px] text-[var(--admin-brand-subtitle)] mt-4 mb-5">{{ t('auth.login.hint') }}</p>
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="login-form">
