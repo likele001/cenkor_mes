@@ -1,0 +1,51 @@
+# 监听 vX.Y.Z 标签推送，自动在 GitHub 创建对应 Release。
+# 触发方式：scripts/release-all.sh 发版时会打并推送 tag，从而驱动本工作流。
+# Release 说明取自 backend/CHANGELOG.json 中该版本号对应的 description。
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 提取本版本 CHANGELOG 说明
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          tag = os.environ["TAG"]
+          try:
+              with open("backend/CHANGELOG.json", encoding="utf-8") as f:
+                  rows = json.load(f)
+          except Exception:
+              rows = []
+          desc = next((r.get("description", "") for r in rows if r.get("version") == tag), "")
+          body = desc or f"Release {tag}"
+          notes = os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "release-notes.md")
+          with open(notes, "w", encoding="utf-8") as f:
+              f.write(body + "\n")
+          PY
+          echo "NOTES_FILE=$RUNNER_TEMP/release-notes.md" >> "$GITHUB_ENV"
+
+      - name: 创建 / 更新 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，更新说明与标题"
+            gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" --latest
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" --latest
+          fi
