@@ -17,6 +17,7 @@ from app.core.middleware import SecurityHeadersMiddleware
 from app.core.response import fail, ok
 from app.core.security import ensure_secure_jwt_secret
 from app.crud.rbac import ensure_permissions, create_default_roles
+from app.crud.tenant import ensure_default_tenant
 from app.crud.user import create_user
 from app.models.base import Base
 from app.models.user import User
@@ -92,6 +93,9 @@ def on_startup():
     if settings.DB_AUTO_SEED:
         db: Session = SessionLocal()
         try:
+            if ensure_default_tenant(db):
+                logger.info("已创建默认租户 tenant_id=1")
+
             ensure_permissions(db)
             create_default_roles(db)
 

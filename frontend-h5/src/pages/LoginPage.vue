@@ -22,6 +22,8 @@ const rememberMe = ref(loadRememberPreference())
 const captchaEnabled = ref(false)
 const captchaLoading = ref(false)
 const TENANT_STORAGE_KEY = 'cenkormes_h5_tenant_code'
+// 单租户部署不显示租户编码；仅当 URL 路径里带租户码（多租户入口如 /DEMO/login）时显示
+const showTenantField = ref(false)
 
 const form = reactive({
   tenant_code: localStorage.getItem(TENANT_STORAGE_KEY) || '',
@@ -66,16 +68,13 @@ onMounted(async () => {
   if (code) {
     form.tenant_code = code
     setStoredTenantCode(code)
+    showTenantField.value = true
   }
   await loadPublicConfig()
   await refreshCaptcha()
 })
 
 async function onSubmit() {
-  if (!form.tenant_code?.trim()) {
-    showToast('请输入租户编码')
-    return
-  }
   if (!form.username || !form.password) {
     showToast('请输入账号和密码')
     return
@@ -88,7 +87,7 @@ async function onSubmit() {
   try {
     saveRememberPreference(rememberMe.value)
     const token = await login({
-      tenant_code: form.tenant_code.trim(),
+      tenant_code: form.tenant_code?.trim() || '',
       username: form.username.trim(),
       password: form.password,
       remember_me: rememberMe.value,
@@ -124,7 +123,13 @@ async function onSubmit() {
       </div>
 
       <van-cell-group inset>
-        <van-field v-model="form.tenant_code" label="租户编码" placeholder="如 DEMO" autocomplete="organization" />
+        <van-field
+          v-if="showTenantField"
+          v-model="form.tenant_code"
+          label="租户编码"
+          placeholder="如 DEMO"
+          autocomplete="organization"
+        />
         <van-field v-model="form.username" label="账号" placeholder="请输入账号" autocomplete="username" />
         <van-field
           v-model="form.password"

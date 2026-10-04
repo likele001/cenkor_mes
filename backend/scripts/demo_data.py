@@ -8,7 +8,7 @@ CenkorMES 演示数据生成脚本
 （宝塔/部分 Linux 无 python 命令，需用 python3 或项目虚拟环境里 python）
 
 自动创建一个完整演示工厂的数据闭环：
-  租户 → 用户 → 产品/SKU → 工序 → 工艺路线 → 工价
+  默认租户 → 用户 → 产品/SKU → 工序 → 工艺路线 → 工价
   → 客户 → 订单 → 工单/任务 → 报工 → 审核 → 工资
 
 幂等：检测到数据已存在时跳过，不会重复创建。
@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
 from app.core.security import hash_password
 from app.models.base import Base
-from app.models.tenant import Tenant
+from app.crud.tenant import DEFAULT_TENANT_ID, ensure_default_tenant
 from app.models.user import User, user_roles
 from app.models.role import Role
 from app.models.department import Department
@@ -75,25 +75,22 @@ def run():
         log("开始生成演示数据...")
         created = 0
 
-        # ── 1. 租户 ──
-        tenant, ok = get_or_create(db, Tenant, {"code": "DEMO"}, {
-            "code": "DEMO", "name": "演示工厂",
-        })
-        if ok: created += 1; log(f"创建租户: {tenant.name}")
-        tid = tenant.id
-
+        # ── 1. 默认租户（ERP/CRM 外键依赖 id=1）──
+        if ensure_default_tenant(db):
+            created += 1
+            log("创建默认租户: tenant_id=1")
         # ── 2. 角色 ──
         roles = {}
         for code, name in [("admin", "管理员"), ("leader", "班组长"), ("employee", "员工"), ("customer", "客户")]:
-            r, ok = get_or_create(db, Role, {"tenant_id": tid, "code": code}, {
-                "tenant_id": tid, "code": code, "name": name,
+            r, ok = get_or_create(db, Role, {"code": code}, {
+                "code": code, "name": name,
             })
             if ok: created += 1; log(f"创建角色: {name}")
             roles[code] = r
 
         # ── 3. 部门 ──
-        dept, ok = get_or_create(db, Department, {"tenant_id": tid, "code": "D01"}, {
-            "tenant_id": tid, "code": "D01", "name": "生产一部", "is_active": True,
+        dept, ok = get_or_create(db, Department, {"code": "D01"}, {
+            "code": "D01", "name": "生产一部", "is_active": True,
         })
         if ok: created += 1; log(f"创建部门: {dept.name}")
 
@@ -107,8 +104,8 @@ def run():
             ("customer1", "123456", "张老板", "customer"),
         ]
         for username, pw, full_name, role_code in demo_users:
-            u, ok = get_or_create(db, User, {"tenant_id": tid, "username": username}, {
-                "tenant_id": tid, "username": username,
+            u, ok = get_or_create(db, User, {"username": username}, {
+                "username": username,
                 "password_hash": hash_password(pw),
                 "full_name": full_name,
                 "is_active": True,
@@ -124,8 +121,8 @@ def run():
         admin_user = users["admin"]
 
         # ── 5. 产品 ──
-        product, ok = get_or_create(db, Product, {"tenant_id": tid, "code": "P001"}, {
-            "tenant_id": tid, "code": "P001", "name": "铝合金支架",
+        product, ok = get_or_create(db, Product, {"code": "P001"}, {
+            "code": "P001", "name": "铝合金支架",
             "category": "五金件", "unit": "个", "description": "标准铝合金支架", "is_active": True,
         })
         if ok: created += 1; log(f"创建产品: {product.name}")
@@ -138,8 +135,8 @@ def run():
         ]
         skus = []
         for code, name, color, material, spec in skus_data:
-            s, ok = get_or_create(db, Sku, {"tenant_id": tid, "code": code}, {
-                "tenant_id": tid, "product_id": product.id,
+            s, ok = get_or_create(db, Sku, {"code": code}, {
+                "product_id": product.id,
                 "code": code, "name": name,
                 "color": color, "material": material, "spec": spec,
                 "is_active": True,
@@ -158,23 +155,23 @@ def run():
         ]
         processes = []
         for code, name, workshop, minutes in processes_data:
-            p, ok = get_or_create(db, Process, {"tenant_id": tid, "code": code}, {
-                "tenant_id": tid, "code": code, "name": name,
+            p, ok = get_or_create(db, Process, {"code": code}, {
+                "code": code, "name": name,
                 "workshop": workshop, "std_minutes": minutes, "is_active": True,
             })
             if ok: created += 1; log(f"创建工序: {p.name}")
             processes.append(p)
 
         # ── 8. 工艺路线 ──
-        route, ok = get_or_create(db, ProcessRoute, {"tenant_id": tid, "product_id": product.id, "name": "默认路线"}, {
-            "tenant_id": tid, "product_id": product.id, "name": "默认路线",
+        route, ok = get_or_create(db, ProcessRoute, {"product_id": product.id, "name": "默认路线"}, {
+            "product_id": product.id, "name": "默认路线",
             "is_active": True, "is_default": True,
         })
         if ok:
             created += 1
             log(f"创建工艺路线: {route.name}")
             for i, p in enumerate(processes, start=1):
-                step = ProcessRouteStep(tenant_id=tid, route_id=route.id, seq=i, process_id=p.id)
+                step = ProcessRouteStep(route_id=route.id, seq=i, process_id=p.id)
                 db.add(step)
                 db.flush()
 
@@ -184,24 +181,24 @@ def run():
             for i, proc in enumerate(processes):
                 idx = i + 1
                 pp, ok = get_or_create(db, ProcessPrice, {
-                    "tenant_id": tid, "sku_id": sku.id, "process_id": proc.id,
+                    "sku_id": sku.id, "process_id": proc.id,
                 }, {
-                    "tenant_id": tid, "sku_id": sku.id, "process_id": proc.id,
+                    "sku_id": sku.id, "process_id": proc.id,
                     "unit_price": str(prices.get(idx, 1.0)),
                     "is_active": True,
                 })
                 if ok: created += 1
 
         # ── 10. 客户 ──
-        customer, ok = get_or_create(db, Customer, {"tenant_id": tid, "code": "C001"}, {
-            "tenant_id": tid, "code": "C001", "name": "华强电子",
+        customer, ok = get_or_create(db, Customer, {"code": "C001"}, {
+            "code": "C001", "name": "华强电子",
             "contact_name": "张老板", "contact_phone": "13800138001",
             "address": "深圳市南山区科技园", "is_active": True,
         })
         if ok: created += 1; log(f"创建客户: {customer.name}")
 
-        customer2, ok = get_or_create(db, Customer, {"tenant_id": tid, "code": "C002"}, {
-            "tenant_id": tid, "code": "C002", "name": "明达五金",
+        customer2, ok = get_or_create(db, Customer, {"code": "C002"}, {
+            "code": "C002", "name": "明达五金",
             "contact_name": "李明", "contact_phone": "13800138002",
             "address": "东莞市长安镇工业区", "is_active": True,
         })
@@ -213,7 +210,7 @@ def run():
             customer.user_id = cust_user.id
             db.flush()
             log(f"绑定客户账号: customer1 → {customer.name} ({customer.code})")
-        product_ids = set_customer_products(db, tenant_id=tid, customer_id=customer.id, product_ids=[product.id])
+        product_ids = set_customer_products(db, customer_id=customer.id, product_ids=[product.id])
         if product_ids:
             log(f"配置可下单产品: {product.name}（客户 {customer.code}）")
 
@@ -225,26 +222,26 @@ def run():
         ]
         work_orders_created = 0
         for code, cust_id, sku_id, qty in orders_to_create:
-            ord_obj, ok = get_or_create(db, Order, {"tenant_id": tid, "code": code}, {
-                "tenant_id": tid, "customer_id": cust_id, "code": code,
+            ord_obj, ok = get_or_create(db, Order, {"code": code}, {
+                "customer_id": cust_id, "code": code,
                 "status": "confirmed", "due_date": datetime.now().date() + timedelta(days=14),
                 "remark": "演示订单",
             })
             if ok:
                 created += 1
                 log(f"创建订单: {code} (数量 {qty})")
-                oi = OrderItem(tenant_id=tid, order_id=ord_obj.id, line_no=1, sku_id=sku_id, qty=qty)
+                oi = OrderItem(order_id=ord_obj.id, line_no=1, sku_id=sku_id, qty=qty)
                 db.add(oi)
                 db.flush()
-                wo = WorkOrder(tenant_id=tid, order_id=ord_obj.id, order_item_id=oi.id,
+                wo = WorkOrder(order_id=ord_obj.id, order_item_id=oi.id,
                                product_id=product.id, sku_id=sku_id, qty=qty, status="in_progress")
                 db.add(wo)
                 db.flush()
                 work_orders_created += 1
                 for i, proc in enumerate(processes):
-                    task_code = f"TK{tid:03d}{work_orders_created:03d}{i+1:03d}"
+                    task_code = f"TK{DEFAULT_TENANT_ID:03d}{work_orders_created:03d}{i+1:03d}"
                     task = Task(
-                        tenant_id=tid, work_order_id=wo.id, process_id=proc.id,
+                        work_order_id=wo.id, process_id=proc.id,
                         seq=i + 1, task_code=task_code, planned_qty=qty,
                         status="done" if i < 3 else ("working" if i == 3 else "pending"),
                         assigned_user_id=users["li"].id,
@@ -256,7 +253,7 @@ def run():
                         good_qty = qty - (2 if i == 0 else 1)
                         bad_qty = 2 if i == 0 else 1
                         report = Report(
-                            tenant_id=tid, task_id=task.id,
+                            task_id=task.id,
                             report_user_id=users["li"].id,
                             good_qty=good_qty, bad_qty=bad_qty,
                             remark="演示报工", status="qc_approved",
@@ -264,17 +261,16 @@ def run():
                         db.add(report)
                         db.flush()
 
-                        db.add(ReportAudit(tenant_id=tid, report_id=report.id,
+                        db.add(ReportAudit(report_id=report.id,
                                            auditor_id=users["zhang"].id, audit_level="leader",
                                            action="approve", reason=None))
-                        db.add(ReportAudit(tenant_id=tid, report_id=report.id,
+                        db.add(ReportAudit(report_id=report.id,
                                            auditor_id=users["wang"].id, audit_level="qc",
                                            action="approve", reason=None))
                         db.flush()
 
                         price_row = db.scalar(
                             select(ProcessPrice).where(
-                                ProcessPrice.tenant_id == tid,
                                 ProcessPrice.sku_id == sku_id,
                                 ProcessPrice.process_id == proc.id,
                                 ProcessPrice.is_active.is_(True),
@@ -284,7 +280,7 @@ def run():
                             up = Decimal(str(price_row.unit_price))
                             amt = Decimal(str(good_qty)) * up
                             db.add(SalaryItem(
-                                tenant_id=tid, report_id=report.id,
+                                report_id=report.id,
                                 user_id=users["li"].id, sku_id=sku_id,
                                 process_id=proc.id,
                                 unit_price=up, good_qty=good_qty,
@@ -293,12 +289,12 @@ def run():
                             ))
                             db.flush()
 
-        ensure_print_template(db, tenant_id=tid, code="task_label")
+        ensure_print_template(db, code="task_label")
         log("打印模板: task_label（任务码标签）")
 
         db.commit()
         log(f"\n✅ 演示数据生成完成！共创建/跳过 {created} 项。")
-        log(f"\n账号信息（租户 code: DEMO）：")
+        log("\n账号信息：")
         log(f"  管理员: admin / admin123")
         log(f"  班组长: zhang / 123456")
         log(f"  员工:   li    / 123456")
