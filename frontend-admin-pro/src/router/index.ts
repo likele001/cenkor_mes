@@ -55,7 +55,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'system/approval-flows', name: 'system-approval-flows', component: () => import('@/pages/system/ApprovalFlowsPage.vue'), meta: { title: () => i18n.global.t('menu.approvalFlows'), permissions: ['setting.manage'] } },
       { path: 'system/feishu-notify', name: 'system-feishu-notify', component: () => import('@/pages/system/FeishuNotifyPage.vue'), meta: { title: () => i18n.global.t('menu.feishuNotify'), permissions: ['setting.manage'] } },
       { path: 'system/cloud-storage', name: 'system-cloud-storage', component: () => import('@/pages/system/CloudStoragePage.vue'), meta: { title: () => i18n.global.t('menu.cloudStorage'), permissions: ['cloud_storage.manage'] } },
-      { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['notification.view'] } },
+      { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['setting.manage'] } },
       { path: 'account/profile', name: 'account-profile', component: () => import('@/pages/account/ProfilePage.vue'), meta: { title: () => i18n.global.t('menu.profile') } },
 
       { path: 'master/products', name: 'master-products', component: () => import('@/pages/master/ProductsPage.vue'), meta: { title: () => i18n.global.t('menu.products'), permissions: ['product.manage'] } },

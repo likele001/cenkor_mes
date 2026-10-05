@@ -127,6 +127,28 @@ def list_stocks_api(
     })
 
 
+@router.get("/stocks/export")
+def export_stocks_api(
+    warehouse_id: int | None = Query(default=None, ge=1),
+    item_type: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    items = list_stocks(db, warehouse_id=warehouse_id, item_type=item_type)
+    headers = ["仓库", "编码", "名称", "数量", "更新时间"]
+    rows = [
+        [
+            s.warehouse.name if s.warehouse else "",
+            s.sku.code if s.sku else "",
+            s.sku.name if s.sku else "",
+            s.qty,
+            str(s.updated_at or ""),
+        ]
+        for s in items
+    ]
+    return make_excel_response(headers, rows, "stocks.xlsx", "库存")
+
+
 @router.post("/stocks/adjust")
 def adjust_stock_api(
     warehouse_id: int = Query(ge=1),

@@ -120,6 +120,45 @@ def _get_group_targets_for_event(
     return targets
 
 
+def _rule_personal_targets_for_event(
+    db: Session,
+    event_code: str,
+    *,
+    user_id: int | None = None,
+    department_id: int | None = None,
+    workshop: str | None = None,
+) -> list[PushTarget]:
+    """解析 rules[event_code].targets 里的个人目标。
+
+    仅群/混合事件此前只看 EVENT_GROUP_CODES，规则里配的 boss、permission:xxx、user:<id>
+    （管理端「预警接收人」即写成一串 user:<id>）从不产生个人推送，这里补上。
+    """
+    rule = _resolve_rule_cfg(db, event_code)
+    codes = rule.get("targets") or []
+    if not codes:
+        return []
+
+    from app.services.feishu.targets import resolve_targets
+
+    out: list[PushTarget] = []
+    seen: set[str] = set()
+    for t in resolve_targets(
+        db,
+        codes,
+        user_id=user_id,
+        department_id=department_id,
+        workshop=workshop,
+    ):
+        if t.get("kind") != "user":
+            continue
+        open_id = (t.get("ref") or "").strip()
+        if not open_id or open_id in seen:
+            continue
+        seen.add(open_id)
+        out.append(PushTarget.user("feishu", open_id, user_id=t.get("user_id")))
+    return out
+
+
 def _create_log(
     db: Session,
     *,
@@ -283,10 +322,14 @@ def dispatch(
         return created
 
     if is_group_only_event(event_code):
+        targets = _get_group_targets_for_event(db, event_code)
+        targets += _rule_personal_targets_for_event(
+            db, event_code, user_id=user_id, department_id=department_id, workshop=workshop
+        )
         return _dispatch_targets(
             db,
             event_code=event_code,
-            targets=_get_group_targets_for_event(db, event_code),
+            targets=targets,
             title=title,
             content=content,
             level=level,
@@ -313,10 +356,14 @@ def dispatch(
                     scheduled_at=scheduled_at,
                     user=user,
                 )
+        group_targets = _get_group_targets_for_event(db, event_code)
+        group_targets += _rule_personal_targets_for_event(
+            db, event_code, user_id=user_id, department_id=department_id, workshop=workshop
+        )
         created += _dispatch_targets(
             db,
             event_code=event_code,
-            targets=_get_group_targets_for_event(db, event_code),
+            targets=group_targets,
             title=title,
             content=content,
             level=level,

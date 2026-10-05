@@ -8,7 +8,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { warehouseApi, type StockLogOut, type StockOut, type WarehouseOut } from '@/api/warehouse'
 import { partyOptionLabel } from '@/utils/display'
-import { useExport } from '@/composables/useExport'
+import { saveBlob } from '@/utils/download'
+import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
 
@@ -17,7 +18,7 @@ const activeTab = ref<'stocks' | 'logs'>('stocks')
 const loading = ref(false)
 const items = ref<StockOut[]>([])
 
-const { exporting, doExport } = useExport()
+const exporting = ref(false)
 const logsLoading = ref(false)
 const logs = ref<StockLogOut[]>([])
 const warehouses = ref<WarehouseOut[]>([])
@@ -93,13 +94,16 @@ onMounted(async () => {
 })
 
 async function exportExcel() {
-  await doExport(
-    () => warehouseApi.exportStocks({
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await warehouseApi.exportStocks({
       warehouse_id: query.warehouse_id,
       item_type: query.item_type,
-    }),
-    `stocks_${new Date().toISOString().slice(0, 10)}.xlsx`,
-  )
+    })
+    saveBlob(blob, `stocks_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    ElMessage.success(t('common.exported'))
+  } catch { /* http 已提示 */ } finally { exporting.value = false }
 }
 </script>
 

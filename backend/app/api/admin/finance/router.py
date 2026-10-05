@@ -22,9 +22,13 @@ from app.schemas.finance_ledger import FinanceLedgerCreateIn
 from app.schemas.statement_payment import StatementPaymentCreateIn
 from app.services.code_generator import BizType, resolve_code
 from app.models.finance import Statement
+from app.tasks._sync_excel import make_excel_response
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["finance.manage"]))])
+
+# 导出不分页，但要有上限：Excel 单元格塞不下无限行，误传筛选条件时也不该拖死进程
+STATEMENT_EXPORT_LIMIT = 10000
 
 
 def _out(x) -> dict:
@@ -125,6 +129,39 @@ def create_ledger_api(
     )
     db.commit()
     return ok(_ledger_out(x))
+
+
+@router.get("/statements/export")
+def export_statements_api(
+    customer_id: int | None = Query(default=None, ge=1),
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """对账单导出。与列表用同一套筛选，但不分页——导出必须是完整结果，
+    否则用户拿到一份缺行的表还以为是对齐的。"""
+    items = list_statements(db, customer_id=customer_id, status=status, offset=0, limit=STATEMENT_EXPORT_LIMIT)
+    names = {
+        c.id: c.name
+        for c in db.scalars(select(Customer).where(Customer.id.in_({x.customer_id for x in items}))).all()
+    }
+    headers = ["对账单号", "客户", "期间起", "期间止", "应收金额", "已核销", "未收余额", "到期日", "状态", "备注"]
+    rows = [
+        [
+            x.code,
+            names.get(x.customer_id, ""),
+            str(x.period_start or ""),
+            str(x.period_end or ""),
+            float(x.total_amount),
+            float(x.paid_amount or 0),
+            float(Decimal(str(x.total_amount)) - Decimal(str(x.paid_amount or 0))),
+            str(x.due_date or ""),
+            x.status,
+            x.remark or "",
+        ]
+        for x in items
+    ]
+    return make_excel_response(headers, rows, "statements.xlsx", "对账单")
 
 
 @router.get("/profit")

@@ -202,6 +202,11 @@ def resolve_targets(
             perm = code.split(":", 1)[1]
             for uid in _users_with_permission(db, perm):
                 add_user(uid)
+        elif code.startswith("user:"):
+            try:
+                add_user(int(code.split(":", 1)[1]))
+            except ValueError:
+                pass
 
     return out
 
@@ -251,6 +256,11 @@ def notify_in_app_for_targets(
             user_ids.update(_boss_user_ids(db))
         elif code.startswith("permission:"):
             user_ids.update(_users_with_permission(db, code.split(":", 1)[1]))
+        elif code.startswith("user:"):
+            try:
+                user_ids.add(int(code.split(":", 1)[1]))
+            except ValueError:
+                pass
     n = 0
     from app.crud.notification import create_notification
 
