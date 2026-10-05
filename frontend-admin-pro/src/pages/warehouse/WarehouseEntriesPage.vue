@@ -33,6 +33,11 @@ const sourceTypeMap: Record<string, string> = {
   material_return: '退料入库',
   other: '其他入库',
 }
+// 退料回补由退料单确认时入账，这里再建一张单会把同一批料入两遍
+const creatableSourceTypes: Record<string, string> = {
+  purchase: '采购入库',
+  other: '其他入库',
+}
 const statusTag: Record<string, string> = {
   draft: 'warning',
   confirmed: 'success',
@@ -81,7 +86,6 @@ const form = reactive({
   source_type: 'other',
   warehouse_id: undefined as number | undefined,
   purchase_order_id: undefined as number | undefined,
-  material_return_id: undefined as number | undefined,
   remark: '',
   rows: [] as { material_id?: number; sku_id?: number; qty?: number }[],
 })
@@ -91,7 +95,6 @@ function openCreate() {
   form.source_type = 'other'
   form.warehouse_id = undefined
   form.purchase_order_id = undefined
-  form.material_return_id = undefined
   form.remark = ''
   form.rows = [{ material_id: undefined, sku_id: undefined, qty: undefined }]
   dialogVisible.value = true
@@ -119,10 +122,6 @@ async function save() {
     ElMessage.warning('采购入库必须关联采购单')
     return
   }
-  if (form.source_type === 'material_return' && !form.material_return_id) {
-    ElMessage.warning('退料入库必须关联退料单')
-    return
-  }
   saving.value = true
   try {
     const payload: any = {
@@ -133,7 +132,6 @@ async function save() {
       items: rows.map((r) => ({ material_id: r.material_id, sku_id: r.sku_id, qty: r.qty }) as EntryItemIn),
     }
     if (form.purchase_order_id) payload.purchase_order_id = form.purchase_order_id
-    if (form.material_return_id) payload.material_return_id = form.material_return_id
     await warehouseApi.createEntry(payload)
     ElMessage.success('入库单已创建')
     dialogVisible.value = false
@@ -230,7 +228,7 @@ onMounted(() => {
           <template #default="{ row }">
             <el-button v-if="row.status === 'draft'" type="primary" link @click="confirmEntry(row)">入库</el-button>
             <el-button v-if="row.status === 'draft'" type="danger" link @click="cancelEntry(row)">取消</el-button>
-            <el-button type="primary" link @click="dialogVisible = true; form.rows = []; form.purchase_order_id = row.purchase_order_id ?? undefined; form.material_return_id = row.material_return_id ?? undefined; form.warehouse_id = row.warehouse_id; form.source_type = row.source_type">详情</el-button>
+            <el-button type="primary" link @click="dialogVisible = true; form.rows = []; form.purchase_order_id = row.purchase_order_id ?? undefined; form.warehouse_id = row.warehouse_id; form.source_type = row.source_type">详情</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -248,7 +246,7 @@ onMounted(() => {
       <el-form label-width="90px">
         <el-form-item label="入库类型">
           <el-select v-model="form.source_type" style="width: 200px">
-            <el-option v-for="(v, k) in sourceTypeMap" :key="k" :label="v" :value="k" />
+            <el-option v-for="(v, k) in creatableSourceTypes" :key="k" :label="v" :value="k" />
           </el-select>
         </el-form-item>
         <el-form-item label="仓库">
@@ -258,9 +256,6 @@ onMounted(() => {
         </el-form-item>
         <el-form-item v-if="form.source_type === 'purchase'" label="采购单号">
           <el-input v-model="form.purchase_order_id" type="number" placeholder="采购单 ID" />
-        </el-form-item>
-        <el-form-item v-if="form.source_type === 'material_return'" label="退料单号">
-          <el-input v-model="form.material_return_id" type="number" placeholder="退料单 ID" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" placeholder="备注" />

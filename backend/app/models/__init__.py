@@ -36,6 +36,7 @@ from app.models.export_job import ExportJob
 from app.models.print_template import PrintTemplate
 from app.models.notification import Notification
 from app.models.approval import ApprovalFlow, ApprovalStep
+from app.models.approval_record import ApprovalRecord
 from app.models.attendance import AttendanceRecord
 from app.models.employee_skill import Skill, UserSkillLink
 from app.models.production_calendar import ProductionCalendarDay

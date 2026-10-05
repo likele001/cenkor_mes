@@ -33,7 +33,6 @@ from app.services.production_automation_settings import get_automation_settings
 def log_automation(
     db: Session,
     *,
-    tenant_id: int,
     trigger: str,
     action: str,
     status: str,
@@ -58,7 +57,6 @@ def log_automation(
 
 def precheck_order_for_automation(
     db: Session,
-    tenant_id: int,
     order_id: int,
     *,
     allow_shortage: bool = False,
@@ -91,7 +89,7 @@ def precheck_order_for_automation(
     return {"ok": ok, "checks": checks, "readiness": readiness}
 
 
-def precheck_plan_for_automation(db: Session, tenant_id: int, plan_id: int) -> dict:
+def precheck_plan_for_automation(db: Session, plan_id: int) -> dict:
     plan = get_plan_by_id(db, plan_id)
     if not plan:
         return {"ok": False, "checks": [{"level": "error", "message": "计划不存在"}]}
@@ -101,7 +99,7 @@ def precheck_plan_for_automation(db: Session, tenant_id: int, plan_id: int) -> d
     return {"ok": True, "checks": checks, "plan_status": plan.status}
 
 
-def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
+def _get_workdays_setting(db: Session) -> list[int]:
     it = get_setting(db, "plan.calendar.workdays")
     if not it or not it.value:
         return [1, 2, 3, 4, 5, 6]
@@ -115,23 +113,23 @@ def _get_workdays_setting(db: Session, tenant_id: int) -> list[int]:
     return [1, 2, 3, 4, 5, 6]
 
 
-def _is_workday_db(db: Session, tenant_id: int, d: date, workdays: list[int]) -> bool:
+def _is_workday_db(db: Session, d: date, workdays: list[int]) -> bool:
     it = get_calendar_day(db, day=d)
     if it is not None:
         return bool(it.is_workday)
     return int(d.isoweekday()) in workdays
 
 
-def _normalize_to_workday(db: Session, tenant_id: int, d: date, *, direction: int, workdays: list[int]) -> date:
+def _normalize_to_workday(db: Session, d: date, *, direction: int, workdays: list[int]) -> date:
     cur = d
     for _ in range(400):
-        if _is_workday_db(db, tenant_id, cur, workdays):
+        if _is_workday_db(db, cur, workdays):
             return cur
         cur = cur + timedelta(days=direction)
     return d
 
 
-def _shift_workdays(db: Session, tenant_id: int, d: date, delta: int, workdays: list[int]) -> date:
+def _shift_workdays(db: Session, d: date, delta: int, workdays: list[int]) -> date:
     if delta == 0:
         return d
     step = 1 if delta > 0 else -1
@@ -139,12 +137,12 @@ def _shift_workdays(db: Session, tenant_id: int, d: date, delta: int, workdays: 
     cur = d
     while remain > 0:
         cur = cur + timedelta(days=step)
-        cur = _normalize_to_workday(db, tenant_id, cur, direction=step, workdays=workdays)
+        cur = _normalize_to_workday(db, cur, direction=step, workdays=workdays)
         remain -= 1
     return cur
 
 
-def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "backward") -> dict:
+def run_auto_schedule(db: Session, plan_id: int, mode: str = "backward") -> dict:
     row = get_plan_with_order_info(db, plan_id)
     if not row:
         raise ValueError("生产计划不存在")
@@ -155,7 +153,7 @@ def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "ba
     if mode not in ("backward", "forward"):
         raise ValueError("mode 参数错误")
 
-    workdays = _get_workdays_setting(db, tenant_id)
+    workdays = _get_workdays_setting(db)
     start = plan.start_date
     end = plan.end_date
     work_days = plan.work_days
@@ -170,8 +168,8 @@ def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "ba
             end = order.due_date
         if not end:
             start = date.today()
-            start = _normalize_to_workday(db, tenant_id, start, direction=1, workdays=workdays)
-            end = _shift_workdays(db, tenant_id, start, int(work_days) - 1, workdays)
+            start = _normalize_to_workday(db, start, direction=1, workdays=workdays)
+            end = _shift_workdays(db, start, int(work_days) - 1, workdays)
             update_plan(db, plan=plan, start_date=start, end_date=end, work_days=int(work_days))
             return {
                 "start_date": start.isoformat(),
@@ -180,19 +178,19 @@ def run_auto_schedule(db: Session, tenant_id: int, plan_id: int, mode: str = "ba
                 "mode": "forward",
                 "note": "订单未设置交期，已从今日正排",
             }
-        end = _normalize_to_workday(db, tenant_id, end, direction=-1, workdays=workdays)
-        start = _shift_workdays(db, tenant_id, end, -(int(work_days) - 1), workdays)
+        end = _normalize_to_workday(db, end, direction=-1, workdays=workdays)
+        start = _shift_workdays(db, end, -(int(work_days) - 1), workdays)
     else:
         if not start:
             raise ValueError("缺少开始日期，无法正排")
-        start = _normalize_to_workday(db, tenant_id, start, direction=1, workdays=workdays)
-        end = _shift_workdays(db, tenant_id, start, int(work_days) - 1, workdays)
+        start = _normalize_to_workday(db, start, direction=1, workdays=workdays)
+        end = _shift_workdays(db, start, int(work_days) - 1, workdays)
 
     update_plan(db, plan=plan, start_date=start, end_date=end, work_days=int(work_days))
     return {"start_date": start.isoformat(), "end_date": end.isoformat(), "work_days": int(work_days), "mode": mode}
 
 
-def apply_optimizer_dates(db: Session, tenant_id: int, plan_id: int) -> dict:
+def apply_optimizer_dates(db: Session, plan_id: int) -> dict:
     opt = optimize_plan_schedule(db, plan_id)
     if not opt.get("ok"):
         raise ValueError(opt.get("error") or "排产优化失败")
@@ -206,12 +204,12 @@ def apply_optimizer_dates(db: Session, tenant_id: int, plan_id: int) -> dict:
     return {"schedule": opt, "start_date": sd.isoformat(), "end_date": ed.isoformat()}
 
 
-def run_auto_release(db: Session, tenant_id: int, plan_id: int, user_id: int, allow_shortage: bool) -> dict:
+def run_auto_release(db: Session, plan_id: int, user_id: int, allow_shortage: bool) -> dict:
     plan = get_plan_by_id(db, plan_id)
     if not plan:
         raise ValueError("生产计划不存在")
     return release_plan(
-    db,
+        db,
         plan=plan,
         releaser_user_id=user_id,
         allow_shortage=allow_shortage,
@@ -220,7 +218,6 @@ def run_auto_release(db: Session, tenant_id: int, plan_id: int, user_id: int, al
 
 def run_auto_dispatch(
     db: Session,
-    tenant_id: int,
     plan_id: int,
     user_id: int,
     *,
@@ -233,12 +230,11 @@ def run_auto_dispatch(
         allow_shortage=allow_shortage,
         unassigned_only=unassigned_only,
     )
-    return execute_auto_dispatch(db, tenant_id=tenant_id, plan_id=plan_id, user_id=user_id, payload=payload)
+    return execute_auto_dispatch(db, plan_id=plan_id, user_id=user_id, payload=payload)
 
 
 def run_schedule_pipeline(
     db: Session,
-    tenant_id: int,
     plan_id: int,
     user_id: int,
     *,
@@ -248,11 +244,10 @@ def run_schedule_pipeline(
     allow_shortage: bool = False,
     trigger: str = "plan_saved",
 ) -> dict:
-    settings = get_automation_settings(db, tenant_id)
+    settings = get_automation_settings(db)
     if not settings.get("enabled"):
         log_automation(
             db,
-            tenant_id=tenant_id,
             trigger=trigger,
             action="pipeline",
             status="skipped",
@@ -266,9 +261,9 @@ def run_schedule_pipeline(
     result: dict = {"steps": []}
     try:
         if engine == "ortools":
-            sched = apply_optimizer_dates(db, tenant_id, plan_id)
+            sched = apply_optimizer_dates(db, plan_id)
         else:
-            sched = run_auto_schedule(db, tenant_id, plan_id, mode="backward")
+            sched = run_auto_schedule(db, plan_id, mode="backward")
         result["schedule"] = sched
         result["steps"].append("schedule")
         db.flush()
@@ -276,7 +271,7 @@ def run_schedule_pipeline(
         release_info = None
         dispatch_info = None
         if auto_release or auto_dispatch:
-            release_info = run_auto_release(db, tenant_id, plan_id, user_id, allow_shortage)
+            release_info = run_auto_release(db, plan_id, user_id, allow_shortage)
             result["release"] = release_info
             result["steps"].append("release")
             db.flush()
@@ -284,7 +279,6 @@ def run_schedule_pipeline(
         if auto_dispatch:
             dispatch_info = run_auto_dispatch(
                 db,
-                tenant_id,
                 plan_id,
                 user_id,
                 auto_release=False,
@@ -295,7 +289,6 @@ def run_schedule_pipeline(
 
         log_automation(
             db,
-            tenant_id=tenant_id,
             trigger=trigger,
             action="pipeline",
             status="success",
@@ -309,7 +302,6 @@ def run_schedule_pipeline(
     except ValueError as e:
         log_automation(
             db,
-            tenant_id=tenant_id,
             trigger=trigger,
             action="pipeline",
             status="failed",
@@ -321,7 +313,7 @@ def run_schedule_pipeline(
         )
         notify_users_with_permission(
             db,
-                        permission_code="plan.manage",
+            permission_code="plan.manage",
             title="生产自动化失败",
             content=str(e)[:500],
             level="warning",
@@ -347,27 +339,24 @@ def run_schedule_pipeline(
 
 def auto_create_plan_for_order(
     db: Session,
-    tenant_id: int,
     order_id: int,
     user_id: int,
     *,
     start_offset_days: int = 0,
     run_pipeline: bool = False,
 ) -> ProductionPlan | None:
-    settings = get_automation_settings(db, tenant_id)
+    settings = get_automation_settings(db)
     if not settings.get("enabled"):
         return None
 
     pre = precheck_order_for_automation(
         db,
-        tenant_id,
         order_id,
         allow_shortage=bool(settings.get("on_plan_saved", {}).get("allow_shortage")),
     )
     if not pre["ok"]:
         log_automation(
             db,
-            tenant_id=tenant_id,
             trigger="order_confirm",
             action="create_plan",
             status="failed",
@@ -379,7 +368,7 @@ def auto_create_plan_for_order(
         )
         notify_users_with_permission(
             db,
-                        permission_code="plan.manage",
+            permission_code="plan.manage",
             title="订单确认后自动建计划失败",
             content=pre["checks"][0]["message"] if pre["checks"] else "检查未通过",
             level="warning",
@@ -422,12 +411,10 @@ def auto_create_plan_for_order(
             exists=lambda c: get_plan_by_code(db, c) is not None,
             duplicate_msg="计划编号已存在",
         )
-        start_date = None
+        start_date = date.today() + timedelta(days=max(0, int(start_offset_days)))
         end_date = order.due_date if order else None
-        if end_date and start_offset_days:
-            end_date = end_date  # keep due as end; offset applied in pipeline
         plan = create_plan(
-    db,
+            db,
             order_id=order_id,
             code=plan_code,
             status="planned",
@@ -439,7 +426,6 @@ def auto_create_plan_for_order(
         )
         log_automation(
             db,
-            tenant_id=tenant_id,
             trigger="order_confirm",
             action="create_plan",
             status="success",
@@ -454,7 +440,6 @@ def auto_create_plan_for_order(
         try:
             run_schedule_pipeline(
                 db,
-                tenant_id,
                 plan.id,
                 user_id,
                 engine=str(opts.get("engine") or "ortools"),
@@ -469,21 +454,21 @@ def auto_create_plan_for_order(
     return plan
 
 
-def enqueue_plan_pipeline(tenant_id: int, plan_id: int, user_id: int, trigger: str = "plan_saved") -> None:
+def enqueue_plan_pipeline(plan_id: int, user_id: int, trigger: str = "plan_saved") -> None:
     from app.celery_app import celery
 
     celery.send_task(
         "production.automation.pipeline",
-        args=[int(tenant_id), int(plan_id), int(user_id), trigger],
+        args=[int(plan_id), int(user_id), trigger],
     )
 
 
-def maybe_trigger_plan_automation(db: Session, tenant_id: int, plan_id: int, user_id: int, trigger: str = "plan_saved") -> bool:
-    settings = get_automation_settings(db, tenant_id)
+def maybe_trigger_plan_automation(db: Session, plan_id: int, user_id: int, trigger: str = "plan_saved") -> bool:
+    settings = get_automation_settings(db)
     if not settings.get("enabled"):
         return False
     opts = settings.get("on_plan_saved") or {}
     if not opts.get("run_schedule"):
         return False
-    enqueue_plan_pipeline(tenant_id, plan_id, user_id, trigger)
+    enqueue_plan_pipeline(plan_id, user_id, trigger)
     return True

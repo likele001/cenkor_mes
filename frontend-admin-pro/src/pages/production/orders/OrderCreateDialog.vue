@@ -69,9 +69,19 @@
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column :label="t('production.orders.quantityLabelCol')" width="120">
+            <el-table-column :label="t('production.orders.quantityLabelCol')" width="110">
               <template #default="{ row }">
                 <el-input-number v-model="row.qty" :min="1" :controls="false" class="!w-full" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('production.orders.unitPriceLabel')" width="120">
+              <template #default="{ row }">
+                <el-input-number v-model="row.unit_price" :min="0" :precision="4" :controls="false" class="!w-full" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('production.orders.subtotalLabel')" width="110">
+              <template #default="{ row }">
+                <span class="text-xs">{{ ((Number(row.qty) || 0) * (Number(row.unit_price) || 0)).toFixed(2) }}</span>
               </template>
             </el-table-column>
             <el-table-column :label="t('production.orders.rowRemarkLabel')" width="120">
@@ -85,6 +95,9 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="text-xs text-zinc-500 mt-2">
+            {{ t('production.orders.amountTotal') }}：{{ orderAmount.toFixed(2) }}
+          </div>
         </el-form-item>
       </el-form>
     </div>
@@ -96,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { productionApi, type CustomerOut } from '@/api/production'
@@ -126,7 +139,11 @@ const form = reactive({
   remark: '',
 })
 
-const lines = reactive<{ sku_id: number | null; qty: number; remark: string }[]>([])
+const lines = reactive<{ sku_id: number | null; qty: number; unit_price: number; remark: string }[]>([])
+
+const orderAmount = computed(() =>
+  lines.reduce((sum, row) => sum + (Number(row.qty) || 0) * (Number(row.unit_price) || 0), 0),
+)
 
 async function suggestedOrderCode() {
   try {
@@ -155,11 +172,11 @@ async function resetForm() {
   form.code = await suggestedOrderCode()
   form.due_date = ''
   form.remark = ''
-  lines.splice(0, lines.length, { sku_id: null, qty: 1, remark: '' })
+  lines.splice(0, lines.length, { sku_id: null, qty: 1, unit_price: 0, remark: '' })
 }
 
 function addLine() {
-  lines.push({ sku_id: null, qty: 1, remark: '' })
+  lines.push({ sku_id: null, qty: 1, unit_price: 0, remark: '' })
 }
 
 function removeLine(idx: number) {
@@ -176,10 +193,12 @@ async function submit() {
     .filter((row) => row.sku_id != null && Number.isFinite(Number(row.qty)))
     .map((row, idx) => {
       const q = Math.max(1, Math.floor(Number(row.qty)))
+      const price = Math.max(0, Number(row.unit_price) || 0)
       return {
         line_no: idx + 1,
         sku_id: row.sku_id as number,
         qty: q,
+        unit_price: price,
         remark: row.remark?.trim() ? row.remark.trim() : undefined,
       }
     })

@@ -8,6 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { http } from '@/utils/http'
+import { warehouseApi, type WarehouseOption } from '@/api/warehouse'
 import { useStatus } from '@/utils/status-maps'
 
 const { t } = useI18n()
@@ -24,6 +25,8 @@ interface Shipment {
   order_id: number
   order_code: string | null
   code: string
+  warehouse_id: number | null
+  warehouse_name: string | null
   logistics_company: string | null
   logistics_no: string | null
   status: string
@@ -42,10 +45,12 @@ const editId = ref<number | null>(null)
 const saving = ref(false)
 const detail = ref<Shipment | null>(null)
 const detailVisible = ref(false)
+const warehouses = ref<WarehouseOption[]>([])
 
 const form = ref({
   order_id: null as number | null,
   code: '',
+  warehouse_id: null as number | null,
   logistics_company: '',
   logistics_no: '',
   remark: '',
@@ -62,14 +67,23 @@ async function load() {
   } catch { items.value = [] } finally { loading.value = false }
 }
 
+async function loadWarehouses() {
+  try {
+    const res = await warehouseApi.listWarehouseOptions()
+    warehouses.value = res.items ?? []
+  } catch { warehouses.value = [] }
+}
+
 function resetForm() {
-  form.value = { order_id: null, code: '', logistics_company: '', logistics_no: '', remark: '', items: [] }
+  form.value = { order_id: null, code: '', warehouse_id: null, logistics_company: '', logistics_no: '', remark: '', items: [] }
   editId.value = null
   editMode.value = false
 }
 
 function openCreate() {
   resetForm()
+  // 只有一个仓库时不必让人再选一次
+  if (warehouses.value.length === 1) form.value.warehouse_id = warehouses.value[0].id
   dialogVisible.value = true
 }
 
@@ -83,6 +97,7 @@ function removeItem(idx: number) {
 
 async function save() {
   if (!form.value.code.trim()) { ElMessage.warning(t('warehouse.shipments.codeRequired')); return }
+  if (warehouses.value.length > 1 && !form.value.warehouse_id) { ElMessage.warning(t('warehouse.shipments.warehouseRequired')); return }
   if (!form.value.items.length) { ElMessage.warning(t('warehouse.shipments.itemsRequired')); return }
   saving.value = true
   try {
@@ -90,7 +105,7 @@ async function save() {
     ElMessage.success(t('warehouse.shipments.createSuccess'))
     dialogVisible.value = false
     await load()
-  } catch { ElMessage.error(t('warehouse.shipments.saveFailed')) } finally { saving.value = false }
+  } catch { /* 失败原因由 http 统一提示（库存不足、多仓未选等） */ } finally { saving.value = false }
 }
 
 async function shipOut(row: Shipment) {
@@ -99,7 +114,7 @@ async function shipOut(row: Shipment) {
     await http.post(`/admin/warehouse/shipments/${row.id}/ship`)
     ElMessage.success(t('warehouse.shipments.shippedSuccess'))
     await load()
-  } catch { /* cancel */ }
+  } catch { /* 取消或后端拒绝，原因已由 http 提示 */ }
 }
 
 async function sign(row: Shipment) {
@@ -107,7 +122,7 @@ async function sign(row: Shipment) {
     await http.post(`/admin/warehouse/shipments/${row.id}/sign`)
     ElMessage.success(t('warehouse.shipments.signedSuccess'))
     await load()
-  } catch { ElMessage.error(t('warehouse.shipments.operationFailed')) }
+  } catch { /* http 已提示 */ }
 }
 
 function viewDetail(row: Shipment) {
@@ -115,7 +130,10 @@ function viewDetail(row: Shipment) {
   detailVisible.value = true
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadWarehouses()
+})
 </script>
 
 <template>
@@ -130,6 +148,9 @@ onMounted(load)
         <el-table-column prop="code" :label="t('warehouse.shipments.code')" width="160" />
         <el-table-column :label="t('warehouse.shipments.order')" width="130">
           <template #default="{ row }">{{ row.order_code || row.order_id }}</template>
+        </el-table-column>
+        <el-table-column :label="t('warehouse.shipments.warehouse')" width="120">
+          <template #default="{ row }">{{ row.warehouse_name || '—' }}</template>
         </el-table-column>
         <el-table-column prop="logistics_company" :label="t('warehouse.shipments.logistics')" width="120" />
         <el-table-column prop="logistics_no" :label="t('warehouse.shipments.trackingNo')" width="150" />
@@ -183,8 +204,10 @@ onMounted(load)
       <el-form :model="form" label-width="100px">
         <el-row :gutter="12">
           <el-col :span="12">
-            <el-form-item label="订单ID" required>
-              <el-input-number v-model="form.order_id" :min="1" style="width:100%" />
+            <el-form-item :label="t('warehouse.shipments.warehouse')" required>
+              <el-select v-model="form.warehouse_id" style="width:100%" :placeholder="t('warehouse.shipments.warehousePlaceholder')">
+                <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -195,10 +218,17 @@ onMounted(load)
         </el-row>
         <el-row :gutter="12">
           <el-col :span="12">
+            <el-form-item label="订单ID" required>
+              <el-input-number v-model="form.order_id" :min="1" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item :label="t('warehouse.shipments.logisticsCompany')">
               <el-input v-model="form.logistics_company" :placeholder="t('warehouse.shipments.logisticsCompanyPlaceholder')" />
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item :label="t('warehouse.shipments.trackingNo')">
               <el-input v-model="form.logistics_no" />
@@ -234,6 +264,7 @@ onMounted(load)
           <el-descriptions-item :label="t('warehouse.shipments.status')">
             <el-tag :type="statusTagType(detail.status)">{{ statusLabel(detail.status) }}</el-tag>
           </el-descriptions-item>
+          <el-descriptions-item :label="t('warehouse.shipments.shippedWarehouse')">{{ detail.warehouse_name || '—' }}</el-descriptions-item>
           <el-descriptions-item :label="t('warehouse.shipments.shippedAt')">{{ detail.shipped_at || '—' }}</el-descriptions-item>
         </el-descriptions>
         <h4 class="mt-3 mb-2 font-medium">{{ t('warehouse.shipments.shipmentDetails') }}</h4>

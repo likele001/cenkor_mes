@@ -149,7 +149,51 @@ export type PlanWorkshopCapacityOut = { workshop: string; capacity_minutes: numb
 export type PlanUserCapacityOut = { user_id: number; capacity_minutes: number }
 export type PlanEquipmentCapacityOut = { equipment_id: number; capacity_minutes: number }
 
+export type PlanForecastOut = {
+  plan_id: number
+  plan_code: string
+  order_id: number
+  order_code: string
+  due_date: string | null
+  days_left: number | null
+  remaining_tasks: number
+  remaining_qty: number
+  avg_daily_output_7d: number
+  days_needed: number | null
+  kitting_ok: boolean
+  shortage_count: number
+  due_risk: 'low' | 'medium' | 'high' | 'overdue' | 'unknown'
+}
+
+export type PlanApsStrategyItem = {
+  key: string
+  title: string
+  score: number
+  start_date: string | null
+  end_date: string | null
+  work_days: number | null
+  pros: string[]
+  cons: string[]
+}
+
+export type PlanApsStrategyOut = {
+  plan_id: number
+  order_id: number
+  due_date: string | null
+  total_minutes: number
+  strategies: PlanApsStrategyItem[]
+  recommended: string
+  llm_summary: string | null
+  forecast: PlanForecastOut
+}
+
 export const plansApi = {
+  getPlanForecast(id: number) {
+    return http.request<PlanForecastOut>({ url: `/admin/plans/${id}/forecast`, method: 'GET' })
+  },
+  getPlanApsStrategy(id: number) {
+    return http.request<PlanApsStrategyOut>({ url: `/admin/plans/${id}/aps-strategy`, method: 'GET' })
+  },
   getPlanFormOptions(params?: { keyword?: string }) {
     return http.request<{ orders: PlanOrderOption[] }>({
       url: '/admin/plans/meta/form-options',

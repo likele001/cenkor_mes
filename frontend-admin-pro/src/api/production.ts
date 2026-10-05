@@ -537,6 +537,8 @@ export type OrderItemOut = {
   line_no: number
   sku_id: number
   qty: number
+  unit_price: number
+  subtotal: number
   remark: string | null
   created_at: string
   updated_at: string
@@ -565,6 +567,9 @@ export type OrderOut = {
   remark: string | null
   confirmed_at: string | null
   confirmed_by: number | null
+  amount: number
+  cost_amount: number
+  actual_completed_at: string | null
   created_at: string
   updated_at: string
   customer: { id: number; name: string; code: string } | null
@@ -584,6 +589,7 @@ export type OrderItemCreateIn = {
   line_no: number
   sku_id: number
   qty: number
+  unit_price?: number
   remark?: string | null
 }
 
@@ -601,6 +607,7 @@ export type OrderItemUpsertIn = {
   line_no: number
   sku_id: number
   qty: number
+  unit_price?: number
   remark?: string | null
 }
 
@@ -844,6 +851,19 @@ export type SalarySlipOut = {
   confirm_status?: string
   reject_reason?: string | null
   rejected_at?: string | null
+  /** 签收是员工认数，发放是厂里付钱——两条独立状态线 */
+  pay_status?: string
+  paid_at?: string | null
+  paid_by?: number | null
+  paid_remark?: string | null
+}
+
+export type SalaryPaySummary = {
+  month: string
+  paid_amount: number
+  unpaid_amount: number
+  paid_count: number
+  unpaid_count: number
 }
 
 export type HourlyItemOut = {
@@ -1412,7 +1432,32 @@ export const productionApi = {
     return http.request<ExportJobOut>({ url: `/admin/production/reports/salary/export-jobs/${id}`, method: 'GET' })
   },
   listSalarySlips(params: any) {
-    return http.request<ListResp<SalarySlipOut>>({ url: '/admin/production/reports/salary/slips', method: 'GET', params })
+    return http.request<{ items: SalarySlipOut[]; pay_summary?: SalaryPaySummary }>({
+      url: '/admin/production/reports/salary/slips',
+      method: 'GET',
+      params,
+    })
+  },
+  paySalarySlips(data: { month: string; user_ids?: number[]; remark?: string }) {
+    return http.request<{ month: string; paid_count: number; paid_amount: number; items: { id: number; user_id: number; net_amount: number }[] }>({
+      url: '/admin/production/reports/salary/slips/pay',
+      method: 'POST',
+      data,
+    })
+  },
+  paySalarySlip(id: number, remark?: string) {
+    return http.request<{ id: number; pay_status: string; paid_at: string | null; net_amount: number }>({
+      url: `/admin/production/reports/salary/slips/${id}/pay`,
+      method: 'POST',
+      data: remark ? { remark } : {},
+    })
+  },
+  unpaySalarySlip(id: number, reason?: string) {
+    return http.request<{ id: number; pay_status: string }>({
+      url: `/admin/production/reports/salary/slips/${id}/unpay`,
+      method: 'POST',
+      data: reason ? { reason } : {},
+    })
   },
   resetSalarySlipConfirm(id: number) {
     return http.request<any>({ url: `/admin/production/reports/salary/slips/${id}/reset-confirm`, method: 'POST' })
@@ -1475,24 +1520,6 @@ export const productionApi = {
   exportSalarySlips(params?: any) {
     return http.downloadBlob({ url: '/admin/production/reports/salary/slips/export', method: 'GET', params })
   },
-
-  // ===== 行业包管理 =====
-  listIndustries() {
-    return http.request<{ items: any[]; current: string | null }>({ url: '/admin/industry', method: 'GET' })
-  },
-  getCurrentIndustry() {
-    return http.request<{ industry_code: string | null; info: any }>({ url: '/admin/industry/current', method: 'GET' })
-  },
-  activateIndustry(data: { industry_code: string }) {
-    return http.request<{ industry_code: string; message: string }>({ url: '/admin/industry/activate', method: 'POST', data })
-  },
-  deactivateIndustry(data: { industry_code: string }) {
-    return http.request<{ industry_code: string; message: string }>({ url: '/admin/industry/deactivate', method: 'POST', data })
-  },
-  reseedIndustry(data?: { industry_code: string }) {
-    return http.request<{ seed_result: any; message: string }>({ url: '/admin/industry/reseed', method: 'POST', data })
-  },
-
 
   // ==== CRM Leads (appended by patch_full.py) ====
   listCrmLeads(params: any) {
@@ -1672,25 +1699,5 @@ export const productionApi = {
   },
   listCustomerQuotations(customerId: number) {
     return http.request<{ items: QuotationOut[] }>({ url: `/admin/production/crm/customers/${customerId}/quotations`, method: 'GET' })
-  },
-
-  // ==== CRM Import / Export (appended by patch_full.py) ====
-  createCrmImportJob(data: FormData) {
-    return http.request<{ id: number }>({ url: '/admin/production/crm/data-imports', method: 'POST', data, headers: { 'Content-Type': 'multipart/form-data' } })
-  },
-  listCrmImportJobs(params?: any) {
-    return http.request<{ items: any[] }>({ url: '/admin/production/crm/data-imports', method: 'GET', params })
-  },
-  getCrmImportJob(id: number) {
-    return http.request<any>({ url: `/admin/production/crm/data-imports/${id}`, method: 'GET' })
-  },
-  listCrmImportErrors(id: number, params?: any) {
-    return http.request<{ items: any[] }>({ url: `/admin/production/crm/data-imports/${id}/errors`, method: 'GET', params })
-  },
-  exportCrmCustomers(params?: any) {
-    return http.request<Blob>({ url: '/admin/production/customers/export', method: 'GET', params, responseType: 'blob' })
-  },
-  exportCrmLeads(params?: any) {
-    return http.request<Blob>({ url: '/admin/production/crm/leads/export', method: 'GET', params, responseType: 'blob' })
   },
 }

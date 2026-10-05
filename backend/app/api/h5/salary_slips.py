@@ -44,6 +44,8 @@ def my_salary_slip_api(
             "confirm_status": slip.confirm_status,
             "reject_reason": slip.reject_reason,
             "rejected_at": slip.rejected_at,
+            "pay_status": slip.pay_status,
+            "paid_at": slip.paid_at,
         }
     )
 

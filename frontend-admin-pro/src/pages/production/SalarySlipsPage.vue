@@ -6,7 +6,7 @@
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { productionApi, type SalarySlipOut } from '@/api/production'
+import { productionApi, type SalaryPaySummary, type SalarySlipOut } from '@/api/production'
 import { http } from '@/utils/http'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -14,7 +14,9 @@ const { t } = useI18n()
 const loading = ref(false)
 const reminding = ref(false)
 const exporting = ref(false)
+const paying = ref(false)
 const items = ref<SalarySlipOut[]>([])
+const paySummary = ref<SalaryPaySummary | null>(null)
 const query = reactive({
   month: '',
   user_id: undefined as number | undefined,
@@ -42,6 +44,7 @@ async function reload(reset = false) {
     if (query.signed === 'false') params.signed = false
     const res = await productionApi.listSalarySlips(params)
     items.value = res.items ?? []
+    paySummary.value = res.pay_summary ?? null
   } finally {
     loading.value = false
   }
@@ -61,6 +64,80 @@ function confirmStatusTagType(v: string | undefined) {
   if (v === 'signed') return 'success'
   if (v === 'rejected') return 'danger'
   return 'info'
+}
+
+function payStatusLabel(v: string | undefined) {
+  return v === 'paid' ? '已发放' : '未发放'
+}
+
+function payStatusTagType(v: string | undefined) {
+  return v === 'paid' ? 'success' : 'warning'
+}
+
+async function onPayMonth() {
+  if (!query.month || !paySummary.value) return
+  const s = paySummary.value
+  if (!s.unpaid_count) {
+    ElMessage.info('本月没有待发放的工资条')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认发放 ${query.month} 工资：${s.unpaid_count} 人，合计 ¥${money(s.unpaid_amount)}。发放会写入现金流水，可在「财务流水」查询。`,
+      '批量发放工资',
+      { type: 'warning', confirmButtonText: '确认发放', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  paying.value = true
+  try {
+    const res = await productionApi.paySalarySlips({ month: query.month })
+    ElMessage.success(`已发放 ${res.paid_count} 人，合计 ¥${money(res.paid_amount)}`)
+    await reload()
+  } finally {
+    paying.value = false
+  }
+}
+
+async function onPayRow(row: SalarySlipOut) {
+  try {
+    await ElMessageBox.confirm(`确认发放 ${row.user_name || `员工 #${row.user_id}`} 的 ${row.month} 工资 ¥${money(row.net_amount)}？`, '发放工资', {
+      type: 'warning',
+      confirmButtonText: '确认发放',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await productionApi.paySalarySlip(row.id)
+    ElMessage.success('已记发放')
+    await reload()
+  } catch { /* http 已提示 */ }
+}
+
+async function onUnpayRow(row: SalarySlipOut) {
+  let reason = ''
+  try {
+    const res = await ElMessageBox.prompt('撤销发放需要写明原因（会在现金流水追加一笔冲销）', '撤销发放', {
+      inputPlaceholder: '例如：金额算错、重复发放',
+      confirmButtonText: '撤销',
+      cancelButtonText: '取消',
+    })
+    reason = String(res.value || '').trim()
+  } catch {
+    return
+  }
+  if (!reason) {
+    ElMessage.warning('请填写撤销原因')
+    return
+  }
+  try {
+    await productionApi.unpaySalarySlip(row.id, reason)
+    ElMessage.success('已撤销发放')
+    await reload()
+  } catch { /* http 已提示 */ }
 }
 
 async function exportExcel() {
@@ -151,10 +228,16 @@ onMounted(() => {
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="reload(true)">{{ t('production.common.search') }}</el-button>
+          <el-button type="success" plain @click="onPayMonth" :loading="paying" :disabled="!query.month">发放本月工资</el-button>
           <el-button plain @click="onRemind" :loading="reminding" :disabled="!query.month">{{ t('production.salarySlips.remindUnsigned') }}</el-button>
           <el-button :loading="exporting" @click="exportExcel">{{ t('common.exportExcel') }}</el-button>
         </el-form-item>
       </el-form>
+
+      <div v-if="paySummary" class="mb-3 flex flex-wrap gap-3 text-sm">
+        <span>已发放 <span class="font-medium text-emerald-600">{{ paySummary.paid_count }}</span> 人 / ¥{{ money(paySummary.paid_amount) }}</span>
+        <span>待发放 <span class="font-medium text-orange-600">{{ paySummary.unpaid_count }}</span> 人 / ¥{{ money(paySummary.unpaid_amount) }}</span>
+      </div>
 
       <div class="mt-4" v-loading="loading">
         <el-table class="hidden lg:block w-full" :data="items" stripe style="width: 100%">
@@ -200,10 +283,24 @@ onMounted(() => {
               </el-button>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="发放" width="110">
             <template #default="{ row }">
+              <el-tooltip v-if="row.paid_remark" :content="row.paid_remark" placement="top">
+                <el-tag :type="payStatusTagType(row.pay_status)">{{ payStatusLabel(row.pay_status) }}</el-tag>
+              </el-tooltip>
+              <el-tag v-else :type="payStatusTagType(row.pay_status)">{{ payStatusLabel(row.pay_status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="paid_at" label="发放时间" width="170">
+            <template #default="{ row }">{{ row.paid_at || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="230" fixed="right">
+            <template #default="{ row }">
+              <el-button v-if="row.pay_status !== 'paid'" size="small" type="success" @click="onPayRow(row)">发放</el-button>
+              <el-button v-else size="small" type="warning" @click="onUnpayRow(row)">撤销</el-button>
               <el-button
                 v-if="row.signature_attachment_id"
+                class="ml-2"
                 size="small"
                 @click="downloadSignature(row.signature_attachment_id, `salary_signature_${row.month}_${row.user_id}.png`)"
               >
@@ -247,8 +344,15 @@ onMounted(() => {
                 <el-tag v-else type="info" size="small">{{ t('production.salarySlips.unsigned') }}</el-tag>
                 <span v-if="row.signed_at" class="block text-xs text-el-placeholder mt-1">{{ row.signed_at }}</span>
               </dd>
+              <dt>发放</dt>
+              <dd class="text-left">
+                <el-tag :type="payStatusTagType(row.pay_status)" size="small">{{ payStatusLabel(row.pay_status) }}</el-tag>
+                <span v-if="row.paid_at" class="block text-xs text-el-placeholder mt-1">{{ row.paid_at }}</span>
+              </dd>
             </dl>
             <div class="admin-mobile-actions">
+              <el-button v-if="row.pay_status !== 'paid'" size="small" type="success" @click="onPayRow(row)">发放</el-button>
+              <el-button v-else size="small" type="warning" @click="onUnpayRow(row)">撤销发放</el-button>
               <el-button
                 v-if="row.signature_attachment_id"
                 size="small"

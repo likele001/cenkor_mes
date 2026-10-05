@@ -80,11 +80,10 @@ def dry_run_api(
         return ok(
             precheck_order_for_automation(
                 db,
-                user.tenant_id,
                 payload.order_id,
                 allow_shortage=payload.allow_shortage,
             )
         )
     if payload.plan_id:
-        return ok(precheck_plan_for_automation(db, user.tenant_id, payload.plan_id))
+        return ok(precheck_plan_for_automation(db, payload.plan_id))
     raise HTTPException(status_code=400, detail="请提供 order_id 或 plan_id")

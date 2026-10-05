@@ -23,6 +23,13 @@ from app.schemas.subcontract import (
 router = APIRouter()
 
 
+def _sku_fields(sku) -> dict:
+    return {
+        "sku_code": sku.code if sku else None,
+        "sku_name": sku.name if sku else None,
+    }
+
+
 def _item_out(item) -> dict:
     return {
         "id": item.id,
@@ -34,8 +41,7 @@ def _item_out(item) -> dict:
         "sent_qty": item.sent_qty,
         "received_qty": item.received_qty,
         "remark": item.remark,
-        "sku_code": item.sku.code if item.sku else None,
-        "sku_name": item.sku.name if item.sku else None,
+        **_sku_fields(item.sku),
         "process_name": item.process.name if item.process else None,
     }
 
@@ -95,6 +101,7 @@ def detail_api(
     order = get_order_by_id(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="委外单不存在")
+    sku_by_item = {i.id: i.sku for i in (order.items or [])}
     return ok({
         "id": order.id,
         "supplier_id": order.supplier_id,
@@ -111,6 +118,9 @@ def detail_api(
                 "id": l.id, "order_id": l.order_id, "item_id": l.item_id,
                 "qty": l.qty, "remark": l.remark,
                 "sent_by": l.sent_by, "sent_at": l.sent_at,
+                "warehouse_id": l.warehouse_id,
+                "warehouse_name": l.warehouse.name if l.warehouse else None,
+                **_sku_fields(sku_by_item.get(l.item_id)),
             }
             for l in (order.send_logs or [])
         ],
@@ -119,6 +129,9 @@ def detail_api(
                 "id": l.id, "order_id": l.order_id, "item_id": l.item_id,
                 "qty": l.qty, "remark": l.remark,
                 "received_by": l.received_by, "received_at": l.received_at,
+                "warehouse_id": l.warehouse_id,
+                "warehouse_name": l.warehouse.name if l.warehouse else None,
+                **_sku_fields(sku_by_item.get(l.item_id)),
             }
             for l in (order.receive_logs or [])
         ],
@@ -154,7 +167,7 @@ def send_api(
     if not order:
         raise HTTPException(status_code=404, detail="委外单不存在")
     try:
-        add_send_log(db, order, body.item_id, body.qty, body.remark, user.id)
+        add_send_log(db, order, body.item_id, body.qty, body.remark, user.id, body.warehouse_id)
         db.commit()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -172,7 +185,7 @@ def receive_api(
     if not order:
         raise HTTPException(status_code=404, detail="委外单不存在")
     try:
-        add_receive_log(db, order, body.item_id, body.qty, body.remark, user.id)
+        add_receive_log(db, order, body.item_id, body.qty, body.remark, user.id, body.warehouse_id)
         db.commit()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

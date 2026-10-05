@@ -64,6 +64,7 @@ def notify_users_with_permission(
     level: str = "info",
     biz_type: str | None = None,
     biz_id: int | None = None,
+    feishu_event: str | None = None,
 ) -> int:
     stmt = (
         select(User.id)
@@ -88,6 +89,7 @@ def notify_users_with_permission(
             level=level,
             biz_type=biz_type,
             biz_id=biz_id,
+            feishu_event=feishu_event,
         )
         n += 1
     return n

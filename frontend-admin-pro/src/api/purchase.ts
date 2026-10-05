@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 import { http } from '@/utils/http'
 import type { ListResp } from '@/types/api'
-import type { ExportJobOut } from '@/api/production'
 
 export type PurchaseOrderReturnItemIn = {
   item_id: number
@@ -64,50 +63,6 @@ export type PurchaseReceiveItemIn = {
 export type PurchaseReceiveIn = {
   warehouse_id: number
   items?: PurchaseReceiveItemIn[] | null
-}
-
-export type WarehouseOut = {
-  id: number
-  code: string
-  name: string
-  address?: string | null
-}
-
-export type SupplierStatementOut = {
-  id: number
-  supplier_id: number
-  supplier_code: string | null
-  supplier_name: string | null
-  code: string
-  period_from: string | null
-  period_to: string | null
-  amount: number
-  status: string
-  confirmed_at: string | null
-  confirmed_by: number | null
-  paid_at: string | null
-  paid_by: number | null
-  created_at: string
-}
-
-export type SupplierStatementItemOut = {
-  purchase_order_id: number
-  purchase_order_code: string | null
-  received_qty: number
-  amount: number
-  created_at: string
-}
-
-export type SupplierStatementDetailOut = SupplierStatementOut & {
-  supplier: { id: number; code: string; name: string } | null
-  items: SupplierStatementItemOut[]
-}
-
-export type SupplierStatementCreateIn = {
-  supplier_id: number
-  code?: string | null
-  period_from?: string | null
-  period_to?: string | null
 }
 
 export type KittingItemOut = {
@@ -185,49 +140,6 @@ export const purchaseApi = {
       method: 'GET',
       params,
     })
-  },
-
-  listStatements(params: any) {
-    return http.request<ListResp<SupplierStatementOut>>({ url: '/admin/purchase/statements', method: 'GET', params })
-  },
-  exportStatementsExcel(params: { supplier_id?: number; status?: string }) {
-    return http.request<ExportJobOut>({ url: '/admin/purchase/statements/export', method: 'POST', params })
-  },
-  createStatement(data: SupplierStatementCreateIn) {
-    return http.request<SupplierStatementOut>({ url: '/admin/purchase/statements', method: 'POST', data })
-  },
-  getStatement(id: number) {
-    return http.request<SupplierStatementDetailOut>({ url: `/admin/purchase/statements/${id}`, method: 'GET' })
-  },
-  printStatement(id: number, params?: { template_id?: number; template_code?: string }) {
-    return http.request<{ html: string; statement_id: number; code: string; template_id: number }>({
-      url: `/admin/purchase/statements/${id}/print`,
-      method: 'GET',
-      params,
-    })
-  },
-  exportStatementPdf(id: number, params?: { template_id?: number; template_code?: string }) {
-    return http.request<{ attachment_id: number; filename: string; url: string }>({
-      url: `/admin/purchase/statements/${id}/print-pdf`,
-      method: 'GET',
-      params,
-    })
-  },
-  confirmStatement(id: number) {
-    return http.request<{ id: number; status: string; confirmed_at: string | null; confirmed_by: number | null }>({
-      url: `/admin/purchase/statements/${id}/confirm`,
-      method: 'POST',
-    })
-  },
-  markStatementPaid(id: number) {
-    return http.request<{ id: number; status: string; paid_at: string | null; paid_by: number | null }>({
-      url: `/admin/purchase/statements/${id}/mark-paid`,
-      method: 'POST',
-    })
-  },
-
-  listWarehouses() {
-    return http.request<ListResp<WarehouseOut>>({ url: '/admin/warehouse/warehouses', method: 'GET' })
   },
 
   getPlanKitting(planId: number) {

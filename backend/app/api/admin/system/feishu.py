@@ -409,6 +409,37 @@ def update_department_binding(
     })
 
 
+def _describe_targets(db: Session, cfg: dict, targets: list[dict]) -> list[dict]:
+    """把解析结果翻成人能核对的样子。
+
+    模拟器给的是配规则的人看的，只回 ou_xxx / oc_xxx 他没法判断到底命中了谁。
+    """
+    group_names = {str(g.get("code")): (g.get("name") or "") for g in cfg.get("groups") or []}
+    out: list[dict] = []
+    for t in targets:
+        row: dict[str, Any] = {"kind": t["kind"], "ref": t["ref"]}
+        if t["kind"] == "user":
+            target = db.get(User, int(t["user_id"])) if t.get("user_id") else None
+            row["name"] = (target.full_name or target.username) if target else None
+            row["username"] = target.username if target else None
+        else:
+            code = t.get("chat_code") or ""
+            row["chat_code"] = code
+            row["name"] = "部门自动群" if code == "dept_auto" else (group_names.get(code) or None)
+        out.append(row)
+    return out
+
+
+def _simulate_targets(db: Session, cfg: dict, codes: list[str], scope: dict) -> dict:
+    """整体 + 逐条目标码各解析一遍：逐条才看得出哪一行目标什么都没命中。"""
+    resolved = {code: _describe_targets(db, cfg, resolve_targets(db, [code], **scope)) for code in codes}
+    return {
+        "targets": _describe_targets(db, cfg, resolve_targets(db, codes, **scope)),
+        "by_code": resolved,
+        "unresolved": [code for code, rows in resolved.items() if not rows],
+    }
+
+
 @router.post("/feishu/simulate")
 def simulate(
     payload: SimulateIn,
@@ -421,26 +452,19 @@ def simulate(
         rule = (cfg.get("rules") or {}).get("alert")
     if rule is None:
         raise HTTPException(status_code=404, detail="该事件没有推送规则")
-    targets = resolve_targets(
-        db,
-        rule.get("targets") or [],
-        user_id=payload.user_id,
-        department_id=payload.department_id,
-        workshop=payload.workshop,
-    )
+    scope = {
+        "user_id": payload.user_id,
+        "department_id": payload.department_id,
+        "workshop": payload.workshop,
+    }
     escalation = {
-        level: resolve_targets(
-            db,
-            codes,
-            user_id=payload.user_id,
-            department_id=payload.department_id,
-            workshop=payload.workshop,
-        )
+        level: _describe_targets(db, cfg, resolve_targets(db, codes, **scope))
         for level, codes in (rule.get("escalation") or {}).items()
     }
     return ok({
-        "targets": [{"kind": t["kind"], "ref": t["ref"]} for t in targets],
-        "escalation": {lv: [{"kind": t["kind"], "ref": t["ref"]} for t in ts] for lv, ts in escalation.items()},
+        **_simulate_targets(db, cfg, list(rule.get("targets") or []), scope),
+        "escalation": escalation,
+        "enabled": bool(rule.get("enabled", True)),
         "rule": rule,
     })
 

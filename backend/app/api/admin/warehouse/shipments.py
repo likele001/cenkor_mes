@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_permissions
@@ -14,9 +13,8 @@ from app.core.response import ok
 from app.crud.notification import create_notification
 from app.crud.order import get_order_by_id
 from app.crud.shipment import create_shipment, get_shipment, list_shipments
-from app.crud.warehouse import adjust_stock
+from app.crud.warehouse import adjust_stock, resolve_warehouse_id
 from app.models.shipment import Shipment
-from app.models.warehouse import Warehouse
 from app.models.user import User
 
 router = APIRouter(prefix="/shipments", dependencies=[Depends(require_permissions(["order.manage"]))])
@@ -30,6 +28,7 @@ class ShipmentItemIn(BaseModel):
 class ShipmentIn(BaseModel):
     order_id: int
     code: str = Field(min_length=1, max_length=64)
+    warehouse_id: int | None = Field(default=None, ge=1, description="出货仓库；多仓必填")
     logistics_company: str | None = Field(default=None, max_length=128)
     logistics_no: str | None = Field(default=None, max_length=64)
     remark: str | None = Field(default=None, max_length=500)
@@ -41,6 +40,9 @@ def _out(s: Shipment) -> dict:
         "id": s.id,
         "order_id": s.order_id,
         "order_code": s.order.code if s.order else None,
+        "warehouse_id": s.warehouse_id,
+        "warehouse_code": s.warehouse.code if s.warehouse else None,
+        "warehouse_name": s.warehouse.name if s.warehouse else None,
         "code": s.code,
         "logistics_company": s.logistics_company,
         "logistics_no": s.logistics_no,
@@ -84,7 +86,19 @@ def get_api(shipment_id: int, db: Session = Depends(get_db), user: User = Depend
 
 @router.post("")
 def create_api(payload: ShipmentIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    s = create_shipment(db, payload.model_dump())
+    data = payload.model_dump()
+    if data.get("warehouse_id"):
+        try:
+            data["warehouse_id"] = resolve_warehouse_id(db, data["warehouse_id"], action="发货")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        # 单仓工厂可不选；多仓时这里就报错，别拖到发货那一刻
+        try:
+            data["warehouse_id"] = resolve_warehouse_id(db, None, action="发货")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    s = create_shipment(db, data)
     db.commit()
     return ok(_out(s))
 
@@ -97,24 +111,25 @@ def ship_api(shipment_id: int, db: Session = Depends(get_db), user: User = Depen
     if s.status != "pending":
         raise HTTPException(status_code=400, detail="仅待发货状态可确认发货")
 
-    warehouse = db.scalar(
-        select(Warehouse).where(
-            Warehouse.is_active.is_(True)
-        ).order_by(Warehouse.id.asc()).limit(1)
-    )
-    if not warehouse:
-        raise HTTPException(status_code=400, detail="请先创建仓库")
+    try:
+        warehouse_id = resolve_warehouse_id(db, s.warehouse_id, action="发货")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    s.warehouse_id = warehouse_id
 
     for item in (s.items or []):
-        adjust_stock(
-            db,
-            warehouse_id=warehouse.id,
-            sku_id=item.sku_id,
-            change_qty=-item.qty,
-            biz_type="ship_out",
-            biz_id=s.id,
-            remark=f"发货#{s.code} {item.sku.code if item.sku else ''} x{item.qty}",
-        )
+        try:
+            adjust_stock(
+                db,
+                warehouse_id=warehouse_id,
+                sku_id=item.sku_id,
+                change_qty=-item.qty,
+                biz_type="ship_out",
+                biz_id=s.id,
+                remark=f"发货#{s.code} {item.sku.code if item.sku else ''} x{item.qty}",
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     s.status = "shipped"
     s.shipped_at = datetime.now(timezone.utc)

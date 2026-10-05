@@ -1,17 +1,29 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
+from datetime import datetime
+from io import BytesIO
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_permissions, get_current_user, get_db, require_any_permissions
 from app.core.response import ok
+from app.crud.attachment import create_attachment
 from app.crud.customer import create_customer, get_customer_by_code, get_customer_by_id, list_customers, update_customer
 from app.crud.customer_product import list_customer_product_ids, list_customer_products_with_detail, set_customer_products
+from app.crud.print_template import (
+    get_print_template_by_code,
+    get_print_template_by_id,
+    html_to_pdf_bytes,
+    render_print_template,
+    wrap_pdf_html_with_page_number)
 from app.crud.user import get_user_by_id
 from app.models.user import User
 from app.schemas.customer import CustomerCreateIn, CustomerProductsSetIn, CustomerUpdateIn
 from app.services.code_generator import BizType, resolve_code
 from app.services.customer_account import ensure_customer_login_user
+from app.storage import get_active_storage
 
 router = APIRouter(dependencies=[Depends(require_any_permissions(["customer.manage"]))])
 
@@ -181,3 +193,103 @@ def update_api(
             login_password=payload.login_password)
     db.commit()
     return ok(_out(item, db))
+
+
+_CUSTOMER_PRINT_EXAMPLE = (
+    "<html><head><meta charset=\"utf-8\" />"
+    "<style>@page{size:A5;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;font-size:12px}"
+    "h1{font-size:18px;margin:0 0 8px}</style></head><body>"
+    "<h1>客户名片</h1>"
+    "<div>编码：{{ customer.code }}</div>"
+    "<div>名称：{{ customer.name }}</div>"
+    "<div>联系人：{{ customer.contact_name }}</div>"
+    "<div>电话：{{ customer.contact_phone }}</div>"
+    "<div>地址：{{ customer.address }}</div>"
+    "<div>等级：{{ customer.customer_level }}　行业：{{ customer.industry }}</div>"
+    "<div>负责人：{{ customer.owner_name }}</div>"
+    "<div>备注：{{ customer.remark }}</div>"
+    "<div style=\"margin-top:8px;color:#888\">打印时间：{{ printed_at }}</div>"
+    "</body></html>"
+)
+
+
+def _customer_print_payload(db: Session, customer_id: int, template_id: int | None, template_code: str):
+    """打印与打印 PDF 共用：模板解析 + 变量渲染。"""
+    cust = _need_customer(db, customer_id)
+    owner = get_user_by_id(db, user_id=cust.owner_user_id) if cust.owner_user_id else None
+    if template_id is not None:
+        tpl = get_print_template_by_id(db, template_id=template_id)
+    else:
+        tpl = get_print_template_by_code(db, code=template_code)
+    if not tpl or not tpl.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"未找到可用打印模板（请在 系统管理-打印模板 创建 code={template_code} 的模板）。"
+                f"示例内容：{_CUSTOMER_PRINT_EXAMPLE}"))
+    html = render_print_template(
+        tpl.content,
+        {
+            "customer": {
+                "id": cust.id,
+                "code": cust.code,
+                "name": cust.name,
+                "contact_name": cust.contact_name or "",
+                "contact_phone": cust.contact_phone or "",
+                "address": cust.address or "",
+                "industry": getattr(cust, "industry", None) or "",
+                "customer_level": getattr(cust, "customer_level", None) or "",
+                "remark": cust.remark or "",
+                "owner_name": (owner.full_name or owner.username) if owner else "",
+            },
+            "printed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+    return cust, tpl, html
+
+
+@router.get("/{customer_id}/print")
+def print_api(
+    customer_id: int,
+    template_id: int | None = Query(default=None, ge=1),
+    template_code: str = Query(default="customer_card", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)):
+    cust, tpl, html = _customer_print_payload(db, customer_id, template_id, template_code)
+    return ok({"html": html, "customer_id": cust.id, "code": cust.code, "template_id": tpl.id})
+
+
+@router.get("/{customer_id}/print-pdf")
+def print_pdf_api(
+    customer_id: int,
+    template_id: int | None = Query(default=None, ge=1),
+    template_code: str = Query(default="customer_card", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)):
+    cust, _tpl, html = _customer_print_payload(db, customer_id, template_id, template_code)
+    printed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    wrapped = wrap_pdf_html_with_page_number(
+        html, title=f"客户 {cust.code or cust.id}", printed_at=printed_at)
+    try:
+        pdf_bytes = html_to_pdf_bytes(wrapped)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    storage = get_active_storage(db)
+    filename = f"customer_{cust.code or cust.id}.pdf"
+    stored = storage.save(
+        filename=filename,
+        content_type="application/pdf",
+        stream=BytesIO(pdf_bytes),
+        max_size=settings.FILE_MAX_UPLOAD_SIZE)
+    att = create_attachment(
+        db,
+        uploader_id=user.id,
+        storage_driver=stored.driver,
+        storage_key=stored.key,
+        original_filename=filename,
+        content_type="application/pdf",
+        size=stored.size,
+        sha256=stored.sha256)
+    db.commit()
+    db.refresh(att)
+    return ok({"attachment_id": att.id, "filename": att.original_filename, "url": f"/api/files/{att.id}?download=true"})

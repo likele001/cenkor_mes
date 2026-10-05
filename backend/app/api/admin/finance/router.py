@@ -181,10 +181,12 @@ def profit_api(
     else:
         end = date(year, mon + 1, 1)
 
+    # 利润按计提口径算：确认应收记 ar、确认应付记 ap；receipt/payment 是真金白银的收付，
+    # 混进来会把「还没付的钱」当成本、「刚确认的单」当收入。
     revenue = db.scalar(
         select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
             FinanceLedger.direction == "in",
-            FinanceLedger.category == "receipt",
+            FinanceLedger.category == "ar",
             FinanceLedger.biz_date >= start,
             FinanceLedger.biz_date < end,
         )
@@ -192,7 +194,7 @@ def profit_api(
     cost = db.scalar(
         select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
             FinanceLedger.direction == "out",
-            FinanceLedger.category == "payment",
+            FinanceLedger.category == "ap",
             FinanceLedger.biz_date >= start,
             FinanceLedger.biz_date < end,
         )
@@ -209,7 +211,7 @@ def profit_api(
         .where(
             FinanceLedger.party_type == "customer",
             FinanceLedger.direction == "in",
-            FinanceLedger.category == "receipt",
+            FinanceLedger.category == "ar",
             FinanceLedger.biz_date >= start,
             FinanceLedger.biz_date < end,
         )
@@ -224,7 +226,7 @@ def profit_api(
         .where(
             FinanceLedger.party_type == "supplier",
             FinanceLedger.direction == "out",
-            FinanceLedger.category == "payment",
+            FinanceLedger.category == "ap",
             FinanceLedger.biz_date >= start,
             FinanceLedger.biz_date < end,
         )
@@ -329,20 +331,14 @@ def confirm_api(
         raise HTTPException(status_code=400, detail="对账单不存在")
     if item.status != "draft":
         raise HTTPException(status_code=400, detail="状态不允许确认")
-    update_statement_status(db, item, "confirmed")
-    today = datetime.now().date()
-    create_ledger(
+    update_statement_status(db, item, "confirmed", operator=user.id, action="confirm")
+    sp_crud.create_accrual_ledger(
         db,
-        direction="in",
-        category="receipt",
-        party_type="customer",
-        party_id=item.customer_id,
         statement_type="statement",
-        statement_id=item.id,
-        amount=item.total_amount,
-        biz_date=today,
-        remark=f"客户对账单{item.code}确认应收",
+        stmt=item,
+        biz_date=datetime.now().date(),
         created_by=user.id,
+        remark=f"客户对账单{item.code}确认应收",
     )
     db.commit()
     return ok({"id": item.id, "status": "confirmed"})
@@ -351,18 +347,30 @@ def confirm_api(
 @router.post("/{statement_id}/mark-paid")
 def mark_paid_api(
     statement_id: int,
+    paid_date: date | None = Query(default=None, description="收款日，默认今天"),
+    method: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     item = get_statement_by_id(db, statement_id=statement_id)
     if not item:
         raise HTTPException(status_code=400, detail="对账单不存在")
+    if item.status == "draft":
+        raise HTTPException(status_code=400, detail="需先确认对账单")
     if item.status == "paid":
         return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
-    if item.status not in ("confirmed", "partial"):
-        raise HTTPException(status_code=400, detail="状态不允许标记已收款")
-    item.paid_amount = item.total_amount
-    update_statement_status(db, item, "paid")
+    try:
+        sp_crud.settle_statement(
+            db,
+            statement_type="statement",
+            statement_id=statement_id,
+            paid_date=paid_date,
+            method=method,
+            remark=f"客户对账单{item.code}整单收款",
+            created_by=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     db.commit()
     db.refresh(item)
     return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
@@ -436,7 +444,7 @@ def reverse_payment_api(
     user: User = Depends(get_current_user),
 ):
     try:
-        sp_crud.reverse_payment(db, payment_id)
+        sp_crud.reverse_payment(db, payment_id, created_by=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     db.commit()

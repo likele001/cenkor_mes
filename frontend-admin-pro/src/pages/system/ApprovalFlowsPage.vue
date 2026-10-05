@@ -8,7 +8,7 @@
       <template #header>
         <div class="flex items-center justify-between">
           <span class="text-[16px] font-semibold">{{ t('menu.approvalFlows') }}</span>
-          <div class="flex items-center gap-2">
+          <div v-if="tab === 'flows'" class="flex items-center gap-2">
             <el-select v-model="filterBiz" clearable placeholder="业务类型" style="width:130px">
               <el-option v-for="(l, k) in BIZ_TYPES" :key="k" :label="l" :value="k" />
             </el-select>
@@ -17,67 +17,165 @@
         </div>
       </template>
       <div class="flex-1 overflow-auto p-3 min-h-0">
-        <div v-loading="loading">
-          <el-table class="hidden lg:block w-full" :data="filtered" stripe border style="width:100%">
-            <el-table-column prop="name" label="名称" min-width="150" />
-            <el-table-column label="业务类型" width="110">
-              <template #default="{row}">{{ BIZ_TYPES[row.biz_type] || row.biz_type }}</template>
-            </el-table-column>
-            <el-table-column label="审批步骤" min-width="200">
-              <template #default="{row}">
-                <div class="flex items-center gap-1 flex-wrap">
-                  <template v-for="(s, i) in row.steps" :key="s.id">
-                    <el-tag size="small" :type="s.is_required ? 'primary' : 'info'">{{ ROLE_LABELS[s.approver_role] || s.approver_role }}</el-tag>
-                    <span v-if="i < row.steps.length - 1" class="text-el-placeholder text-xs">→</span>
+        <el-tabs v-model="tab">
+          <el-tab-pane label="审批流模板" name="flows">
+            <div v-loading="loading">
+              <el-table class="hidden lg:block w-full" :data="filtered" stripe border style="width:100%">
+                <el-table-column prop="name" label="名称" min-width="150" />
+                <el-table-column label="业务类型" width="110">
+                  <template #default="{row}">{{ BIZ_TYPES[row.biz_type] || row.biz_type }}</template>
+                </el-table-column>
+                <el-table-column label="审批步骤" min-width="200">
+                  <template #default="{row}">
+                    <div class="flex items-center gap-1 flex-wrap">
+                      <template v-for="(s, i) in row.steps" :key="s.id">
+                        <el-tag size="small" :type="s.is_required ? 'primary' : 'info'">{{ ROLE_LABELS[s.approver_role] || s.approver_role }}</el-tag>
+                        <span v-if="i < row.steps.length - 1" class="text-el-placeholder text-xs">→</span>
+                      </template>
+                      <el-tag v-if="!row.steps.length" size="small" type="warning">无步骤</el-tag>
+                    </div>
                   </template>
-                  <el-tag v-if="!row.steps.length" size="small" type="warning">无步骤</el-tag>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="80">
-              <template #default="{row}">
-                <el-switch :model-value="row.is_active" @change="toggleActive(row)" />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="220" fixed="right">
-              <template #default="{row}">
-                <el-button size="small" @click="openSteps(row)">步骤管理</el-button>
-                <el-button size="small" @click="openEdit(row)">{{ t('production.common.edit') }}</el-button>
-                <el-popconfirm title="确认删除该审批流？" @confirm="doDelete(row)">
-                  <template #reference><el-button size="small" type="danger" plain>{{ t('production.common.delete') }}</el-button></template>
-                </el-popconfirm>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div class="lg:hidden space-y-3">
-            <div v-for="row in filtered" :key="row.id" class="admin-mobile-row">
-              <div class="admin-mobile-row__head">
-                <div class="font-semibold">{{ row.name }}</div>
-                <el-switch :model-value="row.is_active" size="small" @change="toggleActive(row)" />
-              </div>
-              <dl class="admin-mobile-kv">
-                <dt>业务</dt><dd>{{ BIZ_TYPES[row.biz_type] || row.biz_type }}</dd>
-                <dt>步骤</dt>
-                <dd>
-                  <div class="flex items-center gap-1 flex-wrap">
-                    <el-tag v-for="s in row.steps" :key="s.id" size="small" :type="s.is_required ? 'primary' : 'info'">
-                      {{ ROLE_LABELS[s.approver_role] || s.approver_role }}
-                    </el-tag>
-                    <el-tag v-if="!row.steps.length" size="small" type="warning">无步骤</el-tag>
+                </el-table-column>
+                <el-table-column label="状态" width="80">
+                  <template #default="{row}">
+                    <el-switch :model-value="row.is_active" @change="toggleActive(row)" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="220" fixed="right">
+                  <template #default="{row}">
+                    <el-button size="small" @click="openSteps(row)">步骤管理</el-button>
+                    <el-button size="small" @click="openEdit(row)">{{ t('production.common.edit') }}</el-button>
+                    <el-popconfirm title="确认删除该审批流？" @confirm="doDelete(row)">
+                      <template #reference><el-button size="small" type="danger" plain>{{ t('production.common.delete') }}</el-button></template>
+                    </el-popconfirm>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="lg:hidden space-y-3">
+                <div v-for="row in filtered" :key="row.id" class="admin-mobile-row">
+                  <div class="admin-mobile-row__head">
+                    <div class="font-semibold">{{ row.name }}</div>
+                    <el-switch :model-value="row.is_active" size="small" @change="toggleActive(row)" />
                   </div>
-                </dd>
-              </dl>
-              <div class="admin-mobile-actions">
-                <el-button size="small" @click="openSteps(row)">步骤</el-button>
-                <el-button size="small" @click="openEdit(row)">编辑</el-button>
-                <el-popconfirm title="确认删除？" @confirm="doDelete(row)">
-                  <template #reference><el-button size="small" type="danger" plain>删除</el-button></template>
-                </el-popconfirm>
+                  <dl class="admin-mobile-kv">
+                    <dt>业务</dt><dd>{{ BIZ_TYPES[row.biz_type] || row.biz_type }}</dd>
+                    <dt>步骤</dt>
+                    <dd>
+                      <div class="flex items-center gap-1 flex-wrap">
+                        <el-tag v-for="s in row.steps" :key="s.id" size="small" :type="s.is_required ? 'primary' : 'info'">
+                          {{ ROLE_LABELS[s.approver_role] || s.approver_role }}
+                        </el-tag>
+                        <el-tag v-if="!row.steps.length" size="small" type="warning">无步骤</el-tag>
+                      </div>
+                    </dd>
+                  </dl>
+                  <div class="admin-mobile-actions">
+                    <el-button size="small" @click="openSteps(row)">步骤</el-button>
+                    <el-button size="small" @click="openEdit(row)">编辑</el-button>
+                    <el-popconfirm title="确认删除？" @confirm="doDelete(row)">
+                      <template #reference><el-button size="small" type="danger" plain>删除</el-button></template>
+                    </el-popconfirm>
+                  </div>
+                </div>
+                <el-empty v-if="!loading && !filtered.length" description="暂无审批流" />
               </div>
             </div>
-            <el-empty v-if="!loading && !filtered.length" description="暂无审批流" />
-          </div>
-        </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="审批留痕" name="records">
+            <div class="flex items-center gap-2 flex-wrap mb-3">
+              <el-select v-model="recQuery.biz_type" clearable placeholder="单据类型" style="width:150px">
+                <el-option v-for="(l, k) in TRAIL_BIZ_TYPES" :key="k" :label="l" :value="k" />
+              </el-select>
+              <el-input-number
+                v-model="recQuery.biz_id"
+                :min="1"
+                :controls="false"
+                placeholder="单据ID"
+                style="width:120px"
+                :disabled="!recQuery.biz_type"
+              />
+              <el-select v-model="recQuery.action" clearable placeholder="动作" style="width:130px">
+                <el-option v-for="(l, k) in TRAIL_ACTIONS" :key="k" :label="l" :value="k" />
+              </el-select>
+              <el-button type="primary" @click="loadRecords(true)">查询</el-button>
+              <span v-if="!recQuery.biz_type && recQuery.biz_id" class="text-xs text-el-placeholder">填单据ID前请先选单据类型</span>
+            </div>
+
+            <div v-loading="recLoading">
+              <el-table class="hidden lg:block w-full" :data="records" stripe border style="width:100%">
+                <el-table-column prop="created_at" label="时间" width="170" />
+                <el-table-column label="单据" width="170">
+                  <template #default="{row}">
+                    <span class="text-[12px]">{{ TRAIL_BIZ_TYPES[row.biz_type] || row.biz_type }}</span>
+                    <span class="text-el-placeholder text-[12px] ml-1">{{ row.biz_code || `#${row.biz_id}` }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="动作" width="110">
+                  <template #default="{row}">
+                    <el-tag size="small" :type="actionTagType(row.action)">{{ TRAIL_ACTIONS[row.action] || row.action }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态变化" width="170">
+                  <template #default="{row}">
+                    <span class="text-[12px]">{{ row.from_status || '—' }} → {{ row.to_status || '—' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作人" width="120">
+                  <template #default="{row}">{{ row.operator_name || '系统' }}</template>
+                </el-table-column>
+                <el-table-column prop="channel" label="渠道" width="80" />
+                <el-table-column label="原因/备注" min-width="200">
+                  <template #default="{row}">
+                    <span class="text-[12px]">{{ row.reason || '—' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="详情" width="90">
+                  <template #default="{row}">
+                    <el-tooltip v-if="row.detail" :content="formatDetail(row.detail)" placement="top">
+                      <el-button size="small" text>查看</el-button>
+                    </el-tooltip>
+                    <span v-else class="text-el-placeholder text-[12px]">—</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+
+              <div class="lg:hidden space-y-3">
+                <div v-for="row in records" :key="row.id" class="admin-mobile-row">
+                  <div class="admin-mobile-row__head">
+                    <div class="min-w-0">
+                      <div class="font-semibold text-el-primary">{{ TRAIL_BIZ_TYPES[row.biz_type] || row.biz_type }}</div>
+                      <div class="text-xs text-el-placeholder">{{ row.biz_code || `#${row.biz_id}` }} · {{ row.created_at }}</div>
+                    </div>
+                    <el-tag size="small" :type="actionTagType(row.action)">{{ TRAIL_ACTIONS[row.action] || row.action }}</el-tag>
+                  </div>
+                  <dl class="admin-mobile-kv">
+                    <dt>状态</dt>
+                    <dd>{{ row.from_status || '—' }} → {{ row.to_status || '—' }}</dd>
+                    <dt>操作人</dt>
+                    <dd>{{ row.operator_name || '系统' }}（{{ row.channel }}）</dd>
+                    <dt>原因</dt>
+                    <dd class="text-left">{{ row.reason || '—' }}</dd>
+                    <dt>详情</dt>
+                    <dd class="text-left break-all">{{ row.detail ? formatDetail(row.detail) : '—' }}</dd>
+                  </dl>
+                </div>
+                <el-empty v-if="!recLoading && !records.length" description="暂无留痕记录" />
+              </div>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+              <el-pagination
+                background
+                layout="total, prev, pager, next"
+                :page-size="recQuery.limit"
+                :total="recTotal"
+                :current-page="recPage"
+                @current-change="onRecordPageChange"
+              />
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </el-card>
 
@@ -123,14 +221,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AdminPage from '@/components/admin/AdminPage.vue'
-import { approvalApi, type ApprovalFlowOut, type ApprovalStep, BIZ_TYPES, ROLE_LABELS } from '@/api/approval'
+import {
+  approvalApi,
+  BIZ_TYPES,
+  ROLE_LABELS,
+  TRAIL_ACTIONS,
+  TRAIL_BIZ_TYPES,
+  type ApprovalFlowOut,
+  type ApprovalRecordOut,
+} from '@/api/approval'
 
 const { t } = useI18n()
 
+const tab = ref<'flows' | 'records'>('flows')
 const loading = ref(false)
 const items = ref<ApprovalFlowOut[]>([])
 const filterBiz = ref('')
@@ -204,6 +311,55 @@ function saveSteps() {
     ElMessage.success('步骤已更新'); stepDlg.open = false; fetchList()
   }).finally(() => { stepDlg.saving = false })
 }
+
+// 留痕
+const recLoading = ref(false)
+const records = ref<ApprovalRecordOut[]>([])
+const recTotal = ref(0)
+const recQuery = reactive({
+  biz_type: '',
+  biz_id: undefined as number | undefined,
+  action: '',
+  offset: 0,
+  limit: 50,
+})
+const recPage = computed(() => Math.floor(recQuery.offset / recQuery.limit) + 1)
+
+function actionTagType(action: string) {
+  if (['reject', 'cancel', 'unpay', 'reverse', 'reset'].includes(action)) return 'danger'
+  if (['confirm', 'pay', 'sign', 'ack'].includes(action)) return 'success'
+  return 'info'
+}
+
+function formatDetail(detail: Record<string, any>) {
+  return Object.entries(detail).map(([k, v]) => `${k}: ${v}`).join('　')
+}
+
+function loadRecords(reset = false) {
+  if (reset) recQuery.offset = 0
+  if (recQuery.biz_id && !recQuery.biz_type) {
+    ElMessage.warning('按单据查留痕需要同时选择单据类型')
+    return
+  }
+  recLoading.value = true
+  approvalApi.listRecords({
+    biz_type: recQuery.biz_type || undefined,
+    biz_id: recQuery.biz_type ? recQuery.biz_id : undefined,
+    action: recQuery.action || undefined,
+    offset: recQuery.offset,
+    limit: recQuery.limit,
+  }).then(r => {
+    records.value = r.items
+    recTotal.value = r.total
+  }).finally(() => { recLoading.value = false })
+}
+
+function onRecordPageChange(p: number) {
+  recQuery.offset = (p - 1) * recQuery.limit
+  loadRecords(false)
+}
+
+watch(tab, (v) => { if (v === 'records' && !records.value.length) loadRecords(true) })
 
 onMounted(fetchList)
 </script>

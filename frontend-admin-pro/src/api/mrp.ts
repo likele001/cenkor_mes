@@ -15,10 +15,12 @@ export interface MrpItemOut {
   qty_per: number
   gross_qty: number
   stock_qty: number
+  on_order_qty: number
   net_qty: number
   suggested_purchase_qty: number
   supplier_id: number | null
   unit_price: string | null
+  purchase_order_id: number | null
   work_order_code: string | null
   order_code: string | null
   sku_code: string | null
@@ -56,16 +58,36 @@ export interface MrpPlanOut {
 export interface MrpComputeIn {
   work_order_ids: number[]
   remark?: string | null
+  /** 限定统计哪些仓库的库存；不传＝全部启用中的仓库 */
+  warehouse_ids?: number[] | null
+}
+
+export interface MrpConvertIn {
+  item_ids?: number[] | null
+  only_with_supplier?: boolean
+  remark?: string | null
+}
+
+export interface MrpConvertOut {
+  plan_id: number
+  plan_code: string
+  status: string
+  purchase_orders: { purchase_order_id: number; code: string; lines: number }[]
+  converted_items: number
+  skipped_no_supplier: number
 }
 
 export const mrpApi = {
   listPlans(params: any) {
-    return http.request<ListResp<MrpPlanBrief>>({ url: '/admin/mrp', method: 'GET', params })
+    return http.request<ListResp<MrpPlanBrief> & { total?: number }>({ url: '/admin/mrp', method: 'GET', params })
   },
   getPlan(id: number) {
     return http.request<MrpPlanOut>({ url: `/admin/mrp/${id}`, method: 'GET' })
   },
   compute(data: MrpComputeIn) {
-    return http.request<{ id: number; code: string }>({ url: '/admin/mrp/compute', method: 'POST', data })
+    return http.request<{ id: number; code: string; total_purchase_qty: number }>({ url: '/admin/mrp/compute', method: 'POST', data })
+  },
+  convertPlan(id: number, data: MrpConvertIn) {
+    return http.request<MrpConvertOut>({ url: `/admin/mrp/${id}/convert`, method: 'POST', data })
   },
 }

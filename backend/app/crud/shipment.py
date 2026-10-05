@@ -15,6 +15,7 @@ def get_shipment(db: Session, shipment_id: int) -> Shipment | None:
         .where(Shipment.id == shipment_id)
         .options(
             selectinload(Shipment.order),
+            selectinload(Shipment.warehouse),
             selectinload(Shipment.items).selectinload(ShipmentItem.sku),
         )
     )
@@ -29,6 +30,7 @@ def list_shipments(
 ) -> list[Shipment]:
     stmt = select(Shipment).options(
         selectinload(Shipment.order),
+        selectinload(Shipment.warehouse),
         selectinload(Shipment.items).selectinload(ShipmentItem.sku),
     )
     if order_id is not None:
@@ -43,6 +45,7 @@ def create_shipment(db: Session, data: dict[str, Any]) -> Shipment:
     s = Shipment(
         order_id=data["order_id"],
         code=data["code"],
+        warehouse_id=data.get("warehouse_id"),
         logistics_company=data.get("logistics_company"),
         logistics_no=data.get("logistics_no"),
         remark=data.get("remark"),

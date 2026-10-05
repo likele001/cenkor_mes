@@ -155,7 +155,15 @@ def submit_unit(
     unit.status = "submitted"
     unit.submitted_at = datetime.now()
     db.flush()
+    _sync_rollup(db, unit)
     return unit
+
+
+def _sync_rollup(db: Session, unit: ReportUnit) -> None:
+    """件次状态一变，任务/工单/订单进度与成本要跟着重算。"""
+    from app.services.production_rollup import sync_after_unit
+
+    sync_after_unit(db, unit)
 
 
 def create_unit_audit(
@@ -181,6 +189,13 @@ def create_unit_audit(
     return audit
 
 
+def set_unit_status(db: Session, unit: ReportUnit, new_status: str) -> ReportUnit:
+    unit.status = new_status
+    db.flush()
+    _sync_rollup(db, unit)
+    return unit
+
+
 def reset_unit_to_draft(db: Session, unit: ReportUnit) -> ReportUnit:
     unit.status = "draft"
     unit.result_type = None
@@ -191,6 +206,7 @@ def reset_unit_to_draft(db: Session, unit: ReportUnit) -> ReportUnit:
     unit.parent_trace_id = None
     unit.piece_id = None
     db.flush()
+    _sync_rollup(db, unit)
     return unit
 
 
@@ -226,7 +242,9 @@ def calc_and_create_salary_for_unit(db: Session, unit: ReportUnit) -> SalaryItem
 
     unit_price = Decimal(str(price.unit_price))
     amount = unit_price
-    month = datetime.now().strftime("%Y-%m")
+    # 归属到报工那天，不是终审通过那天：月底的活拖到下个月才签字，工资不能跟着跑到下个月
+    work_at = unit.submitted_at or unit.created_at or datetime.now()
+    month = work_at.strftime("%Y-%m")
 
     item = SalaryItem(
         report_id=None,
@@ -237,6 +255,7 @@ def calc_and_create_salary_for_unit(db: Session, unit: ReportUnit) -> SalaryItem
         unit_price=unit_price,
         good_qty=1,
         amount=amount,
+        work_date=work_at.date(),
         month=month,
     )
     db.add(item)

@@ -17,8 +17,6 @@ from app.crud.warehouse_entry import (
 from app.models.warehouse_entry import WarehouseEntry
 from app.models.warehouse import Warehouse
 from app.models.material import Material
-from app.models.purchase import PurchaseOrder
-from app.models.material_issue import MaterialReturn
 from app.models.user import User
 from app.services.code_generator import BizType, resolve_code
 
@@ -89,7 +87,7 @@ def list_api(
     db: Session = Depends(get_db),
 ):
     rows = list_entries(db, warehouse_id=warehouse_id, source_type=source_type, status=status, offset=offset, limit=limit)
-    return ok([_entry_out(x) for x in rows])
+    return ok({"items": [_entry_out(x) for x in rows]})
 
 
 @router.get("/entries/{entry_id}")
@@ -109,20 +107,16 @@ def create_api(
     wh = db.get(Warehouse, payload.warehouse_id)
     if not wh or not wh.is_active:
         raise HTTPException(status_code=400, detail="仓库不存在或已停用")
-    if payload.source_type not in {"purchase", "material_return", "other"}:
-        raise HTTPException(status_code=400, detail="入库类型无效")
+    if payload.source_type not in {"purchase", "other"}:
+        raise HTTPException(
+            status_code=400,
+            detail="入库类型无效：退料回补请在退料单上确认，不要建入库单",
+        )
     if payload.source_type == "purchase":
         if not payload.purchase_order_id:
             raise HTTPException(status_code=400, detail="采购入库必须关联采购单")
-        po = db.get(PurchaseOrder, payload.purchase_order_id)
-        if not po:
-            raise HTTPException(status_code=400, detail="采购单不存在")
-    if payload.source_type == "material_return":
-        if not payload.material_return_id:
-            raise HTTPException(status_code=400, detail="退料入库必须关联退料单")
-        mr = db.get(MaterialReturn, payload.material_return_id)
-        if not mr:
-            raise HTTPException(status_code=400, detail="退料单不存在")
+    if payload.material_return_id:
+        raise HTTPException(status_code=400, detail="退料入库请直接在退料单上确认，系统会回补库存")
     for it in payload.items:
         m = db.get(Material, it.material_id)
         if not m or not m.is_active:
@@ -136,17 +130,20 @@ def create_api(
         exists=lambda c: db.scalar(select(WarehouseEntry.id).where(WarehouseEntry.code == c)) is not None,
         duplicate_msg="入库单号已存在",
     )
-    entry = create_entry(
-        db,
-        code=code,
-        source_type=payload.source_type,
-        warehouse_id=payload.warehouse_id,
-        items=[{"material_id": it.material_id, "sku_id": it.sku_id, "qty": it.qty} for it in payload.items],
-        purchase_order_id=payload.purchase_order_id,
-        material_return_id=payload.material_return_id,
-        remark=payload.remark,
-        created_by=user.id,
-    )
+    try:
+        entry = create_entry(
+            db,
+            code=code,
+            source_type=payload.source_type,
+            warehouse_id=payload.warehouse_id,
+            items=[{"material_id": it.material_id, "sku_id": it.sku_id, "qty": it.qty} for it in payload.items],
+            purchase_order_id=payload.purchase_order_id,
+            material_return_id=payload.material_return_id,
+            remark=payload.remark,
+            created_by=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     db.commit()
     return ok(_entry_out(get_entry_by_id(db, entry.id)))
 
@@ -169,12 +166,16 @@ def confirm_api(
 
 
 @router.post("/entries/{entry_id}/cancel")
-def cancel_api(entry_id: int, db: Session = Depends(get_db)):
+def cancel_api(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     entry = get_entry_by_id(db, entry_id)
     if not entry:
         raise HTTPException(status_code=404, detail="入库单不存在")
     try:
-        cancel_entry(db, entry)
+        cancel_entry(db, entry, operator_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     db.commit()

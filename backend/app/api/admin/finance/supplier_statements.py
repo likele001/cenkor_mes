@@ -11,7 +11,6 @@ from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.supplier import get_supplier_by_id
 from app.crud.purchase_order import get_purchase_order_by_id
-from app.crud.finance_ledger import create_ledger
 from app.crud import statement_payment as sp_crud
 from app.crud.supplier_statement import (
     calc_purchase_order_amount,
@@ -130,20 +129,14 @@ def confirm_api(
         raise HTTPException(status_code=400, detail="供应商对账单不存在")
     if item.status != "draft":
         raise HTTPException(status_code=400, detail="状态不允许确认")
-    update_supplier_statement_status(db, item, "confirmed")
-    today = datetime.now().date()
-    create_ledger(
+    update_supplier_statement_status(db, item, "confirmed", operator=user.id, action="confirm")
+    sp_crud.create_accrual_ledger(
         db,
-        direction="out",
-        category="ap",
-        party_type="supplier",
-        party_id=item.supplier_id,
         statement_type="supplier_statement",
-        statement_id=item.id,
-        amount=item.total_amount,
-        biz_date=today,
-        remark=f"供应商对账单{item.code}确认应付",
+        stmt=item,
+        biz_date=datetime.now().date(),
         created_by=user.id,
+        remark=f"供应商对账单{item.code}确认应付",
     )
     db.commit()
     return ok({"id": item.id, "status": "confirmed"})
@@ -152,32 +145,30 @@ def confirm_api(
 @router.post("/supplier-statements/{statement_id}/mark-paid")
 def mark_paid_api(
     statement_id: int,
+    paid_date: date | None = Query(default=None, description="付款日，默认今天"),
+    method: str | None = Query(default=None, max_length=32),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     item = get_supplier_statement_by_id(db, statement_id=statement_id)
     if not item:
         raise HTTPException(status_code=400, detail="供应商对账单不存在")
+    if item.status == "draft":
+        raise HTTPException(status_code=400, detail="需先确认对账单")
     if item.status == "paid":
         return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
-    if item.status not in ("confirmed", "partial"):
-        raise HTTPException(status_code=400, detail="状态不允许标记已付款")
-    item.paid_amount = item.total_amount
-    update_supplier_statement_status(db, item, "paid")
-    today = datetime.now().date()
-    create_ledger(
-        db,
-        direction="out",
-        category="payment",
-        party_type="supplier",
-        party_id=item.supplier_id,
-        statement_type="supplier_statement",
-        statement_id=item.id,
-        amount=item.total_amount,
-        biz_date=today,
-        remark=f"供应商对账单{item.code}付款",
-        created_by=user.id,
-    )
+    try:
+        sp_crud.settle_statement(
+            db,
+            statement_type="supplier_statement",
+            statement_id=statement_id,
+            paid_date=paid_date,
+            method=method,
+            remark=f"供应商对账单{item.code}整单付款",
+            created_by=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     db.commit()
     db.refresh(item)
     return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})

@@ -46,6 +46,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="due_date" :label="t('production.orders.dueDate')" width="130" />
+          <el-table-column :label="t('production.orders.amountTotal')" width="130" align="right">
+            <template #default="{ row }">{{ money(row.amount) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('production.orders.costTotal')" width="130" align="right">
+            <template #default="{ row }">{{ money(row.cost_amount) }}</template>
+          </el-table-column>
           <el-table-column prop="remark" :label="t('production.common.remark')" min-width="220" />
           <el-table-column prop="confirmed_at" :label="t('production.orders.confirmTime')" width="180" />
           <el-table-column :label="t('production.common.operation')" width="360" fixed="right">
@@ -98,6 +104,8 @@
               </dd>
               <dt>交期</dt>
               <dd>{{ row.due_date || '—' }}</dd>
+              <dt>金额</dt>
+              <dd>{{ money(row.amount) }}</dd>
               <dt>备注</dt>
               <dd>{{ row.remark || '—' }}</dd>
               <dt>确认时间</dt>
@@ -140,6 +148,9 @@
           <el-descriptions-item label="状态">{{ statusLabel(detail.data.status) }}</el-descriptions-item>
           <el-descriptions-item :label="t('production.orders.dueDate')">{{ detail.data.due_date || '-' }}</el-descriptions-item>
           <el-descriptions-item label="确认时间">{{ detail.data.confirmed_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('production.orders.amountTotal')">{{ money(detail.data.amount) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('production.orders.costTotal')">{{ money(detail.data.cost_amount) }}</el-descriptions-item>
+          <el-descriptions-item label="完工时间">{{ detail.data.actual_completed_at || '-' }}</el-descriptions-item>
           <el-descriptions-item v-if="detail.data.opportunity_id" label="来源商机">
             <router-link :to="{ name: 'production-customer-detail', params: { id: detail.data.customer_id }, query: { tab: 'opps' } }">
               {{ detail.data.opportunity_code || `#${detail.data.opportunity_id}` }}
@@ -173,8 +184,17 @@
             </template>
           </el-table-column>
           <el-table-column prop="qty" :label="t('production.orders.quantityLabel')" width="110" />
+          <el-table-column :label="t('production.orders.unitPriceLabel')" width="110" align="right">
+            <template #default="{ row }">{{ money(row.unit_price, 4) }}</template>
+          </el-table-column>
+          <el-table-column :label="t('production.orders.subtotalLabel')" width="130" align="right">
+            <template #default="{ row }">{{ money(row.subtotal) }}</template>
+          </el-table-column>
           <el-table-column prop="remark" :label="t('production.common.remark')" min-width="240" />
         </el-table>
+        <p v-if="detail.data" class="hidden lg:block mt-2 text-right text-sm">
+          {{ t('production.orders.amountTotal') }}：<span class="font-semibold">{{ money(detailOrderTotal) }}</span>
+        </p>
         <div v-if="detail.data" class="lg:hidden space-y-3 mt-4">
           <div v-for="row in detail.data.items" :key="row.line_no" class="admin-mobile-row">
             <div class="text-xs text-el-placeholder">行 {{ row.line_no }}</div>
@@ -186,10 +206,17 @@
             <dl class="admin-mobile-kv mt-2">
               <dt>数量</dt>
               <dd>{{ row.qty }}</dd>
+              <dt>单价</dt>
+              <dd>{{ money(row.unit_price, 4) }}</dd>
+              <dt>小计</dt>
+              <dd>{{ money(row.subtotal) }}</dd>
               <dt>备注</dt>
               <dd class="text-left">{{ row.remark || '—' }}</dd>
             </dl>
           </div>
+          <p class="text-xs text-zinc-500">
+            {{ t('production.orders.amountTotal') }}：{{ money(detailOrderTotal) }}
+          </p>
         </div>
       </div>
       <template #footer>
@@ -262,6 +289,14 @@
                   <el-input-number v-model="row.qty" :min="1" :controls="false" class="!w-full" />
                 </template>
               </el-table-column>
+              <el-table-column :label="t('production.orders.unitPriceLabel')" width="120">
+                <template #default="{ row }">
+                  <el-input-number v-model="row.unit_price" :min="0" :precision="4" :controls="false" class="!w-full" />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.orders.subtotalLabel')" width="110" align="right">
+                <template #default="{ row }">{{ lineSubtotal(row) }}</template>
+              </el-table-column>
               <el-table-column :label="t('production.orders.rowRemarkLabel')" width="120">
                 <template #default="{ row }">
                   <el-input v-model="row.remark" :placeholder="t('production.orders.remarkPlaceholder')" />
@@ -273,6 +308,9 @@
                 </template>
               </el-table-column>
             </el-table>
+            <p class="mt-2 text-right text-sm">
+              {{ t('production.orders.amountTotal') }}：<span class="font-semibold">{{ money(createOrderTotal) }}</span>
+            </p>
           </el-form-item>
         </el-form>
       </div>
@@ -368,6 +406,14 @@
                   <el-input-number v-model="row.qty" :min="1" :controls="false" class="!w-full" :disabled="row.locked" />
                 </template>
               </el-table-column>
+              <el-table-column :label="t('production.orders.unitPriceLabel')" width="120">
+                <template #default="{ row }">
+                  <el-input-number v-model="row.unit_price" :min="0" :precision="4" :controls="false" class="!w-full" :disabled="editDlg.orderPlanLocked" />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.orders.subtotalLabel')" width="110" align="right">
+                <template #default="{ row }">{{ lineSubtotal(row) }}</template>
+              </el-table-column>
               <el-table-column label="行备注" min-width="100">
                 <template #default="{ row }">
                   <el-input v-model="row.remark" :placeholder="t('production.orders.remarkPlaceholder')" :disabled="row.locked" />
@@ -388,7 +434,10 @@
               </el-table-column>
             </el-table>
             <p v-if="editDlg.status === 'confirmed' || editDlg.status === 'producing'" class="mt-2 text-xs text-zinc-500">
-              已审核/生产中订单不可更换型号；未下发投产或未派工锁定前可改数量；已有工单时数量将同步任务。
+              已审核/生产中订单不可更换型号；未下发投产或未派工锁定前可改数量；已有工单时数量将同步任务。单价可随行修订，订单金额随之重算。
+            </p>
+            <p class="mt-2 text-right text-sm">
+              {{ t('production.orders.amountTotal') }}：<span class="font-semibold">{{ money(editOrderTotal) }}</span>
             </p>
           </el-form-item>
         </el-form>
@@ -455,13 +504,14 @@ const createDlg = reactive({
     due_date: '' as string,
     remark: '',
   },
-  lines: [] as { sku_id: number | null; qty: number; remark: string }[],
+  lines: [] as { sku_id: number | null; qty: number; unit_price: number; remark: string }[],
 })
 
 type EditLine = {
   id?: number | null
   sku_id: number | null
   qty: number
+  unit_price: number
   remark: string
   locked?: boolean
   lock_reason?: string | null
@@ -479,6 +529,23 @@ const editDlg = reactive({
   form: null as { customer_id: number; code: string; due_date: string; remark: string } | null,
   lines: [] as EditLine[],
 })
+
+function money(v: number | null | undefined, digits = 2) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n.toFixed(digits) : '—'
+}
+
+function lineSubtotal(row: { qty: number; unit_price: number }) {
+  return money((Number(row.qty) || 0) * (Number(row.unit_price) || 0))
+}
+
+function sumLines(rows: { qty: number; unit_price: number }[]) {
+  return rows.reduce((sum, row) => sum + (Number(row.qty) || 0) * (Number(row.unit_price) || 0), 0)
+}
+
+const detailOrderTotal = computed(() => sumLines(detail.data?.items || []))
+const createOrderTotal = computed(() => sumLines(createDlg.lines))
+const editOrderTotal = computed(() => sumLines(editDlg.lines))
 
 
 
@@ -552,7 +619,7 @@ async function openCreate() {
     due_date: '',
     remark: '',
   }
-  createDlg.lines = [{ sku_id: null, qty: 1, remark: '' }]
+  createDlg.lines = [{ sku_id: null, qty: 1, unit_price: 0, remark: '' }]
   createDlg.open = true
 }
 
@@ -569,7 +636,7 @@ async function loadCreateOptions() {
 }
 
 function addCreateLine() {
-  createDlg.lines.push({ sku_id: null, qty: 1, remark: '' })
+  createDlg.lines.push({ sku_id: null, qty: 1, unit_price: 0, remark: '' })
 }
 
 function removeCreateLine(idx: number) {
@@ -590,6 +657,7 @@ async function submitCreate() {
       line_no: idx + 1,
       sku_id: row.sku_id as number,
       qty: q,
+      unit_price: Math.max(0, Number(row.unit_price) || 0),
       remark: row.remark?.trim() ? row.remark.trim() : undefined,
     }})
   if (!rows.length) {
@@ -650,12 +718,13 @@ async function loadEditOptions() {
       id: it.id,
       sku_id: it.sku_id,
       qty: it.qty,
+      unit_price: Number(it.unit_price) || 0,
       remark: it.remark || '',
       locked: it.locked,
       lock_reason: it.lock_reason,
     }))
     if (!editDlg.lines.length) {
-      editDlg.lines = [{ sku_id: null, qty: 1, remark: '' }]
+      editDlg.lines = [{ sku_id: null, qty: 1, unit_price: 0, remark: '' }]
     }
   } finally {
     editDlg.optionsLoading = false
@@ -663,7 +732,7 @@ async function loadEditOptions() {
 }
 
 function addEditLine() {
-  editDlg.lines.push({ sku_id: null, qty: 1, remark: '' })
+  editDlg.lines.push({ sku_id: null, qty: 1, unit_price: 0, remark: '' })
 }
 
 function removeEditLine(idx: number) {
@@ -701,6 +770,7 @@ async function submitEdit() {
           line_no: idx + 1,
           sku_id: row.sku_id as number,
           qty: q,
+          unit_price: Math.max(0, Number(row.unit_price) || 0),
           remark: row.remark?.trim() ? row.remark.trim() : undefined,
         }
       })

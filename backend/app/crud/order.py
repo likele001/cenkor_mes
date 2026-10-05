@@ -1,10 +1,12 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.approval_record import record_status
 from app.crud.process_route import get_default_route_for_product
 from app.crud.sku import get_sku_by_id
 from app.models.order import Order, OrderItem
@@ -13,6 +15,7 @@ from app.models.sku import Sku
 from app.models.task import Task
 from app.models.task_assignment import TaskAssignment
 from app.models.work_order import WorkOrder
+from app.services.production_rollup import recalc_order_amount, sync_work_order_progress
 
 PLAN_ACTIVE_STATUSES = ("planned", "in_progress")
 PRODUCTION_LOCK_PLAN_STATUSES = ("in_progress", "done")
@@ -103,6 +106,20 @@ def delete_order(db: Session, order_id: int) -> None:
     db.flush()
 
 
+def _row_unit_price(row: tuple) -> Decimal:
+    """明细元组兼容 5 元组（无单价）与 6 元组（带单价）。"""
+    if len(row) > 5:
+        return Decimal(str(row[5] or 0))
+    return Decimal("0")
+
+
+def _item_unit_price(item: tuple) -> Decimal:
+    """明细元组兼容 4 元组（无单价）与 5 元组（带单价）。"""
+    if len(item) > 4:
+        return Decimal(str(item[4] or 0))
+    return Decimal("0")
+
+
 def create_order(
     db: Session,
     customer_id: int,
@@ -120,12 +137,22 @@ def create_order(
         remark=remark,
         status="draft",
     )
-    order.items = [
-        OrderItem(line_no=line_no, sku_id=sku_id, qty=qty, remark=item_remark)
-        for line_no, sku_id, qty, item_remark in items
-    ]
+    lines = []
+    for row in items:
+        line_no, sku_id, qty, item_remark = row[:4]
+        lines.append(
+            OrderItem(
+                line_no=line_no,
+                sku_id=sku_id,
+                qty=qty,
+                remark=item_remark,
+                unit_price=_item_unit_price(row),
+            )
+        )
+    order.items = lines
     db.add(order)
     db.flush()
+    recalc_order_amount(db, order)
     return order
 
 
@@ -252,6 +279,7 @@ def _create_work_order_and_tasks(
     wo.tasks = tasks
     db.add(wo)
     db.flush()
+    sync_work_order_progress(db, wo)
     return wo, next_seq
 
 
@@ -275,15 +303,19 @@ def _replace_draft_items(
     for old in list(order.items):
         db.delete(old)
     db.flush()
-    order.items = [
-        OrderItem(
-            line_no=line_no,
-            sku_id=sku_id,
-            qty=qty,
-            remark=remark,
+    lines = []
+    for row in items:
+        _id, line_no, sku_id, qty, remark = row[:5]
+        lines.append(
+            OrderItem(
+                line_no=line_no,
+                sku_id=sku_id,
+                qty=qty,
+                remark=remark,
+                unit_price=_row_unit_price(row),
+            )
         )
-        for _id, line_no, sku_id, qty, remark in items
-    ]
+    order.items = lines
     db.flush()
 
 
@@ -296,15 +328,17 @@ def update_order_items(
         raise ValueError("订单至少保留一条明细")
 
     seen_line: set[int] = set()
-    for _id, line_no, _sku_id, _qty, _remark in items:
+    for row in items:
+        line_no = row[1]
         if line_no in seen_line:
             raise ValueError("订单明细行号重复")
         seen_line.add(line_no)
 
     if order.status == "draft":
-        for _id, line_no, sku_id, qty, _remark in items:
-            _validate_sku(db, sku_id)
+        for row in items:
+            _validate_sku(db, row[2])
         _replace_draft_items(db, order, items)
+        recalc_order_amount(db, order)
         return
 
     if order.status not in ("confirmed", "producing"):
@@ -324,7 +358,9 @@ def update_order_items(
 
     next_seq = _next_task_seq(db)
 
-    for row_id, line_no, sku_id, qty, remark in items:
+    for row in items:
+        row_id, line_no, sku_id, qty, remark = row[:5]
+        unit_price = _row_unit_price(row)
         sku = _validate_sku(db, sku_id)
         if row_id is None:
             if production_locked:
@@ -335,6 +371,7 @@ def update_order_items(
                 sku_id=sku_id,
                 qty=qty,
                 remark=remark,
+                unit_price=unit_price,
             )
             db.add(new_item)
             db.flush()
@@ -349,44 +386,88 @@ def update_order_items(
         if lock["locked"]:
             if ex.qty != qty or ex.sku_id != sku_id or (ex.remark or "") != (remark or "") or ex.line_no != line_no:
                 raise ValueError(f"第{ex.line_no}行{lock['lock_reason']}，不可修改")
+            # 数量/型号/行号都没动，只允许改单价
+            if Decimal(str(ex.unit_price or 0)) != unit_price:
+                ex.unit_price = unit_price
             continue
         if ex.sku_id != sku_id:
             raise ValueError(f"第{ex.line_no}行已确认，不可更换型号")
         ex.line_no = line_no
         ex.qty = qty
         ex.remark = remark
+        ex.unit_price = unit_price
         _sync_work_order_qty_from_item(db, ex)
 
+    recalc_order_amount(db, order)
     db.flush()
 
 
-def submit_order_for_review(db: Session, order: Order) -> Order:
+def submit_order_for_review(db: Session, order: Order, *, operator_id: int | None = None, channel: str = "web") -> Order:
     if order.status not in ("draft",):
         raise ValueError("当前状态不可提交审核")
+    from_status = order.status
     order.status = "pending_confirm"
+    record_status(
+        db,
+        biz_type="order",
+        biz_id=order.id,
+        biz_code=order.code,
+        action="submit",
+        operator=operator_id,
+        from_status=from_status,
+        to_status=order.status,
+        channel=channel,
+    )
     db.flush()
     return order
 
 
-def reject_order(db: Session, order: Order, reason: str) -> Order:
+def reject_order(db: Session, order: Order, reason: str, *, operator_id: int | None = None, channel: str = "web") -> Order:
     if order.status != "pending_confirm":
         raise ValueError("仅待审核订单可驳回")
+    from_status = order.status
     order.status = "draft"
     note = (order.remark or "").strip()
     order.remark = f"{note}\n[驳回]{reason}".strip() if note else f"[驳回]{reason}"
+    record_status(
+        db,
+        biz_type="order",
+        biz_id=order.id,
+        biz_code=order.code,
+        action="reject",
+        operator=operator_id,
+        from_status=from_status,
+        to_status=order.status,
+        reason=reason,
+        channel=channel,
+    )
     db.flush()
     return order
 
 
-def confirm_order(db: Session, order: Order, confirmer_user_id: int) -> Order:
+def confirm_order(db: Session, order: Order, confirmer_user_id: int, *, channel: str = "web") -> Order:
     if order.status not in ("draft", "pending_confirm"):
         raise ValueError("订单状态不允许确认")
     loaded = get_order_by_id(db, order_id=order.id, with_items=True)
     if not loaded or not loaded.items:
         raise ValueError("订单无明细，无法审核")
+    from_status = order.status
     order.status = "confirmed"
     order.confirmed_at = datetime.now()
     order.confirmed_by = confirmer_user_id
+    recalc_order_amount(db, order)
+    record_status(
+        db,
+        biz_type="order",
+        biz_id=order.id,
+        biz_code=order.code,
+        action="confirm",
+        operator=confirmer_user_id,
+        from_status=from_status,
+        to_status=order.status,
+        channel=channel,
+        detail={"amount": str(order.amount)},
+    )
     db.flush()
     return order
 

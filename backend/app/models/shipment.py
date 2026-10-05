@@ -27,6 +27,7 @@ class Shipment(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False, index=True)
+    warehouse_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id", ondelete="SET NULL"), nullable=True, index=True)
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     logistics_company: Mapped[str | None] = mapped_column(String(128), nullable=True)
     logistics_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -38,6 +39,7 @@ class Shipment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
     order = relationship("Order")
+    warehouse = relationship("Warehouse")
 
 
 class AfterSale(Base):

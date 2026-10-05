@@ -1,13 +1,16 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
-from app.services.production_automation import precheck_order_for_automation, precheck_plan_for_automation
+from app.services.production_automation import (
+    precheck_order_for_automation,
+    precheck_plan_for_automation,
+)
 
 
-def test_precheck_order_not_found(session, tenant):
-    out = precheck_order_for_automation(session, tenant.id, 999999)
+def test_precheck_order_not_found(session):
+    out = precheck_order_for_automation(session, 999999)
     assert out["ok"] is False
 
 
-def test_precheck_plan_not_found(session, tenant):
-    out = precheck_plan_for_automation(session, tenant.id, 999999)
+def test_precheck_plan_not_found(session):
+    out = precheck_plan_for_automation(session, 999999)
     assert out["ok"] is False

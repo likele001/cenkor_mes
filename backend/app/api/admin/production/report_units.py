@@ -15,7 +15,8 @@ from app.crud.report_unit import (
     create_unit_audit,
     get_unit_by_id,
     list_report_units,
-    reset_unit_to_draft)
+    reset_unit_to_draft,
+    set_unit_status)
 from app.crud.task import get_task_by_id
 from app.crud.process_flow import (
     ensure_unit_piece_on_qc_approve,
@@ -29,6 +30,7 @@ from app.models.warehouse import Warehouse
 from app.services.attachment_media import attachment_play_url
 from app.services.report_mode_settings import use_unit_report_mode
 from app.services.mold_shot_tracker import increment_mold_shots_for_task
+from app.services.production_rollup import sync_after_unit
 from app.crud.quality import (
     create_inspection_records,
     find_template_for_process,
@@ -324,7 +326,7 @@ def approve_api(
 
     # ── Update status ──
     new_status = get_status_after_approval(db, audit_count)
-    unit.status = new_status
+    set_unit_status(db, unit, new_status)
 
     if payload and payload.qc_attachment_ids.strip():
         # Append to existing qc_attachment_ids if any
@@ -335,8 +337,10 @@ def approve_api(
             unit.qc_attachment_ids = payload.qc_attachment_ids.strip()
 
     # ── Terminal step: salary, trace, stock ──
-    if is_terminal_status(new_status):
+    if is_terminal_status(db, new_status):
         salary = calc_and_create_salary_for_unit(db, unit)
+        # 工资明细落库后才能算准订单成本
+        sync_after_unit(db, unit)
         trace_code = None
         task = db.get(Task, unit.task_id)
         piece = db.get(WorkOrderPiece, unit.piece_id) if unit.piece_id else None
@@ -387,7 +391,6 @@ def approve_api(
                             sku_id=wo.sku_id, change_qty=1, biz_type="produce_in",
                             biz_id=unit.id, remark=f"工单#{wo.id} 件次#{unit.unit_seq} 终审通过自动入库")
 
-        step_label = format_step_label(next_step, step_index, total_steps)
         create_notification(
             db, user_id=unit.user_id,
             title="件次报工已终审通过",
@@ -408,7 +411,7 @@ def approve_api(
         })
 
     # ── Non-terminal step ──
-    step_label = format_step_label(next_step, step_index, total_steps)
+    step_label = format_step_label(db, next_step)
     create_notification(
         db, user_id=unit.user_id,
         title=f"件次报工已通过（{step_label}）",

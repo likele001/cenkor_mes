@@ -82,6 +82,8 @@ def _item_out(x, order=None, db: Session | None = None) -> dict:
         "line_no": x.line_no,
         "sku_id": x.sku_id,
         "qty": x.qty,
+        "unit_price": float(x.unit_price or 0),
+        "subtotal": float(x.subtotal or 0),
         "remark": x.remark,
         "created_at": x.created_at,
         "updated_at": x.updated_at,
@@ -114,6 +116,9 @@ def _out(x) -> dict:
         "remark": x.remark,
         "confirmed_at": x.confirmed_at,
         "confirmed_by": x.confirmed_by,
+        "amount": float(x.amount or 0),
+        "cost_amount": float(x.cost_amount or 0),
+        "actual_completed_at": x.actual_completed_at,
         "created_at": x.created_at,
         "updated_at": x.updated_at,
         "customer": {"id": cust.id, "name": cust.name, "code": cust.code} if cust else None,
@@ -172,13 +177,17 @@ def export_orders_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
     items = list_orders(db, keyword=None, customer_id=None, status=None, offset=0, limit=999999)
-    headers = ["订单号", "客户名称", "SKU编码", "SKU名称", "数量", "状态", "交期", "创建时间"]
+    headers = ["订单号", "客户名称", "SKU编码", "SKU名称", "数量", "单价", "小计", "订单金额", "状态", "交期", "创建时间"]
     rows = []
     for o in items:
         cust_name = o.customer.name if o.customer else ""
         for it in (o.items or []):
             sku = getattr(it, "sku", None)
-            rows.append([o.code, cust_name, sku.code if sku else "", sku.name if sku else "", str(it.qty), o.status, str(o.due_date or ""), str(o.created_at)])
+            rows.append([
+                o.code, cust_name, sku.code if sku else "", sku.name if sku else "",
+                str(it.qty), str(it.unit_price or 0), str(it.subtotal or 0), str(o.amount or 0),
+                o.status, str(o.due_date or ""), str(o.created_at),
+            ])
     return make_excel_response(headers, rows, "orders.xlsx", "订单")
 
 @router.get("/import-template")
@@ -337,7 +346,7 @@ def create_api(
             raise HTTPException(status_code=400, detail="产品型号不存在")
         if not sku.is_active:
             raise HTTPException(status_code=400, detail="产品型号已停用")
-        items.append((it.line_no, it.sku_id, it.qty, it.remark))
+        items.append((it.line_no, it.sku_id, it.qty, it.remark, it.unit_price))
 
     order = create_order(
         db,
@@ -394,9 +403,9 @@ def update_api(
         remark=payload.remark,
         status=payload.status if order.status == "draft" else None)
     if payload.items is not None:
-        rows: list[tuple[int | None, int, int, int, str | None]] = []
+        rows: list[tuple] = []
         for it in payload.items:
-            rows.append((it.id, it.line_no, it.sku_id, it.qty, it.remark))
+            rows.append((it.id, it.line_no, it.sku_id, it.qty, it.remark, it.unit_price))
         try:
             update_order_items(db, order, rows)
         except ValueError as e:
@@ -421,7 +430,7 @@ def reject_api(
     if not order:
         raise HTTPException(status_code=400, detail="订单不存在")
     try:
-        reject_order(db, order, reason)
+        reject_order(db, order, reason, operator_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     cust = order.customer

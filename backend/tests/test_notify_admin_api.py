@@ -355,6 +355,34 @@ def test_simulate_alert_escalation_per_level(session: Session, bound_user):
     assert len(esc["info"]) <= len(esc["critical"])
 
 
+def test_simulate_names_targets_and_flags_dead_codes(session: Session, bound_user):
+    """模拟器要能指出「哪一条目标谁也没命中」——配规则的人靠这个排错。"""
+    feishu_api.write_settings(_Payload_model(
+        app_id="cli_a",
+        app_secret="s",
+        groups=[{
+            "code": "management",
+            "name": "管理群",
+            "enabled": True,
+            "channels": {"feishu": {"chat_id": "oc_mgmt", "enabled": True}},
+        }],
+        rules={"report.submitted": {
+            "enabled": True,
+            "targets": [f"user:{bound_user.id}", "group:management", "group:not_configured"],
+        }},
+    ), db=session, user=bound_user)
+
+    data = _data(feishu_api.simulate(
+        feishu_api.SimulateIn(event_code="report.submitted"), db=session, user=bound_user
+    ))
+    by_kind = {t["ref"]: t for t in data["targets"]}
+    assert by_kind["ou_admin_001"]["name"] == "管理员"
+    assert by_kind["oc_mgmt"]["name"] == "管理群"
+    assert data["unresolved"] == ["group:not_configured"]
+    assert data["by_code"]["group:management"]
+    assert data["enabled"] is True
+
+
 # ── 群地址：旧结构 vs v2 channels 结构 ──
 
 def test_group_chat_id_reads_legacy_and_v2():

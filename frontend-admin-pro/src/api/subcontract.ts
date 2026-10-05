@@ -33,7 +33,10 @@ export type SendLogOut = {
   item_id: number
   qty: number
   remark: string | null
-  created_at: string
+  sent_at: string
+  sent_by: number | null
+  warehouse_id: number | null
+  warehouse_name: string | null
   sku_code: string | null
   sku_name: string | null
 }
@@ -44,7 +47,10 @@ export type ReceiveLogOut = {
   item_id: number
   qty: number
   remark: string | null
-  created_at: string
+  received_at: string
+  received_by: number | null
+  warehouse_id: number | null
+  warehouse_name: string | null
   sku_code: string | null
   sku_name: string | null
 }
@@ -77,12 +83,14 @@ export type SendLogIn = {
   item_id: number
   qty: number
   remark?: string | null
+  warehouse_id?: number | null
 }
 
 export type ReceiveLogIn = {
   item_id: number
   qty: number
   remark?: string | null
+  warehouse_id?: number | null
 }
 
 export const subcontractApi = {

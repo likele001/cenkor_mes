@@ -6,11 +6,13 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.approval_record import record_status, status_action
 from app.crud.process_route import get_default_route_for_product
 from app.models.finance import Statement, StatementItem
 from app.models.order import Order, OrderItem
 from app.models.process_price import ProcessPrice
 from app.models.sku import Sku
+from app.models.user import User
 
 
 def calc_order_statement_amount(db: Session, order: Order) -> Decimal:
@@ -103,7 +105,29 @@ def list_statements(
     return db.scalars(stmt).all()
 
 
-def update_statement_status(db: Session, stmt: Statement, new_status: str) -> Statement:
+def update_statement_status(
+    db: Session,
+    stmt: Statement,
+    new_status: str,
+    *,
+    operator: User | int | None = None,
+    action: str | None = None,
+    channel: str = "web",
+    reason: str | None = None,
+) -> Statement:
+    old_status = stmt.status
     stmt.status = new_status
+    record_status(
+        db,
+        biz_type="statement",
+        biz_id=stmt.id,
+        biz_code=stmt.code,
+        action=action or status_action(new_status),
+        operator=operator,
+        from_status=old_status,
+        to_status=new_status,
+        channel=channel,
+        reason=reason,
+    )
     db.flush()
     return stmt

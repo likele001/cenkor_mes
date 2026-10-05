@@ -49,11 +49,17 @@ class MrpItem(Base):
     qty_per: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     gross_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     stock_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # 已下单未到货：不算这一段，同一批料会被 MRP 反复建议再买一次
+    on_order_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     net_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     suggested_purchase_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
     unit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # 落地痕迹：这行建议量最终进了哪张采购单（NULL＝还没转）
+    purchase_order_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     plan = relationship("MrpPlan", back_populates="items")
     work_order = relationship("WorkOrder")

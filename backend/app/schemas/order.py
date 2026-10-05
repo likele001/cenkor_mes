@@ -1,6 +1,7 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 class CustomerOrderItemIn(BaseModel):
     sku_id: int = Field(ge=1)
     qty: int = Field(ge=1)
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0)
     remark: str | None = None
 
 
@@ -22,6 +24,7 @@ class OrderItemCreateIn(BaseModel):
     line_no: int = Field(ge=1)
     sku_id: int = Field(ge=1)
     qty: int = Field(ge=1)
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0, description="销售单价，用于订单金额与毛利")
     remark: str | None = None
 
 
@@ -40,6 +43,7 @@ class OrderItemUpsertIn(BaseModel):
     line_no: int = Field(ge=1)
     sku_id: int = Field(ge=1)
     qty: int = Field(ge=1)
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0)
     remark: str | None = None
 
 
@@ -58,6 +62,8 @@ class OrderItemOut(BaseModel):
     line_no: int
     sku_id: int
     qty: int
+    unit_price: Decimal
+    subtotal: Decimal
     remark: str | None
     created_at: datetime
     updated_at: datetime
@@ -68,6 +74,9 @@ class OrderOut(BaseModel):
     customer_id: int
     code: str
     status: str
+    amount: Decimal
+    cost_amount: Decimal
+    actual_completed_at: datetime | None
     due_date: date | None
     remark: str | None
     confirmed_at: datetime | None

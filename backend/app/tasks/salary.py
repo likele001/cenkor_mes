@@ -4,7 +4,6 @@
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
 from io import BytesIO
 
 from celery import shared_task
@@ -16,31 +15,28 @@ from app.crud.attachment import create_attachment
 from app.crud.salary_slip import ensure_salary_slip
 from app.models.export_job import ExportJob
 from app.models.process import Process
-from app.models.process_price import ProcessPrice
 from app.models.report import Report
 from app.models.salary import SalaryItem
 from app.models.sku import Sku
-from app.models.task import Task
 from app.models.user import User
-from app.models.work_order import WorkOrder
 from app.storage import get_storage as get_active_storage
 
 logger = logging.getLogger(__name__)
 
 
 def calculate_salary_items(month: str | None = None) -> dict:
-    """批量计算计件工资：扫描当月已终审(qc_approved)的报工记录，生成 SalaryItem
+    """批量补漏：扫描该月已终审(qc_approved)但未生成工资明细的报工。
 
-    审核通过时 calc_and_create_salary() 已逐条生成，此函数用于：
-    1. 补漏：因异步或异常遗漏的报工
-    2. 批量重算：管理员手动触发
+    逐条计算逻辑与审核通过时走的是同一个 calc_and_create_salary()——月份归属、工价缺失
+    处理、订单成本重算都必须同源，否则补漏任务跑出来的工资和实时审核的对不上。
     """
+    from app.crud.report import calc_and_create_salary
+
     if not month:
         month = datetime.now().strftime("%Y-%m")
 
     db = SessionLocal()
     try:
-        # 查找当月所有已终审的报工，排除已生成工资明细的
         reports = db.scalars(
             select(Report).where(
                 Report.status == "qc_approved",
@@ -52,53 +48,17 @@ def calculate_salary_items(month: str | None = None) -> dict:
         created = 0
         skipped = 0
         for report in reports:
-            # 检查是否已存在
             existing = db.scalar(
                 select(SalaryItem).where(SalaryItem.report_id == report.id)
             )
             if existing:
                 skipped += 1
                 continue
-
-            task = db.get(Task, report.task_id)
-            if not task:
+            item = calc_and_create_salary(db, report)
+            if item is None:
+                logger.warning("报工 %s 无法生成工资明细（任务/工单/工价缺失）", report.id)
                 skipped += 1
                 continue
-            wo = db.get(WorkOrder, task.work_order_id)
-            if not wo:
-                skipped += 1
-                continue
-
-            price = db.scalar(
-                select(ProcessPrice).where(
-                    ProcessPrice.sku_id == wo.sku_id,
-                    ProcessPrice.process_id == task.process_id,
-                    ProcessPrice.is_active.is_(True),
-                )
-            )
-            if not price:
-                logger.warning(
-                    "报工 %s 缺少工价配置(sku=%s, process=%s)，跳过",
-                    report.id, wo.sku_id, task.process_id,
-                )
-                skipped += 1
-                continue
-
-            unit_price = Decimal(str(price.unit_price))
-            amount = Decimal(str(report.good_qty)) * unit_price
-
-            item = SalaryItem(
-                report_id=report.id,
-                report_unit_id=None,
-                user_id=report.report_user_id,
-                sku_id=wo.sku_id,
-                process_id=task.process_id,
-                unit_price=unit_price,
-                good_qty=report.good_qty,
-                amount=amount,
-                month=month,
-            )
-            db.add(item)
             created += 1
 
         db.commit()
@@ -286,12 +246,12 @@ def export_salary_excel(job_id: int) -> dict:
 @shared_task(name="salary.daily_hourly_calc")
 def daily_hourly_calc() -> dict:
     """每日凌晨计算前一天的计时工资"""
-    from app.crud.salary_item import generate_all_time_salary_items
+    from app.crud.salary_item import generate_all_time_salary_items_for_tenant
 
     db = SessionLocal()
     try:
         yesterday = date.today() - timedelta(days=1)
-        n = generate_all_time_salary_items(db, target_date=yesterday)
+        n = generate_all_time_salary_items_for_tenant(db, target_date=yesterday)
         db.commit()
         return {"ok": True, "date": yesterday.isoformat(), "items_generated": n}
     except Exception:

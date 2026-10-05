@@ -128,6 +128,10 @@
                 <el-tag v-if="apsRecommended === s.key" type="success" size="small">{{ t('production.planForm.recommended') }}</el-tag>
                 <span class="text-xs text-zinc-500">评分 {{ s.score }}</span>
               </div>
+              <p v-if="s.start_date || s.end_date" class="text-xs text-zinc-500 mt-1">
+                {{ s.start_date || '—' }} → {{ s.end_date || '—' }}
+                <span v-if="s.work_days">（{{ s.work_days }} 天）</span>
+              </p>
               <p v-if="s.pros?.length" class="text-xs text-green-700 mt-2">优点：{{ s.pros.join('；') }}</p>
               <p v-if="s.cons?.length" class="text-xs text-amber-700 mt-1">注意：{{ s.cons.join('；') }}</p>
             </div>
@@ -165,8 +169,8 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { plansApi, type PlanOrderOption } from '@/api/plans'
-import { aiApi, type PlanForecastOut, type PlanScheduleOut, type PlanApsStrategyItem } from '@/api/ai'
+import { plansApi, type PlanOrderOption, type PlanForecastOut, type PlanApsStrategyItem } from '@/api/plans'
+import { aiApi, type PlanScheduleOut } from '@/api/ai'
 import { automationApi, type AutomationSettings } from '@/api/automation'
 import { formatAutomationFeedback } from '@/utils/automationFeedback'
 import { useAuthStore } from '@/stores/auth'
@@ -189,30 +193,32 @@ const apsRecommended = ref('')
 const apsLlmSummary = ref<string | null>(null)
 
 function riskLabel(risk: string) {
-  if (risk === 'green') return '低风险'
-  if (risk === 'yellow') return '中风险'
-  if (risk === 'red') return '高风险'
-  return risk
+  if (risk === 'low' || risk === 'green') return '低风险'
+  if (risk === 'medium' || risk === 'yellow') return '中风险'
+  if (risk === 'high' || risk === 'red') return '高风险'
+  if (risk === 'overdue') return '已逾期'
+  return '未知'
 }
 
 function riskTagType(risk: string): 'success' | 'warning' | 'danger' | 'info' {
-  if (risk === 'green') return 'success'
-  if (risk === 'yellow') return 'warning'
-  if (risk === 'red') return 'danger'
+  if (risk === 'low' || risk === 'green') return 'success'
+  if (risk === 'medium' || risk === 'yellow') return 'warning'
+  if (risk === 'high' || risk === 'overdue' || risk === 'red') return 'danger'
   return 'info'
 }
 
 function riskBarPercent(risk: string) {
-  if (risk === 'green') return 25
-  if (risk === 'yellow') return 55
-  if (risk === 'red') return 90
+  if (risk === 'low' || risk === 'green') return 25
+  if (risk === 'medium' || risk === 'yellow') return 55
+  if (risk === 'high' || risk === 'red') return 90
+  if (risk === 'overdue') return 100
   return 40
 }
 
 function riskBarColor(risk: string) {
-  if (risk === 'green') return '#67c23a'
-  if (risk === 'yellow') return '#e6a23c'
-  if (risk === 'red') return '#f56c6c'
+  if (risk === 'low' || risk === 'green') return '#67c23a'
+  if (risk === 'medium' || risk === 'yellow') return '#e6a23c'
+  if (risk === 'high' || risk === 'overdue' || risk === 'red') return '#f56c6c'
   return '#909399'
 }
 
@@ -229,16 +235,16 @@ async function loadApsTab() {
   if (!isEdit.value) return
   apsLoading.value = true
   try {
-    planForecast.value = await aiApi.getPlanForecast(id.value)
-    if (canAi.value) {
-      const aps = await aiApi.getPlanApsStrategy(id.value)
-      apsStrategies.value = aps.strategies || []
-      apsRecommended.value = aps.recommended || ''
-      apsLlmSummary.value = aps.llm_summary || null
-      if (aps.forecast) planForecast.value = aps.forecast
-    } else {
-      apsStrategies.value = []
-      apsLlmSummary.value = null
+    const [forecast, aps] = await Promise.all([
+      plansApi.getPlanForecast(id.value).catch(() => null),
+      plansApi.getPlanApsStrategy(id.value).catch(() => null),
+    ])
+    planForecast.value = aps?.forecast ?? forecast
+    apsStrategies.value = aps?.strategies || []
+    apsRecommended.value = aps?.recommended || ''
+    apsLlmSummary.value = aps?.llm_summary || null
+    if (!forecast && !aps) {
+      ElMessage.error(t('production.planForm.apsLoadFailed'))
     }
   } catch (e: unknown) {
     ElMessage.error(e instanceof Error ? e.message : t('production.planForm.apsLoadFailed'))
