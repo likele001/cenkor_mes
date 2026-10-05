@@ -3,6 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.warehouse import adjust_stock, resolve_warehouse_id
 from app.models.material import Supplier
 from app.models.process import Process
 from app.models.sku import Sku
@@ -28,8 +29,8 @@ def _order_options():
         selectinload(SubcontractOrder.supplier),
         selectinload(SubcontractOrder.items).selectinload(SubcontractOrderItem.sku),
         selectinload(SubcontractOrder.items).selectinload(SubcontractOrderItem.process),
-        selectinload(SubcontractOrder.send_logs),
-        selectinload(SubcontractOrder.receive_logs),
+        selectinload(SubcontractOrder.send_logs).selectinload(SubcontractSendLog.warehouse),
+        selectinload(SubcontractOrder.receive_logs).selectinload(SubcontractReceiveLog.warehouse),
     )
 
 
@@ -124,22 +125,39 @@ def add_send_log(
     qty: int,
     remark: str | None,
     sent_by: int | None,
+    warehouse_id: int | None = None,
 ) -> SubcontractSendLog:
     item = next((i for i in order.items if i.id == item_id), None)
     if not item:
         raise ValueError("明细不存在")
     if qty <= 0:
         raise ValueError("发料数量必须大于0")
+    remaining = item.qty - item.sent_qty
+    if qty > remaining:
+        raise ValueError(f"发料数量超出委外量：本单 {item.qty}，已发 {item.sent_qty}，最多还能发 {remaining}")
 
+    wh_id = resolve_warehouse_id(db, warehouse_id, action="委外发料")
+    sku_code = item.sku.code if item.sku else f"型号#{item.sku_id}"
+    # 发料即出库：先扣账，扣不动就不留发料记录
+    adjust_stock(
+        db,
+        warehouse_id=wh_id,
+        sku_id=item.sku_id,
+        change_qty=-qty,
+        biz_type="subcontract_out",
+        biz_id=order.id,
+        remark=f"委外发料#{order.code} {sku_code} x{qty}",
+    )
     log = SubcontractSendLog(
         order_id=order.id,
         item_id=item_id,
+        warehouse_id=wh_id,
         qty=qty,
         remark=remark,
         sent_by=sent_by,
     )
-    item.sent_qty += qty
     db.add(log)
+    item.sent_qty += qty
     db.flush()
 
     if order.status == "draft":
@@ -155,22 +173,38 @@ def add_receive_log(
     qty: int,
     remark: str | None,
     received_by: int | None,
+    warehouse_id: int | None = None,
 ) -> SubcontractReceiveLog:
     item = next((i for i in order.items if i.id == item_id), None)
     if not item:
         raise ValueError("明细不存在")
     if qty <= 0:
         raise ValueError("收货数量必须大于0")
+    outstanding = item.sent_qty - item.received_qty
+    if qty > outstanding:
+        raise ValueError(f"收货数量超出在制外协量：已发 {item.sent_qty}，已收 {item.received_qty}，最多还能收 {outstanding}")
 
+    wh_id = resolve_warehouse_id(db, warehouse_id, action="委外收货")
+    sku_code = item.sku.code if item.sku else f"型号#{item.sku_id}"
+    adjust_stock(
+        db,
+        warehouse_id=wh_id,
+        sku_id=item.sku_id,
+        change_qty=qty,
+        biz_type="subcontract_in",
+        biz_id=order.id,
+        remark=f"委外收货#{order.code} {sku_code} x{qty}",
+    )
     log = SubcontractReceiveLog(
         order_id=order.id,
         item_id=item_id,
+        warehouse_id=wh_id,
         qty=qty,
         remark=remark,
         received_by=received_by,
     )
-    item.received_qty += qty
     db.add(log)
+    item.received_qty += qty
     db.flush()
 
     all_received = all(i.received_qty >= i.qty for i in order.items)

@@ -59,6 +59,22 @@ class SalarySlipOut(BaseModel):
     confirm_status: str
     reject_reason: str | None
     rejected_at: datetime | None
+    pay_status: str = "unpaid"
+    paid_at: datetime | None = None
+    paid_by: int | None = None
+    paid_remark: str | None = None
+
+
+class SalarySlipPayIn(BaseModel):
+    """工资发放 — 按月批量时 month 必填，单张发放时忽略 slip 之外的筛选"""
+    month: str | None = Field(default=None, min_length=7, max_length=7, description="月份 YYYY-MM")
+    user_ids: list[int] | None = Field(default=None, description="只发放这些员工，留空为整月")
+    remark: str | None = Field(default=None, max_length=255, description="发放备注（银行批次号等）")
+
+
+class SalarySlipUnpayIn(BaseModel):
+    """撤销发放"""
+    reason: str | None = Field(default=None, max_length=255)
 
 
 class SalarySlipSignOut(BaseModel):

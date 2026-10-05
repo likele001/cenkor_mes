@@ -159,8 +159,11 @@ def adjust_stock_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    s = adjust_stock(db, warehouse_id=warehouse_id,
-                     sku_id=sku_id, change_qty=change_qty, biz_type=biz_type, remark=remark)
+    try:
+        s = adjust_stock(db, warehouse_id=warehouse_id,
+                         sku_id=sku_id, change_qty=change_qty, biz_type=biz_type, remark=remark)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     db.commit()
     return ok({"qty": s.qty})
 

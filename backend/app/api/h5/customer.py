@@ -13,10 +13,10 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
 from app.crud.after_sale import create_after_sale, list_after_sales, list_shipments_by_order
+from app.crud.approval_record import record_status
 from app.crud.customer import get_customer_by_user_id
 from app.crud.customer_product import list_customer_product_ids
 from app.crud.finance import get_statement_by_id, list_statements, update_statement_status
-from app.crud.finance_ledger import create_ledger
 from app.crud.kanban import build_order_progress_for_loaded_order, get_order_progress_summary
 from app.models.finance import StatementItem
 from app.models.product import Product
@@ -207,7 +207,7 @@ def submit_order_api(order_id: int, db: Session = Depends(get_db), user: User = 
     if not order:
         raise HTTPException(status_code=400, detail="订单不存在")
     try:
-        submit_order_for_review(db, order)
+        submit_order_for_review(db, order, operator_id=user.id, channel="h5")
         notify_users_with_permission(
             db,
             permission_code="order.manage",
@@ -387,7 +387,7 @@ def my_statement_ack_api(
     if item.status not in {"draft", "confirmed", "paid"}:
         raise HTTPException(status_code=400, detail="对账单状态不可确认")
     if item.status == "draft":
-        update_statement_status(db, item, "confirmed")
+        update_statement_status(db, item, "confirmed", operator=user.id, action="ack", channel="h5")
         notify_users_with_permission(
             db,
             permission_code="finance.manage",
@@ -415,32 +415,54 @@ def my_statement_mark_paid_api(
     statement_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
+    """客户「我已付款」= 声明，不是核销。
+
+    钱到账了没有，得由财务在应收单上核销（写 StatementPayment + 现金流水）才算数；
+    让付款方自己改我方账面 paid_amount 并记一笔现金收入，等于把总账钥匙交给客户。
+    所以这里只把声明推给财务，对账单状态与总账一律不动。
+    """
     customer = get_customer_by_user_id(db, user_id=user.id)
     if not customer:
         raise HTTPException(status_code=400, detail="无客户档案")
     item = get_statement_by_id(db, statement_id=statement_id)
     if not item or item.customer_id != customer.id:
         raise HTTPException(status_code=400, detail="对账单不存在")
-    if item.status == "paid":
-        return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
-    if item.status != "confirmed":
+    if item.status == "draft":
         raise HTTPException(status_code=400, detail="对账单未确认")
-    update_statement_status(db, item, "paid")
-    create_ledger(
-        db,
-        direction="in",
-        category="receipt",
-        party_type="customer",
-        party_id=customer.id,
-        statement_type="statement",
-        statement_id=item.id,
-        amount=item.total_amount,
-        biz_date=datetime.now().date(),
-        remark=f"客户对账单{item.code}收款",
-        created_by=user.id)
+    if item.status != "paid":
+        notify_users_with_permission(
+            db,
+            permission_code="finance.manage",
+            title="客户声明已付款",
+            content=f"对账单 {item.code}（{customer.name}）客户声明已付款，请在应收管理核销收款",
+            level="info",
+            biz_type="statement",
+            biz_id=item.id,
+            feishu_event="statement.customer_ack")
+        if customer.owner_user_id:
+            create_notification(
+                db,
+                user_id=customer.owner_user_id,
+                title="客户声明已付款",
+                content=f"对账单 {item.code} 客户声明已付款，待财务核销",
+                level="info",
+                biz_type="statement",
+                biz_id=item.id)
+        record_status(
+            db,
+            biz_type="statement",
+            biz_id=item.id,
+            biz_code=item.code,
+            action="claim",
+            operator=user.id,
+            from_status=item.status,
+            to_status=item.status,
+            channel="h5",
+            reason="客户声明已付款，待财务核销",
+        )
     db.commit()
     db.refresh(item)
-    return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at})
+    return ok({"id": item.id, "status": item.status, "updated_at": item.updated_at, "claimed": True})
 
 @router.get("/statements/{statement_id}/download")
 def my_statement_download_api(

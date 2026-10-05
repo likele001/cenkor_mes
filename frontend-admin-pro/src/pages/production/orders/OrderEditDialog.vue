@@ -61,9 +61,19 @@
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column :label="t('production.orders.quantityLabelCol')" width="120">
+            <el-table-column :label="t('production.orders.quantityLabelCol')" width="110">
               <template #default="{ row }">
                 <el-input-number v-model="row.qty" :min="1" :controls="false" class="!w-full" :disabled="row.locked" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('production.orders.unitPriceLabel')" width="110">
+              <template #default="{ row }">
+                <el-input-number v-model="row.unit_price" :min="0" :precision="4" :controls="false" class="!w-full" :disabled="orderPlanLocked" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('production.orders.subtotalLabel')" width="100">
+              <template #default="{ row }">
+                <span class="text-xs">{{ ((Number(row.qty) || 0) * (Number(row.unit_price) || 0)).toFixed(2) }}</span>
               </template>
             </el-table-column>
             <el-table-column label="行备注" min-width="100">
@@ -80,6 +90,9 @@
           <p v-if="status === 'confirmed' || status === 'producing'" class="mt-2 text-xs text-zinc-500">
             已审核/生产中订单不可更换型号；未下发投产或未派工锁定前可改数量；已有工单时数量将同步任务。
           </p>
+          <div class="mt-2 text-xs text-zinc-600">
+            {{ t('production.orders.amountTotal') }}：{{ orderTotal.toFixed(2) }}
+          </div>
         </el-form-item>
       </el-form>
     </div>
@@ -91,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { productionApi, type CustomerOut, type OrderOut } from '@/api/production'
@@ -101,6 +114,7 @@ type EditLine = {
   id?: number | null
   sku_id: number | null
   qty: number
+  unit_price: number
   remark: string
   locked?: boolean
   lock_reason?: string | null
@@ -134,6 +148,10 @@ const form = reactive<{
 
 const lines = reactive<EditLine[]>([])
 
+const orderTotal = computed(() =>
+  lines.reduce((sum, row) => sum + (Number(row.qty) || 0) * (Number(row.unit_price) || 0), 0),
+)
+
 async function loadOptions() {
   if (!props.editOrder) return
   editId.value = props.editOrder.id
@@ -164,12 +182,13 @@ async function loadOptions() {
       id: it.id,
       sku_id: it.sku_id,
       qty: it.qty,
+      unit_price: Number(it.unit_price ?? 0),
       remark: it.remark || '',
       locked: it.locked,
       lock_reason: it.lock_reason,
     })))
     if (!lines.length) {
-      lines.push({ sku_id: null, qty: 1, remark: '' })
+      lines.push({ sku_id: null, qty: 1, unit_price: 0, remark: '' })
     }
   } finally {
     optionsLoading.value = false
@@ -177,7 +196,7 @@ async function loadOptions() {
 }
 
 function addLine() {
-  lines.push({ sku_id: null, qty: 1, remark: '' })
+  lines.push({ sku_id: null, qty: 1, unit_price: 0, remark: '' })
 }
 
 function removeLine(idx: number) {
@@ -215,6 +234,7 @@ async function submit() {
           line_no: idx + 1,
           sku_id: row.sku_id as number,
           qty: q,
+          unit_price: Math.max(0, Number(row.unit_price) || 0),
           remark: row.remark?.trim() ? row.remark.trim() : undefined,
         }
       })

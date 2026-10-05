@@ -37,6 +37,7 @@ _DETAIL_HEADER_ALIASES: dict[str, set[str]] = {
     "material": {"material", "材料", "材质"},
     "spec": {"spec", "规格", "尺寸"},
     "qty": {"qty", "数量"},
+    "unit_price": {"unit_price", "单价", "销售单价", "售价", "price"},
     "line_remark": {"line_remark", "行备注", "备注", "明细备注"},
 }
 
@@ -62,6 +63,7 @@ class DetailLine:
     material: str | None = None
     spec: str | None = None
     qty: int = 0
+    unit_price: Decimal | None = None
     line_remark: str | None = None
 
 
@@ -94,6 +96,20 @@ def _parse_qty(raw: Any) -> int | None:
         return n if n >= 1 else None
     except (ValueError, TypeError):
         return None
+
+
+def _parse_price(raw: Any) -> Decimal | None:
+    """销售单价：留空或无法解析时按未填价处理（订单金额为 0，不用成本冒充收入）。"""
+    if raw is None:
+        return None
+    s = str(raw).strip().replace(",", "")
+    if not s:
+        return None
+    try:
+        v = Decimal(s)
+    except InvalidOperation:
+        return None
+    return v if v >= 0 else None
 
 
 def _split_product_sku_name(raw: str) -> tuple[str, str | None]:
@@ -156,6 +172,7 @@ def parse_detail_lines(raw: bytes) -> list[DetailLine]:
                 material=_cell_str(row, col_map.get("material")),
                 spec=_cell_str(row, col_map.get("spec")),
                 qty=qty,
+                unit_price=_parse_price(row[col_map["unit_price"]]) if "unit_price" in col_map and col_map["unit_price"] < len(row) else None,
                 line_remark=_cell_str(row, col_map.get("line_remark")),
             )
         )
@@ -166,9 +183,9 @@ def build_import_template_bytes() -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "订单明细"
-    ws.append(["序号", "产品名称", "型号名称", "颜色", "材料", "规格", "数量", "行备注"])
-    ws.append([1, "示例产品", "红色款", "红色", "塑料", "100x50", 100, ""])
-    ws.append([2, "示例产品-蓝色款", "", "蓝色", "塑料", "100x50", 50, "合并写法示例"])
+    ws.append(["序号", "产品名称", "型号名称", "颜色", "材料", "规格", "数量", "单价", "行备注"])
+    ws.append([1, "示例产品", "红色款", "红色", "塑料", "100x50", 100, 12.5, ""])
+    ws.append([2, "示例产品-蓝色款", "", "蓝色", "塑料", "100x50", 50, "", "单价留空则不计订单金额"])
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -310,7 +327,7 @@ def import_single_order_from_excel(
 
     ctx = ImportContext()
     errors: list[dict[str, Any]] = []
-    order_items: list[tuple[int, int, int, str | None]] = []
+    order_items: list[tuple[int, int, int, str | None, Decimal | None]] = []
     lines_success = 0
 
     for idx, line in enumerate(lines, start=1):
@@ -329,7 +346,7 @@ def import_single_order_from_excel(
                 allow_create=params.auto_create_sku,
                 default_unit_price=params.default_unit_price,
             )
-            order_items.append((idx, sku.id, line.qty, line.line_remark))
+            order_items.append((idx, sku.id, line.qty, line.line_remark, line.unit_price))
             lines_success += 1
         except ValueError as e:
             errors.append({"row": line.row, "message": str(e)})

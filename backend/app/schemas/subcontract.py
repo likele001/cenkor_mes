@@ -62,12 +62,14 @@ class SendLogIn(BaseModel):
     item_id: int
     qty: int
     remark: str | None = None
+    warehouse_id: int | None = None
 
 
 class ReceiveLogIn(BaseModel):
     item_id: int
     qty: int
     remark: str | None = None
+    warehouse_id: int | None = None
 
 
 class SendLogOut(BaseModel):

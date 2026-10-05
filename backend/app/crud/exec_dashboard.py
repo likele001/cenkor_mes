@@ -3,10 +3,10 @@
 """老板看板（Executive Dashboard）5 大指标聚合查询
 
 指标定义：
-1. 销售额（revenue）：订单状态=completed，amount 之和（按 period）
+1. 销售额（revenue）：已确认及之后（confirmed/producing/completed/shipped）订单的 amount 之和（按 confirmed_at 归期）
 2. 毛利率（profit_margin）：(revenue - cost) / revenue * 100
-3. 订单准交率（delivery_rate）：已确认订单中，实际完成时间 <= 交期的占比
-4. 回款率（collection_rate）：finance_ledgers 中 incoming 累计 / 销售订单总金额
+3. 订单准交率（delivery_rate）：有交期的已确认订单中，actual_completed_at <= due_date 的占比
+4. 回款率（collection_rate）：应收核销流水（statement_payments）累计 / 同期销售订单总金额
 5. 产能利用率（capacity_utilization）：work_orders 实际工时 / 标准工时 * 100
 """
 from __future__ import annotations
@@ -18,9 +18,12 @@ from decimal import Decimal
 from sqlalchemy import case, func, select, and_, or_
 from sqlalchemy.orm import Session
 
-from app.models.finance_ledger import FinanceLedger
 from app.models.order import Order
+from app.models.statement_payment import StatementPayment
 from app.models.work_order import WorkOrder
+
+# 收入口径：已确认及其后续状态才计入销售额（草稿/待审核/取消不算）
+SALES_STATUSES = ("confirmed", "completed", "producing", "shipped")
 
 
 @dataclass
@@ -105,7 +108,7 @@ def get_revenue(db: Session, period: PeriodRange) -> dict:
             func.coalesce(func.sum(Order.amount), 0).label("rev"),
             func.count(Order.id).label("cnt"),
         ).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         )
@@ -115,7 +118,7 @@ def get_revenue(db: Session, period: PeriodRange) -> dict:
 
     prev_row = db.execute(
         select(func.coalesce(func.sum(Order.amount), 0)).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.prev_start,
             Order.confirmed_at < period.prev_end,
         )
@@ -139,7 +142,7 @@ def get_profit_margin(db: Session, period: PeriodRange) -> dict:
             func.coalesce(func.sum(Order.amount), 0).label("rev"),
             func.coalesce(func.sum(Order.cost_amount), 0).label("cost"),
         ).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         )
@@ -153,7 +156,7 @@ def get_profit_margin(db: Session, period: PeriodRange) -> dict:
             func.coalesce(func.sum(Order.amount), 0).label("rev"),
             func.coalesce(func.sum(Order.cost_amount), 0).label("cost"),
         ).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.prev_start,
             Order.confirmed_at < period.prev_end,
         )
@@ -177,6 +180,7 @@ def get_delivery_rate(db: Session, period: PeriodRange) -> dict:
     total_row = db.execute(
         select(func.count(Order.id)).where(
             Order.due_date.isnot(None),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         )
@@ -186,6 +190,7 @@ def get_delivery_rate(db: Session, period: PeriodRange) -> dict:
     on_time_row = db.execute(
         select(func.count(Order.id)).where(
             Order.due_date.isnot(None),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
             Order.actual_completed_at.isnot(None),
@@ -199,6 +204,7 @@ def get_delivery_rate(db: Session, period: PeriodRange) -> dict:
     prev_total_row = db.execute(
         select(func.count(Order.id)).where(
             Order.due_date.isnot(None),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.prev_start,
             Order.confirmed_at < period.prev_end,
         )
@@ -208,6 +214,7 @@ def get_delivery_rate(db: Session, period: PeriodRange) -> dict:
     prev_on_time_row = db.execute(
         select(func.count(Order.id)).where(
             Order.due_date.isnot(None),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.prev_start,
             Order.confirmed_at < period.prev_end,
             Order.actual_completed_at.isnot(None),
@@ -226,33 +233,43 @@ def get_delivery_rate(db: Session, period: PeriodRange) -> dict:
     }
 
 
-def get_collection_rate(db: Session, period: PeriodRange) -> dict:
-    """回款率：期内财务账本中 direction=in 的累计 / 期内销售订单总金额
+def _collected(db: Session, start: datetime, end: datetime) -> float:
+    """实际回款：应收核销流水（StatementPayment）按收款日汇总。
+
+    不用 finance_ledgers.direction=in：那张表里既有确认应收的计提行也有现金行，
+    对账单一确认就会被当成「钱已到账」，回款率立刻冲到 100%。
     """
+    return float(
+        db.execute(
+            select(func.coalesce(func.sum(StatementPayment.amount), 0)).where(
+                StatementPayment.statement_type == "statement",
+                StatementPayment.paid_date >= start.date(),
+                StatementPayment.paid_date < end.date(),
+            )
+        ).one()[0]
+        or 0
+    )
+
+
+def get_collection_rate(db: Session, period: PeriodRange) -> dict:
+    """回款率：期内实际回款 / 期内销售订单总金额"""
     revenue_row = db.execute(
         select(func.coalesce(func.sum(Order.amount), 0)).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         )
     ).one()
     revenue = float(revenue_row[0] or 0)
 
-    collection_row = db.execute(
-        select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
-            FinanceLedger.direction == "in",
-            FinanceLedger.biz_date >= period.start.date(),
-            FinanceLedger.biz_date < period.end.date(),
-        )
-    ).one()
-    collected = float(collection_row[0] or 0)
+    collected = _collected(db, period.start, period.end)
 
     rate = _safe_ratio(collected, revenue)
 
     prev_revenue = float(
         db.execute(
             select(func.coalesce(func.sum(Order.amount), 0)).where(
-                Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+                Order.status.in_(SALES_STATUSES),
                 Order.confirmed_at >= period.prev_start,
                 Order.confirmed_at < period.prev_end,
             )
@@ -260,16 +277,7 @@ def get_collection_rate(db: Session, period: PeriodRange) -> dict:
         or 0
     )
 
-    prev_collected = float(
-        db.execute(
-            select(func.coalesce(func.sum(FinanceLedger.amount), 0)).where(
-                FinanceLedger.direction == "in",
-                FinanceLedger.biz_date >= period.prev_start.date(),
-                FinanceLedger.biz_date < period.prev_end.date(),
-            )
-        ).one()[0]
-        or 0
-    )
+    prev_collected = _collected(db, period.prev_start, period.prev_end)
     prev_rate = _safe_ratio(prev_collected, prev_revenue)
 
     return {
@@ -354,7 +362,7 @@ def get_revenue_trend(db: Session, days: int = 30) -> list[dict]:
             func.coalesce(func.sum(Order.amount), 0).label("rev"),
             func.count(Order.id).label("cnt"),
         ).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= start_dt,
         ).group_by(func.date(Order.confirmed_at)).order_by(func.date(Order.confirmed_at))
     ).all()
@@ -394,7 +402,7 @@ def get_top_customers(db: Session, period: PeriodRange, limit: int = 5) -> list[
             func.coalesce(func.sum(Order.amount), 0).label("rev"),
             func.count(Order.id).label("cnt"),
         ).join(Customer, Order.customer_id == Customer.id).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         ).group_by(Customer.id, Customer.name).order_by(func.sum(Order.amount).desc()).limit(limit)
@@ -424,7 +432,7 @@ def get_top_skus(db: Session, period: PeriodRange, limit: int = 5) -> list[dict]
             func.coalesce(func.sum(OrderItem.subtotal), 0).label("rev"),
             func.coalesce(func.sum(OrderItem.qty), 0).label("qty"),
         ).join(Order, Order.id == OrderItem.order_id).join(Sku, OrderItem.sku_id == Sku.id).where(
-            Order.status.in_(("confirmed", "completed", "producing", "shipped")),
+            Order.status.in_(SALES_STATUSES),
             Order.confirmed_at >= period.start,
             Order.confirmed_at < period.end,
         ).group_by(OrderItem.sku_id, Sku.code, Sku.name).order_by(func.sum(OrderItem.subtotal).desc()).limit(limit)
@@ -443,7 +451,7 @@ def get_top_skus(db: Session, period: PeriodRange, limit: int = 5) -> list[dict]
 
 
 def get_overdue_orders(db: Session, limit: int = 10) -> list[dict]:
-    """逾期未完成订单"""
+    """逾期未完成订单：已确认/生产中/已发货但未完成的"""
     from app.models.customer import Customer
 
     today = date.today()
@@ -458,7 +466,7 @@ def get_overdue_orders(db: Session, limit: int = 10) -> list[dict]:
         ).join(Customer, Order.customer_id == Customer.id).where(
             Order.due_date.isnot(None),
             Order.due_date < today,
-            Order.status.notin_(("completed", "cancelled")),
+            Order.status.in_(("confirmed", "producing", "shipped")),
         ).order_by(Order.due_date.asc()).limit(limit)
     ).all()
     return [

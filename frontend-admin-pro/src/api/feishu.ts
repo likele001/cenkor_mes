@@ -106,6 +106,25 @@ export type FeishuDeliveryDiagnostics = {
   hints: string[]
 }
 
+/** 规则模拟解析出来的一个接收人/群 */
+export type FeishuSimulateTarget = {
+  kind: string
+  ref: string
+  name?: string | null
+  username?: string | null
+  chat_code?: string
+}
+
+export type FeishuSimulateOut = {
+  targets: FeishuSimulateTarget[]
+  /** 逐条目标码各解析一遍的结果，看得出哪一条没命中任何人 */
+  by_code: Record<string, FeishuSimulateTarget[]>
+  unresolved: string[]
+  escalation: Record<string, FeishuSimulateTarget[]>
+  enabled: boolean
+  rule: FeishuRule
+}
+
 export type FeishuChat = {
   chat_id: string
   name: string
@@ -192,7 +211,7 @@ export const feishuApi = {
     })
   },
   simulate(data: { event_code: string; user_id?: number; department_id?: number; workshop?: string }) {
-    return http.request<{ targets: { kind: string; ref: string }[]; rule: FeishuRule }>({
+    return http.request<FeishuSimulateOut>({
       url: '/admin/system/feishu/simulate',
       method: 'POST',
       data,

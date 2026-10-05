@@ -9,6 +9,7 @@ from app.api.admin.system.common import write_op_log
 from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.material import get_material_by_id
+from app.crud.approval_record import record_status
 from app.crud.purchase_order import confirm_purchase_order, create_purchase_order, get_purchase_order_by_id, list_purchase_orders
 from app.crud.supplier import get_supplier_by_id
 from app.crud.warehouse import adjust_stock
@@ -19,6 +20,21 @@ from app.tasks._sync_excel import make_excel_response
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["purchase.manage"]))])
+
+
+def _trace(db: Session, po, action: str, operator_id: int, *, from_status: str | None, reason: str | None = None) -> None:
+    """收货/退货/作废都是人做的决定，采购单上要留下是谁、从什么状态改到什么状态。"""
+    record_status(
+        db,
+        biz_type="purchase_order",
+        biz_id=po.id,
+        biz_code=po.code,
+        action=action,
+        operator=operator_id,
+        from_status=from_status,
+        to_status=po.status,
+        reason=reason,
+    )
 
 
 def _out(po) -> dict:
@@ -204,6 +220,7 @@ def receive_api(
     if not any_received:
         raise HTTPException(status_code=400, detail="无可入库数量")
     po.status = "received" if all_received else "partial_received"
+    _trace(db, po, "receive", user.id, from_status=old_status)
     write_op_log(
         db,
         request,
@@ -263,15 +280,18 @@ def return_api(
         m = it.material
         if not m or not m.is_active:
             raise HTTPException(status_code=400, detail="物料不存在")
-        adjust_stock(
-            db,
-            warehouse_id=payload.warehouse_id,
-            sku_id=m.sku_id,
-            change_qty=-rq,
-            biz_type="purchase_return",
-            biz_id=po.id,
-            remark=po.code,
-        )
+        try:
+            adjust_stock(
+                db,
+                warehouse_id=payload.warehouse_id,
+                sku_id=m.sku_id,
+                change_qty=-rq,
+                biz_type="purchase_return",
+                biz_id=po.id,
+                remark=po.code,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         it.returned_qty += rq
         any_returned = True
 
@@ -289,6 +309,7 @@ def return_api(
     else:
         po.status = "received"
 
+    _trace(db, po, "return", user.id, from_status=old_status, reason=f"退货入仓 #{payload.warehouse_id}")
     write_op_log(
         db,
         request,
@@ -307,7 +328,13 @@ def return_api(
 
 
 @router.post("/{order_id}/cancel")
-def cancel_api(order_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def cancel_api(
+    order_id: int,
+    request: Request,
+    reason: str | None = Query(default=None, max_length=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     po = get_purchase_order_by_id(db, order_id=order_id, with_items=False)
     if not po:
         raise HTTPException(status_code=404, detail="采购单不存在")
@@ -315,6 +342,7 @@ def cancel_api(order_id: int, request: Request, db: Session = Depends(get_db), u
         raise HTTPException(status_code=400, detail="采购单状态不允许作废")
     old_status = po.status
     po.status = "canceled"
+    _trace(db, po, "cancel", user.id, from_status=old_status, reason=reason)
     write_op_log(
         db,
         request,
@@ -323,7 +351,7 @@ def cancel_api(order_id: int, request: Request, db: Session = Depends(get_db), u
         action="cancel",
         object_type="PurchaseOrder",
         object_id=po.id,
-        detail=f"code={po.code},status={old_status}->canceled",
+        detail=f"code={po.code},status={old_status}->canceled,reason={reason or ''}",
     )
     db.commit()
     po2 = get_purchase_order_by_id(db, order_id=order_id, with_items=True)

@@ -222,7 +222,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { purchaseApi, type PurchaseOrderOut, type WarehouseOut } from '@/api/purchase'
+import { purchaseApi, type PurchaseOrderOut } from '@/api/purchase'
+import { warehouseApi, type WarehouseOption } from '@/api/warehouse'
 import { http } from '@/utils/http'
 import { openPrintWindow } from '@/utils/print'
 import { partyOptionLabel } from '@/utils/display'
@@ -257,7 +258,7 @@ const loading = ref(false)
 const item = ref<PurchaseOrderOut | null>(null)
 const confirming = ref(false)
 const canceling = ref(false)
-const warehouses = ref<WarehouseOut[]>([])
+const warehouses = ref<WarehouseOption[]>([])
 
 const recv = reactive({
   open: false,
@@ -293,9 +294,11 @@ const canCancel = computed(() => {
 
 async function loadWarehouses() {
   try {
-    const res = await purchaseApi.listWarehouses()
+    const res = await warehouseApi.listWarehouseOptions()
     warehouses.value = res.items
-    if (warehouses.value.length && !recv.form.warehouse_id) recv.form.warehouse_id = warehouses.value[0].id
+    if (!warehouses.value.length) return
+    if (!recv.form.warehouse_id) recv.form.warehouse_id = warehouses.value[0].id
+    if (!ret.form.warehouse_id) ret.form.warehouse_id = warehouses.value[0].id
   } catch {
     warehouses.value = []
   }

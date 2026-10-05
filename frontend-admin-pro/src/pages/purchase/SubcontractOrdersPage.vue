@@ -234,12 +234,17 @@
             <el-table-column prop="sku_code" label="SKU编码" width="160" />
             <el-table-column prop="sku_name" label="SKU名称" min-width="180" />
             <el-table-column prop="qty" label="数量" width="100" />
+            <el-table-column prop="warehouse_name" label="发料仓库" width="140">
+              <template #default="{ row }">
+                <span>{{ row.warehouse_name || '-' }}</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="150">
               <template #default="{ row }">
                 <span>{{ row.remark || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="时间" width="180" />
+            <el-table-column prop="sent_at" label="时间" width="180" />
           </el-table>
           <el-empty v-if="!detail.send_logs?.length" description="暂无发料记录" :image-size="60" />
         </div>
@@ -252,12 +257,17 @@
             <el-table-column prop="sku_code" label="SKU编码" width="160" />
             <el-table-column prop="sku_name" label="SKU名称" min-width="180" />
             <el-table-column prop="qty" label="数量" width="100" />
+            <el-table-column prop="warehouse_name" label="收货仓库" width="140">
+              <template #default="{ row }">
+                <span>{{ row.warehouse_name || '-' }}</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="150">
               <template #default="{ row }">
                 <span>{{ row.remark || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="时间" width="180" />
+            <el-table-column prop="received_at" label="时间" width="180" />
           </el-table>
           <el-empty v-if="!detail.receive_logs?.length" description="暂无收货记录" :image-size="60" />
         </div>
@@ -277,8 +287,13 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="发料仓库">
+          <el-select v-model="sendForm.warehouse_id" placeholder="请选择仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="数量">
-          <el-input-number v-model="sendForm.qty" :min="0" :precision="2" controls-position="right" style="width: 100%" />
+          <el-input-number v-model="sendForm.qty" :min="0" :step="1" :precision="0" controls-position="right" style="width: 100%" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="sendForm.remark" type="textarea" :rows="2" placeholder="备注" />
@@ -303,8 +318,13 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="收货仓库">
+          <el-select v-model="receiveForm.warehouse_id" placeholder="请选择仓库" style="width: 100%">
+            <el-option v-for="w in warehouses" :key="w.id" :label="`${w.name}（${w.code}）`" :value="w.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="数量">
-          <el-input-number v-model="receiveForm.qty" :min="0" :precision="2" controls-position="right" style="width: 100%" />
+          <el-input-number v-model="receiveForm.qty" :min="0" :step="1" :precision="0" controls-position="right" style="width: 100%" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="receiveForm.remark" type="textarea" :rows="2" placeholder="备注" />
@@ -328,6 +348,7 @@ import {
 } from '@/api/subcontract'
 import { materialsApi, type SupplierOut } from '@/api/materials'
 import { masterApi, type SkuOut, type ProcessOut } from '@/api/master'
+import { warehouseApi, type WarehouseOption } from '@/api/warehouse'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -335,6 +356,16 @@ const items = ref<SubcontractOrderBrief[]>([])
 const suppliers = ref<SupplierOut[]>([])
 const skus = ref<SkuOut[]>([])
 const processes = ref<ProcessOut[]>([])
+const warehouses = ref<WarehouseOption[]>([])
+
+async function loadWarehouses() {
+  try {
+    const res = await warehouseApi.listWarehouseOptions()
+    warehouses.value = res.items ?? []
+  } catch {
+    warehouses.value = []
+  }
+}
 
 const query = reactive({
   keyword: '',
@@ -559,12 +590,14 @@ const sendForm = reactive({
   item_id: null as number | null,
   qty: 0,
   remark: '',
+  warehouse_id: null as number | null,
 })
 
 function openSendDialog() {
   sendForm.item_id = null
   sendForm.qty = 0
   sendForm.remark = ''
+  sendForm.warehouse_id = warehouses.value.length === 1 ? warehouses.value[0].id : null
   sendDialogVisible.value = true
 }
 
@@ -578,12 +611,17 @@ async function submitSend() {
     ElMessage.warning('数量必须大于0')
     return
   }
+  if (warehouses.value.length > 1 && !sendForm.warehouse_id) {
+    ElMessage.warning('请选择发料仓库')
+    return
+  }
   submitting.value = true
   try {
     await subcontractApi.sendLog(detail.value.id, {
       item_id: sendForm.item_id,
-      qty: sendForm.qty,
+      qty: Math.round(sendForm.qty),
       remark: sendForm.remark || null,
+      warehouse_id: sendForm.warehouse_id,
     })
     ElMessage.success('发料成功')
     sendDialogVisible.value = false
@@ -601,12 +639,14 @@ const receiveForm = reactive({
   item_id: null as number | null,
   qty: 0,
   remark: '',
+  warehouse_id: null as number | null,
 })
 
 function openReceiveDialog() {
   receiveForm.item_id = null
   receiveForm.qty = 0
   receiveForm.remark = ''
+  receiveForm.warehouse_id = warehouses.value.length === 1 ? warehouses.value[0].id : null
   receiveDialogVisible.value = true
 }
 
@@ -620,12 +660,17 @@ async function submitReceive() {
     ElMessage.warning('数量必须大于0')
     return
   }
+  if (warehouses.value.length > 1 && !receiveForm.warehouse_id) {
+    ElMessage.warning('请选择收货仓库')
+    return
+  }
   submitting.value = true
   try {
     await subcontractApi.receiveLog(detail.value.id, {
       item_id: receiveForm.item_id,
-      qty: receiveForm.qty,
+      qty: Math.round(receiveForm.qty),
       remark: receiveForm.remark || null,
+      warehouse_id: receiveForm.warehouse_id,
     })
     ElMessage.success('收货成功')
     receiveDialogVisible.value = false
@@ -637,7 +682,7 @@ async function submitReceive() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadSuppliers(), loadSkus(), loadProcesses()])
+  await Promise.all([loadSuppliers(), loadSkus(), loadProcesses(), loadWarehouses()])
   await reload(true)
 })
 </script>

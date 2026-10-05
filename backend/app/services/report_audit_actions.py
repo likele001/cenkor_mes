@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.crud.notification import create_notification
 from app.crud.report import create_audit, get_report_by_id, update_report_status
-from app.crud.report_unit import create_unit_audit, get_unit_by_id, reset_unit_to_draft
+from app.crud.report_unit import (
+    create_unit_audit,
+    get_unit_by_id,
+    reset_unit_to_draft,
+    set_unit_status,
+)
 from app.models.user import User
 
 
@@ -133,7 +138,7 @@ def leader_approve_unit(
         action="approve",
         reason=f"{channel_label}卡片审核",
     )
-    unit.status = new_status
+    set_unit_status(db, unit, new_status)
     create_notification(
         db,
         user_id=unit.user_id,

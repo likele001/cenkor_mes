@@ -14,6 +14,7 @@
     </template>
 
     <div v-loading="loading" class="space-y-6 mt-4">
+      <el-alert v-if="loadError" type="error" :closable="false" show-icon :title="loadError" />
       <!-- KPI Cards -->
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div v-for="card in kpiCards" :key="card.key"
@@ -24,7 +25,7 @@
           </div>
           <div class="flex items-center gap-1 mt-1 text-xs"
                :class="card.change >= 0 ? 'text-emerald-600' : 'text-red-500'">
-            <el-icon v-if="card.change !== 0"><component :is="card.change >= 0 ? 'Top' : 'Bottom'" /></el-icon>
+            <el-icon v-if="card.change !== 0"><component :is="card.change >= 0 ? TopIcon : BottomIcon" /></el-icon>
             <span v-if="card.change !== null">{{ Math.abs(card.change).toFixed(1) }}%</span>
             <span class="text-gray-400 ml-1">{{ t('execDashboard.vsPrev') }}</span>
           </div>
@@ -99,7 +100,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Top, Bottom, Warning } from '@element-plus/icons-vue'
+import { Top as TopIcon, Bottom as BottomIcon, Warning } from '@element-plus/icons-vue'
 import AdminPage from '@/components/admin/AdminPage.vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -124,6 +125,7 @@ const { t } = useI18n()
 const period = ref('month')
 const loading = ref(false)
 
+const loadError = ref('')
 const summary = ref<ExecSummaryOut | null>(null)
 const trend = ref<TrendItem[]>([])
 const orderStatus = ref<OrderStatusItem[]>([])
@@ -240,6 +242,7 @@ const pieOption = computed(() => ({
 
 async function loadAll() {
   loading.value = true
+  loadError.value = ''
   try {
     const [s, tr, os, tc, ts, ov] = await Promise.all([
       execDashboardApi.summary(period.value),
@@ -257,6 +260,7 @@ async function loadAll() {
     overdueOrders.value = ov ?? []
   } catch (e) {
     console.error('exec dashboard load error', e)
+    loadError.value = t('execDashboard.loadFailed')
   } finally {
     loading.value = false
   }

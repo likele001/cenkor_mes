@@ -72,16 +72,18 @@ def list_api(
 
 @router.get("/export")
 def export_api(
+    order_id: int | None = Query(default=None, ge=1),
+    status: str | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    items = list_work_orders(db, offset=0, limit=999999)
+    items = list_work_orders(db, order_id=order_id, status=status, offset=0, limit=999999)
     rows = []
     for x in items:
         order_code = x.order.code if x.order else ""
         sku_code = x.sku.code if x.sku else ""
         sku_name = x.sku.name if x.sku else ""
-        rows.append([x.code, order_code, sku_code, sku_name, x.qty, x.status, str(x.created_at) if x.created_at else ""])
+        rows.append([x.id, order_code, sku_code, sku_name, x.qty, x.status, str(x.created_at) if x.created_at else ""])
     return make_excel_response(
         headers=["工单号", "订单号", "型号编码", "型号名称", "数量", "状态", "创建时间"],
         rows=rows,

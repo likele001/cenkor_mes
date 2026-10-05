@@ -140,6 +140,7 @@ const groups: Group[] = [
         items: [
           { path: '/dashboard/kanban', i18nKey: 'menu.kanban', permissions: ['dashboard.view'], icon: Histogram },
           { path: '/dashboard/screen', i18nKey: 'menu.screen', permissions: ['dashboard.view'], icon: Monitor },
+          { path: '/dashboard/exec', i18nKey: 'menu.execDashboard', permissions: ['exec_dashboard.view'], icon: Money },
           { path: '/reports', i18nKey: 'menu.reportsOverview', permissions: ['report.view'], icon: DataAnalysis },
         ],
       },

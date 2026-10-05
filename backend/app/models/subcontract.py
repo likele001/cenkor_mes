@@ -57,6 +57,7 @@ class SubcontractSendLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("subcontract_orders.id", ondelete="CASCADE"), nullable=False, index=True)
     item_id: Mapped[int] = mapped_column(Integer, ForeignKey("subcontract_order_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    warehouse_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id", ondelete="SET NULL"), nullable=True, index=True)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -65,6 +66,7 @@ class SubcontractSendLog(Base):
 
     order = relationship("SubcontractOrder", back_populates="send_logs")
     item = relationship("SubcontractOrderItem")
+    warehouse = relationship("Warehouse")
 
 
 class SubcontractReceiveLog(Base):
@@ -74,6 +76,7 @@ class SubcontractReceiveLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(Integer, ForeignKey("subcontract_orders.id", ondelete="CASCADE"), nullable=False, index=True)
     item_id: Mapped[int] = mapped_column(Integer, ForeignKey("subcontract_order_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    warehouse_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("warehouses.id", ondelete="SET NULL"), nullable=True, index=True)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -82,3 +85,4 @@ class SubcontractReceiveLog(Base):
 
     order = relationship("SubcontractOrder", back_populates="receive_logs")
     item = relationship("SubcontractOrderItem")
+    warehouse = relationship("Warehouse")

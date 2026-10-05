@@ -79,7 +79,7 @@
                 :on-remove="() => (form.file = null)"
               >
                 <div class="text-sm text-zinc-500">{{ t('production.orderImport.dragHint') }}</div>
-                <div class="text-xs text-zinc-400 mt-1">支持 .xlsx、.xls；表头：产品名称、型号名称、数量等</div>
+                <div class="text-xs text-zinc-400 mt-1">支持 .xlsx、.xls；表头：产品名称、型号名称、数量，可选单价</div>
               </el-upload>
             </el-form-item>
 
@@ -90,7 +90,7 @@
 
             <el-form-item label="默认工价">
               <el-input-number v-model="form.default_unit_price" :min="0" :precision="2" :step="0.1" />
-              <span class="ml-2 text-xs text-zinc-500">新建型号时，各工序统一使用该单价（元/件）</span>
+              <span class="ml-2 text-xs text-zinc-500">新建型号时，各工序统一使用该工价（元/件），仅用于计件工资，与订单销售单价无关</span>
             </el-form-item>
 
             <el-form-item>
@@ -136,7 +136,8 @@
           <template #header><span class="font-medium">{{ t('production.orderImport.importInstructions') }}</span></template>
           <ul class="text-sm text-zinc-600 space-y-2 list-disc pl-4">
             <li>在左侧填写<strong>{{ t('production.orderImport.orderName') }}</strong>并<strong>选择客户</strong>，客户电话、地址等将自动带出。</li>
-            <li>Excel 仅需填写<strong>明细</strong>：产品名称、型号名称、数量；可选颜色、材料、规格、行备注。</li>
+            <li>Excel 仅需填写<strong>明细</strong>：产品名称、型号名称、数量；可选颜色、材料、规格、单价、行备注。</li>
+            <li><strong>单价</strong>列为该行的销售单价（元/件），用于计算订单金额；留空则该行不计金额。</li>
             <li>产品名称支持「产品-型号」合并写法（如「沙发-三人位」），型号名称列可留空。</li>
             <li>产品/型号<strong>编号由系统</strong>根据名称自动匹配；不存在时可勾选自动创建。</li>
             <li>新建型号将按产品默认工艺路线批量创建工序工价（默认 {{ form.default_unit_price }} 元/件）。</li>

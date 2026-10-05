@@ -33,8 +33,15 @@ class SalarySlip(Base):
     reject_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # confirm_status 是员工签收，pay_status 是厂里付钱——两回事，混用会导致「签了字=已发工资」的错觉
+    pay_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="unpaid", index=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    paid_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    paid_remark: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", foreign_keys=[user_id])
     signature_attachment = relationship("Attachment", foreign_keys=[signature_attachment_id])
+    payer = relationship("User", foreign_keys=[paid_by])

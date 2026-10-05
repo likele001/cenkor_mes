@@ -33,6 +33,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/dashboard/DashboardScreenPage.vue'),
         meta: { title: () => i18n.global.t('menu.screen'), permissions: ['dashboard.view'] },
       },
+      {
+        path: 'dashboard/exec',
+        name: 'dashboard-exec',
+        component: () => import('@/pages/dashboard/ExecutiveDashboardPage.vue'),
+        meta: { title: () => i18n.global.t('menu.execDashboard'), permissions: ['exec_dashboard.view'] },
+      },
       { path: 'reports', name: 'reports', component: () => import('@/pages/reports/DataReportsPage.vue'), meta: { title: () => i18n.global.t('menu.reportsOverview'), permissions: ['report.view'] } },
       { path: 'dashboard', redirect: '/dashboard/kanban' },
 

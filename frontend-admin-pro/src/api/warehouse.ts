@@ -5,6 +5,8 @@ import type { ListResp } from '@/types/api'
 
 export type WarehouseOut = { id: number; code: string; name: string; address: string | null }
 
+export type WarehouseOption = { id: number; code: string; name: string }
+
 export type StockOut = {
   id: number
   warehouse_id: number
@@ -120,6 +122,10 @@ export type EntryItemIn = { material_id: number; sku_id: number; qty: number }
 export const warehouseApi = {
   listWarehouses() {
     return http.request<ListResp<WarehouseOut>>({ url: '/admin/warehouse/warehouses', method: 'GET' })
+  },
+  /** 仓库下拉：登录即可读，发货/委外等出入库页面共用 */
+  listWarehouseOptions() {
+    return http.request<ListResp<WarehouseOption>>({ url: '/admin/warehouse/options', method: 'GET' })
   },
   listStocks(params: { warehouse_id?: number; item_type?: 'product' | 'material' | 'all' }) {
     const p: any = { warehouse_id: params.warehouse_id }

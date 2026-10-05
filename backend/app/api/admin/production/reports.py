@@ -22,6 +22,7 @@ from app.models.work_order import WorkOrder
 from app.models.user import User
 from app.schemas.salary import SalaryAllowanceCreateIn
 from app.services.mold_shot_tracker import increment_mold_shots_for_task
+from app.services.production_rollup import sync_after_report
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["report.audit"]))])
@@ -174,6 +175,8 @@ def qc_approve_api(
 
     # 审核通过 → 自动生成工资明细 + 追溯码
     salary = calc_and_create_salary(db, report=report)
+    # 工资明细落库后才能算准订单成本，这里再跑一次汇总
+    sync_after_report(db, report)
 
     # 模具模次自动累加
     task = db.get(Task, report.task_id)

@@ -35,6 +35,9 @@ def create_report(
     )
     db.add(report)
     db.flush()
+    from app.services.production_rollup import sync_after_report
+
+    sync_after_report(db, report)
     return report
 
 
@@ -99,6 +102,10 @@ def create_audit(
 def update_report_status(db: Session, report: Report, new_status: str) -> Report:
     report.status = new_status
     db.flush()
+    # 报工状态是任务/工单/订单进度的唯一真实来源，审核一次就要把汇总链跑一遍
+    from app.services.production_rollup import sync_after_report
+
+    sync_after_report(db, report)
     return report
 
 
@@ -137,7 +144,9 @@ def calc_and_create_salary(
     from decimal import Decimal
     unit_price = Decimal(str(price.unit_price))
     amount = Decimal(str(report.good_qty)) * unit_price
-    month = datetime.now().strftime("%Y-%m")
+    # 归属到报工那天：终审往往晚几天甚至跨月，按审核时间算会把上个月的工钱记到下个月工资条
+    work_at = report.created_at or datetime.now()
+    month = work_at.strftime("%Y-%m")
 
     item = SalaryItem(
         report_id=report.id,
@@ -147,6 +156,7 @@ def calc_and_create_salary(
         unit_price=unit_price,
         good_qty=report.good_qty,
         amount=amount,
+        work_date=work_at.date(),
         month=month,
     )
     db.add(item)
@@ -158,6 +168,13 @@ def calc_and_create_salary(
     except IntegrityError:
         _sp.rollback()
         return db.scalar(select(SalaryItem).where(SalaryItem.report_id == report.id))
+    # 工资明细是订单成本的唯一来源，落库后马上重算，调用方不必记得再同步一次
+    from app.models.order import Order
+    from app.services.production_rollup import recalc_order_cost
+
+    order = db.get(Order, wo.order_id)
+    if order:
+        recalc_order_cost(db, order)
     return item
 
 

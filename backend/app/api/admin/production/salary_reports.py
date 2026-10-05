@@ -1,6 +1,7 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import date, datetime
+from decimal import Decimal
 from io import BytesIO
 import json
 
@@ -21,11 +22,21 @@ from app.crud.salary_item import (
     list_hourly_items as _list_hourly_items,
 )
 from app.crud.salary_ledger import list_hourly_ledger, list_salary_ledger
-from app.crud.salary_slip import ensure_salary_slip, list_salary_slips, reset_salary_slip_confirm
+from app.crud.salary_slip import (
+    ensure_salary_slip,
+    list_salary_slips,
+    month_payable_summary,
+    pay_month,
+    pay_slip,
+    reset_salary_slip_confirm,
+    unpay_slip,
+)
 from app.models.export_job import ExportJob
 from app.models.salary import SalaryItem
 from app.models.salary_allowance import SalaryAllowance
+from app.models.salary_slip import SalarySlip
 from app.models.user import User
+from app.schemas.salary import SalarySlipPayIn, SalarySlipUnpayIn
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["salary.manage"]))])
@@ -264,9 +275,14 @@ def list_salary_slips_api(
                     "confirm_status": slip.confirm_status,
                     "reject_reason": slip.reject_reason,
                     "rejected_at": slip.rejected_at,
+                    "pay_status": slip.pay_status,
+                    "paid_at": slip.paid_at,
+                    "paid_by": slip.paid_by,
+                    "paid_remark": slip.paid_remark,
                 }
                 for slip, u in items
-            ]
+            ],
+            "pay_summary": month_payable_summary(db, month),
         }
     )
 
@@ -289,10 +305,12 @@ def export_salary_slips_api(
             slip.month,
             float(slip.net_amount),
             slip.confirm_status,
+            slip.pay_status,
+            str(slip.paid_at) if slip.paid_at else "",
             str(slip.created_at) if slip.created_at else "",
         ])
     return make_excel_response(
-        headers=["员工姓名", "月份", "实发金额", "状态", "创建时间"],
+        headers=["员工姓名", "月份", "实发金额", "签收状态", "发放状态", "发放时间", "创建时间"],
         rows=rows,
         filename=f"salary_slips_{month}.xlsx",
         sheet_name="工资条",
@@ -306,7 +324,7 @@ def reset_salary_slip_confirm_api(
     user: User = Depends(get_current_user),
 ):
     try:
-        slip = reset_salary_slip_confirm(db, slip_id=slip_id)
+        slip = reset_salary_slip_confirm(db, slip_id=slip_id, operator=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     create_notification(
@@ -321,6 +339,81 @@ def reset_salary_slip_confirm_api(
     )
     db.commit()
     return ok({"id": slip.id, "confirm_status": slip.confirm_status})
+
+
+@router.get("/salary/slips/pay-summary")
+def salary_pay_summary_api(
+    month: str = Query(min_length=7, max_length=7, pattern=r"^\d{4}-\d{2}$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return ok(month_payable_summary(db, month))
+
+
+@router.post("/salary/slips/pay")
+def pay_salary_slips_api(
+    payload: SalarySlipPayIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按月（或指定员工）批量发放：每张工资条写一行总账现金流水。"""
+    if not payload.month:
+        raise HTTPException(status_code=400, detail="请选择发放月份")
+    month = payload.month
+    try:
+        slips = pay_month(
+            db,
+            month=month,
+            operator_id=user.id,
+            user_ids=payload.user_ids,
+            remark=payload.remark,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    return ok({
+        "month": month,
+        "paid_count": len(slips),
+        "paid_amount": float(sum(Decimal(str(s.net_amount)) for s in slips)),
+        "items": [{"id": s.id, "user_id": s.user_id, "net_amount": float(s.net_amount)} for s in slips],
+    })
+
+
+@router.post("/salary/slips/{slip_id}/pay")
+def pay_salary_slip_api(
+    slip_id: int,
+    payload: SalarySlipPayIn | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    slip = db.scalar(select(SalarySlip).where(SalarySlip.id == slip_id))
+    if not slip:
+        raise HTTPException(status_code=400, detail="工资条不存在")
+    try:
+        slip = pay_slip(db, slip, operator_id=user.id, remark=(payload.remark if payload else None))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    return ok({"id": slip.id, "pay_status": slip.pay_status, "paid_at": slip.paid_at, "net_amount": float(slip.net_amount)})
+
+
+@router.post("/salary/slips/{slip_id}/unpay")
+def unpay_salary_slip_api(
+    slip_id: int,
+    payload: SalarySlipUnpayIn | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """撤销发放：写一笔等额负数现金流水，不改历史流水。"""
+    slip = db.scalar(select(SalarySlip).where(SalarySlip.id == slip_id))
+    if not slip:
+        raise HTTPException(status_code=400, detail="工资条不存在")
+    try:
+        slip = unpay_slip(db, slip, operator_id=user.id, reason=(payload.reason if payload else None))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    db.commit()
+    return ok({"id": slip.id, "pay_status": slip.pay_status})
 
 
 @router.post("/salary/slips/remind")

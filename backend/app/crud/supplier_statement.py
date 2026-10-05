@@ -6,10 +6,11 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.approval_record import record_status, status_action
 from app.models.material import Supplier
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.supplier_statement import SupplierStatement, SupplierStatementItem
-from app.models.finance_ledger import FinanceLedger
+from app.models.user import User
 
 
 def get_supplier_statement_by_id(db: Session, statement_id: int) -> SupplierStatement | None:
@@ -75,8 +76,30 @@ def create_supplier_statement(
     return stmt
 
 
-def update_supplier_statement_status(db: Session, stmt: SupplierStatement, new_status: str) -> SupplierStatement:
+def update_supplier_statement_status(
+    db: Session,
+    stmt: SupplierStatement,
+    new_status: str,
+    *,
+    operator: User | int | None = None,
+    action: str | None = None,
+    channel: str = "web",
+    reason: str | None = None,
+) -> SupplierStatement:
+    old_status = stmt.status
     stmt.status = new_status
+    record_status(
+        db,
+        biz_type="supplier_statement",
+        biz_id=stmt.id,
+        biz_code=stmt.code,
+        action=action or status_action(new_status),
+        operator=operator,
+        from_status=old_status,
+        to_status=new_status,
+        channel=channel,
+        reason=reason,
+    )
     db.flush()
     return stmt
 
@@ -97,39 +120,31 @@ def calc_purchase_order_amount(db: Session, order: PurchaseOrder) -> Decimal:
 
 
 def get_supplier_payables(db: Session) -> list[dict]:
-    """供应商应付汇总：应付总额（已确认对账） / 已付 / 未付"""
+    """供应商应付汇总：应付总额 / 已付 / 未付，全部取自对账单本身。
+
+    曾经这里是 SUM(总账 out/payment) 而应收那边是 statement.paid_amount，
+    两套口径对同一笔付款各算各的——总账漏记或多记，应付表就跟着失真。
+    paid_amount 由核销引擎（crud/statement_payment.py）唯一维护。
+    """
     rows = db.execute(
         select(
             Supplier.id,
             Supplier.code,
             Supplier.name,
             func.coalesce(func.sum(SupplierStatement.total_amount), 0).label("total_amount"),
+            func.coalesce(func.sum(SupplierStatement.paid_amount), 0).label("paid_amount"),
         )
         .select_from(SupplierStatement)
         .join(Supplier, Supplier.id == SupplierStatement.supplier_id)
-        .where(SupplierStatement.status.in_(["confirmed", "paid"]))
+        .where(SupplierStatement.status.in_(["confirmed", "partial", "paid"]))
         .group_by(Supplier.id, Supplier.code, Supplier.name)
         .order_by(func.sum(SupplierStatement.total_amount).desc())
     ).all()
 
-    paid_rows = db.execute(
-        select(
-            FinanceLedger.party_id,
-            func.coalesce(func.sum(FinanceLedger.amount), 0).label("paid_amount"),
-        )
-        .where(
-            FinanceLedger.party_type == "supplier",
-            FinanceLedger.direction == "out",
-            FinanceLedger.category == "payment",
-        )
-        .group_by(FinanceLedger.party_id)
-    ).all()
-    paid_map = {int(pid): Decimal(str(amt)) for pid, amt in paid_rows}
-
     result = []
     for r in rows:
         total = Decimal(str(r.total_amount))
-        paid = paid_map.get(int(r.id), Decimal("0"))
+        paid = Decimal(str(r.paid_amount))
         result.append({
             "supplier_id": int(r.id),
             "supplier_code": r.code,

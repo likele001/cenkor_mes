@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.crud.approval_record import record_status
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 
 
@@ -75,12 +76,24 @@ def list_purchase_orders(
     return db.scalars(stmt).all()
 
 
-def confirm_purchase_order(db: Session, po: PurchaseOrder, confirmer_user_id: int) -> PurchaseOrder:
+def confirm_purchase_order(db: Session, po: PurchaseOrder, confirmer_user_id: int, *, channel: str = "web") -> PurchaseOrder:
     if po.status != "draft":
         raise ValueError("采购单状态不允许确认")
+    from_status = po.status
     po.status = "confirmed"
     po.confirmed_at = datetime.now()
     po.confirmed_by = confirmer_user_id
+    record_status(
+        db,
+        biz_type="purchase_order",
+        biz_id=po.id,
+        biz_code=po.code,
+        action="confirm",
+        operator=confirmer_user_id,
+        from_status=from_status,
+        to_status=po.status,
+        channel=channel,
+    )
     db.flush()
     return po
 

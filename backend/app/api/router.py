@@ -28,7 +28,9 @@ from app.api.admin.automation.router import router as admin_automation_router
 from app.api.admin.finance.router import router as admin_finance_router
 from app.api.admin.purchase.router import router as admin_purchase_router
 from app.api.admin.warehouse.router import router as admin_warehouse_router
+from app.api.admin.warehouse.options import router as admin_warehouse_options_router
 from app.api.admin.approval.router import router as admin_approval_router
+from app.api.admin.approval.records import router as admin_approval_records_router
 from app.api.admin.mrp.router import router as admin_mrp_router
 from app.api.admin.subcontract.router import router as admin_subcontract_router
 
@@ -56,6 +58,9 @@ api_router.include_router(admin_automation_router, prefix="/admin/automation", t
 api_router.include_router(admin_finance_router, prefix="/admin/finance", tags=["admin-finance"], dependencies=_admin_deps)
 api_router.include_router(admin_purchase_router, prefix="/admin/purchase", tags=["admin-purchase"], dependencies=_admin_deps)
 api_router.include_router(admin_warehouse_router, prefix="/admin/warehouse", tags=["admin-warehouse"], dependencies=_admin_deps)
+api_router.include_router(admin_warehouse_options_router, prefix="/admin/warehouse/options", tags=["admin-warehouse-options"], dependencies=_admin_deps)
+# records 必须排在 /admin/approval/{flow_id} 之前注册，否则 "records" 会被当成 flow_id 解析
+api_router.include_router(admin_approval_records_router, prefix="/admin/approval/records", tags=["admin-approval-records"], dependencies=_admin_deps)
 api_router.include_router(admin_approval_router, prefix="/admin/approval", tags=["admin-approval"], dependencies=_admin_deps)
 api_router.include_router(admin_mrp_router, prefix="/admin/mrp", tags=["admin-mrp"], dependencies=_admin_deps)
 api_router.include_router(admin_subcontract_router, prefix="/admin/subcontract", tags=["admin-subcontract"], dependencies=_admin_deps)

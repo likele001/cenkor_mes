@@ -205,9 +205,12 @@
               <el-tag :type="row.bound ? 'success' : 'info'" size="small">{{ row.bound ? '是' : '否' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('system.feishu.actions')" width="100" align="center">
+          <el-table-column :label="t('system.feishu.actions')" width="160" align="center">
             <template #default="{ row }">
               <el-button link type="primary" @click="openBindForUser(row.id)">{{ t('system.feishu.oauthBind') }}</el-button>
+              <el-button v-if="row.bound" link type="primary" @click="openDiagnoseFor(row.id)">
+                {{ t('system.feishu.deliveryDiagnostics') }}
+              </el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -235,6 +238,105 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane :label="t('system.feishu.tabDiagnostics')" name="diagnostics">
+        <div class="mt-4 mb-3 flex gap-2 flex-wrap items-center">
+          <el-select
+            v-model="diagUserId"
+            clearable
+            filterable
+            :placeholder="t('system.feishu.diagUserPlaceholder')"
+            style="width: 280px"
+          >
+            <el-option
+              v-for="u in userBindings"
+              :key="u.id"
+              :label="bindingLabel(u)"
+              :value="u.id"
+            />
+          </el-select>
+          <el-button type="primary" :loading="diagLoading" @click="onDiagnose">
+            {{ t('system.feishu.diagRun') }}
+          </el-button>
+        </div>
+        <FeishuDeliveryPanel :info="diagInfo" />
+      </el-tab-pane>
+
+      <el-tab-pane :label="t('system.feishu.tabSimulate')" name="simulate">
+        <el-form label-width="110px" class="max-w-2xl mt-4">
+          <el-form-item :label="t('system.feishu.event')">
+            <el-select v-model="simForm.event_code" filterable style="width: 100%">
+              <el-option v-for="e in ruleRows" :key="e.code" :label="`${e.name}（${e.code}）`" :value="e.code" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('system.feishu.simEmployee')">
+            <el-select v-model="simForm.user_id" clearable filterable style="width: 100%" :placeholder="t('system.feishu.simOptional')">
+              <el-option v-for="u in userBindings" :key="u.id" :label="`${u.full_name || u.username}（${u.username}）`" :value="u.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('system.feishu.simDepartment')">
+            <el-select v-model="simForm.department_id" clearable filterable style="width: 100%" :placeholder="t('system.feishu.simOptional')">
+              <el-option v-for="d in deptBindings" :key="d.id" :label="d.name" :value="d.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('system.feishu.simWorkshop')">
+            <el-input v-model="simForm.workshop" :placeholder="t('system.feishu.simOptional')" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="simLoading" @click="onSimulate">{{ t('system.feishu.simRun') }}</el-button>
+          </el-form-item>
+        </el-form>
+
+        <template v-if="simResult">
+          <el-alert
+            v-if="!simResult.enabled"
+            type="warning"
+            :closable="false"
+            class="mb-3"
+            :title="t('system.feishu.simRuleDisabled')"
+          />
+          <el-alert
+            v-if="simResult.unresolved.length"
+            type="error"
+            :closable="false"
+            class="mb-3"
+            :title="t('system.feishu.simUnresolved', { codes: simResult.unresolved.map(targetName).join('、') })"
+          />
+
+          <div class="mb-2 font-semibold">{{ t('system.feishu.simFinalTargets', { count: simResult.targets.length }) }}</div>
+          <el-table :data="simResult.targets" border size="small" class="mb-4">
+            <el-table-column :label="t('system.feishu.simKind')" width="90">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.kind === 'user' ? 'success' : 'warning'">{{ kindLabel(row.kind) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('system.feishu.simName')" min-width="160">
+              <template #default="{ row }">
+                {{ row.name || '—' }}
+                <span v-if="row.username" class="text-el-placeholder">/ {{ row.username }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="ref" min-width="200">
+              <template #default="{ row }"><span class="break-all">{{ row.ref }}</span></template>
+            </el-table-column>
+          </el-table>
+
+          <div class="mb-2 text-el-placeholder">{{ t('system.feishu.simByCode') }}</div>
+          <div v-for="(rows, code) in simResult.by_code" :key="code" class="mb-2 text-sm">
+            <el-tag size="small" :type="rows.length ? 'info' : 'danger'">{{ targetName(String(code)) }}</el-tag>
+            <span class="ml-2">{{ rows.length ? rows.map(displayTarget).join('、') : t('system.feishu.simNobody') }}</span>
+          </div>
+
+          <div v-if="escalationLevels.length" class="mt-4">
+            <div class="mb-2 text-el-placeholder">{{ t('system.feishu.simEscalation') }}</div>
+            <div v-for="lv in escalationLevels" :key="lv" class="mb-2 text-sm">
+              <el-tag size="small" :type="levelTag(lv)">{{ lv }}</el-tag>
+              <span class="ml-2">{{ (simResult.escalation[lv] || []).map(displayTarget).join('、') || '—' }}</span>
+            </div>
+          </div>
+        </template>
+        <el-empty v-else :description="t('system.feishu.simEmpty')" />
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.feishu.tabLogs')" name="logs">
@@ -285,28 +387,9 @@
       </el-tab-pane>
 
       <el-tab-pane :label="t('system.feishu.tabTest')" name="test">
-        <el-alert
-          v-if="deliveryInfo"
-          type="success"
-          :closable="false"
-          class="mt-4 mb-4"
-          :title="t('system.feishu.testSendDeliveryHint')"
-        >
-          <p class="text-sm">{{ t('system.feishu.feishuTenant') }}：{{ deliveryInfo.feishu_tenant_name }}</p>
-          <p class="text-sm">{{ t('system.feishu.boundFeishuUser') }}：{{ deliveryInfo.bound_feishu_name }}（{{ deliveryInfo.bound_feishu_email }}）</p>
-          <p class="text-sm">{{ t('system.feishu.p2pMessageCount') }}：{{ deliveryInfo.p2p_message_count }}</p>
-          <ul class="text-sm mt-2 list-disc pl-5">
-            <li v-for="(hint, idx) in deliveryInfo.hints" :key="idx">{{ hint }}</li>
-          </ul>
-          <div class="mt-3 flex gap-2 flex-wrap">
-            <el-button v-if="deliveryInfo.chat_open_link" type="primary" @click="openLink(deliveryInfo.chat_open_link)">
-              {{ t('system.feishu.openBotChat') }}
-            </el-button>
-            <el-button v-if="deliveryInfo.bot_open_link" @click="openLink(deliveryInfo.bot_open_link)">
-              {{ t('system.feishu.openBotApp') }}
-            </el-button>
-          </div>
-        </el-alert>
+        <div class="mt-4">
+          <FeishuDeliveryPanel :info="deliveryInfo" />
+        </div>
         <el-form label-width="140px" class="max-w-xl mt-4">
           <el-form-item label="receive_id_type">
             <el-select v-model="testForm.receive_id_type" style="width: 200px">
@@ -335,6 +418,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AdminPage from '@/components/admin/AdminPage.vue'
+import FeishuDeliveryPanel from '@/components/admin/FeishuDeliveryPanel.vue'
 import {
   feishuApi,
   type FeishuDeliveryDiagnostics,
@@ -342,6 +426,8 @@ import {
   type FeishuPushLog,
   type FeishuSettings,
   type FeishuSetupChecklist,
+  type FeishuSimulateOut,
+  type FeishuSimulateTarget,
   type FeishuUserBinding,
 } from '@/api/feishu'
 
@@ -360,6 +446,21 @@ const testSending = ref(false)
 const deliveryInfo = ref<FeishuDeliveryDiagnostics | null>(null)
 const setupChecklist = ref<FeishuSetupChecklist | null>(null)
 const activeTab = ref('connection')
+
+const diagUserId = ref<number | null>(null)
+const diagLoading = ref(false)
+const diagInfo = ref<FeishuDeliveryDiagnostics | null>(null)
+
+const simLoading = ref(false)
+const simResult = ref<FeishuSimulateOut | null>(null)
+const simForm = reactive<{
+  event_code: string
+  user_id: number | null
+  department_id: number | null
+  workshop: string
+}>({ event_code: '', user_id: null, department_id: null, workshop: '' })
+
+const escalationLevels = computed(() => Object.keys(simResult.value?.escalation || {}))
 
 const appSecret = ref('')
 const encryptKey = ref('')
@@ -595,6 +696,68 @@ async function retryLog(id: number) {
   await loadLogs()
 }
 
+function bindingLabel(u: FeishuUserBinding) {
+  const name = u.full_name ? `${u.full_name}（${u.username}）` : u.username
+  return u.bound ? name : `${name} · ${t('system.feishu.unbound')}`
+}
+
+async function onDiagnose() {
+  diagLoading.value = true
+  try {
+    diagInfo.value = await feishuApi.getDeliveryDiagnostics(diagUserId.value ?? undefined)
+  } catch (e: unknown) {
+    diagInfo.value = null
+    ElMessage.error(String(e))
+  } finally {
+    diagLoading.value = false
+  }
+}
+
+async function openDiagnoseFor(userId: number) {
+  diagUserId.value = userId
+  activeTab.value = 'diagnostics'
+  await onDiagnose()
+}
+
+async function onSimulate() {
+  if (!simForm.event_code) {
+    ElMessage.warning(t('system.feishu.event'))
+    return
+  }
+  simLoading.value = true
+  try {
+    simResult.value = await feishuApi.simulate({
+      event_code: simForm.event_code,
+      user_id: simForm.user_id ?? undefined,
+      department_id: simForm.department_id ?? undefined,
+      workshop: simForm.workshop || undefined,
+    })
+  } catch (e: unknown) {
+    simResult.value = null
+    ElMessage.error(String(e))
+  } finally {
+    simLoading.value = false
+  }
+}
+
+function targetName(code: string) {
+  return (form.target_options || []).find((o) => o.code === code)?.name || code
+}
+
+function displayTarget(target: FeishuSimulateTarget) {
+  return target.name ? `${target.name}（${target.ref}）` : target.ref
+}
+
+function kindLabel(kind: string) {
+  return kind === 'user' ? t('system.feishu.simKindUser') : t('system.feishu.simKindChat')
+}
+
+function levelTag(level: string) {
+  if (level === 'critical' || level === 'danger') return 'danger'
+  if (level === 'warning') return 'warning'
+  return 'info'
+}
+
 async function onTestSend() {
   testSending.value = true
   try {
@@ -680,5 +843,9 @@ onMounted(async () => {
   loadUsers()
   loadDepts()
   loadLogs()
+  simForm.event_code =
+    (form.event_catalog || []).find((e) => (form.rules[e.code]?.targets || []).length)?.code
+    || form.event_catalog?.[0]?.code
+    || ''
 })
 </script>
