@@ -187,7 +187,7 @@ import { productionApi, type CustomerOut } from '@/api/production'
 import { partyOptionLabel } from '@/utils/display'
 import { useI18n } from 'vue-i18n'
 import { useStatus } from '@/utils/status-maps'
-import { useExport } from '@/composables/useExport'
+import { saveBlob } from '@/utils/download'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
@@ -196,7 +196,7 @@ const router = useRouter()
 const loading = ref(false)
 const items = ref<CustomerStatementOut[]>([])
 
-const { exporting, doExport } = useExport()
+const exporting = ref(false)
 const customers = ref<CustomerOut[]>([])
 
 const query = reactive({
@@ -324,12 +324,15 @@ onMounted(async () => {
 })
 
 async function exportExcel() {
-  await doExport(
-    () => financeApi.exportStatementsExcel({
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await financeApi.exportStatementsExcel({
       customer_id: query.customer_id || undefined,
       status: query.status || undefined,
-    }),
-    `statements_${new Date().toISOString().slice(0, 10)}.xlsx`,
-  )
+    })
+    saveBlob(blob, `statements_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    ElMessage.success(t('common.exported'))
+  } catch { /* http 已提示 */ } finally { exporting.value = false }
 }
 </script>

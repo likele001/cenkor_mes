@@ -98,6 +98,9 @@ import {
   SetUp,
   Tickets,
   Cloudy,
+  Stamp,
+  Promotion,
+  ChatDotRound,
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
@@ -309,6 +312,7 @@ const groups: Group[] = [
           { path: '/system/roles', i18nKey: 'menu.roles', permissions: ['role.manage'], icon: Key },
           { path: '/system/permissions', i18nKey: 'menu.permissions', permissions: ['permission.manage'], icon: Lock },
           { path: '/system/departments', i18nKey: 'menu.departments', permissions: ['department.manage'], icon: OfficeBuilding },
+          { path: '/system/approval-flows', i18nKey: 'menu.approvalFlows', permissions: ['setting.manage'], icon: Stamp },
         ],
       },
       {
@@ -317,6 +321,8 @@ const groups: Group[] = [
         icon: Connection,
         items: [
           { path: '/system/notifications', i18nKey: 'menu.notifications', permissions: ['notification.view'], icon: Bell },
+          { path: '/system/message-center', i18nKey: 'menu.messageCenter', permissions: ['setting.manage'], icon: ChatDotRound },
+          { path: '/system/feishu-notify', i18nKey: 'menu.feishuNotify', permissions: ['setting.manage'], icon: Promotion },
           { path: '/system/print-templates', i18nKey: 'menu.printTemplates', permissions: ['print_template.manage'], icon: Document },
           { path: '/system/attachments', i18nKey: 'menu.attachments', permissions: ['attachment.view'], icon: FolderOpened },
           { path: '/system/cloud-storage', i18nKey: 'menu.cloudStorage', permissions: ['cloud_storage.manage'], icon: Cloudy },

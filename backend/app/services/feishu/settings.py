@@ -251,9 +251,19 @@ def save_feishu_settings(db: Session, payload: dict) -> dict:
 
 
 def get_group_chat_id(cfg: dict, code: str) -> str:
+    """群地址有两种存法：旧结构在顶层 chat_id，v2 结构在 channels.feishu.chat_id。
+
+    notify_migration 会把配置升级成 v2，消息中心也只写 v2，所以两种都必须认，
+    否则迁移过的实例上所有群推送（含 boss 之外的 group:xxx 目标）都会静默丢失。
+    """
     for g in cfg.get("groups") or []:
-        if g.get("code") == code and g.get("enabled", True):
-            return (g.get("chat_id") or "").strip()
+        if g.get("code") != code or not g.get("enabled", True):
+            continue
+        channels = g.get("channels") if isinstance(g.get("channels"), dict) else {}
+        feishu = channels.get("feishu") if isinstance(channels.get("feishu"), dict) else {}
+        if feishu and not feishu.get("enabled", True):
+            continue
+        return (g.get("chat_id") or feishu.get("chat_id") or "").strip()
     return ""
 
 

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 import { http } from '@/utils/http'
 import type { ListResp } from '@/types/api'
-import type { ExportJobOut } from '@/api/production'
 
 export type WarehouseOut = { id: number; code: string; name: string; address: string | null }
 
@@ -131,7 +130,7 @@ export const warehouseApi = {
     const p: any = {}
     if (params.warehouse_id) p.warehouse_id = params.warehouse_id
     if (params.item_type && params.item_type !== 'all') p.item_type = params.item_type
-    return http.request<ExportJobOut>({ url: '/admin/warehouse/stocks/export', method: 'POST', params: p })
+    return http.downloadBlob({ url: '/admin/warehouse/stocks/export', method: 'GET', params: p })
   },
   exportWarehouses(params?: any) {
     return http.downloadBlob({ url: '/admin/warehouse/warehouses/export', method: 'GET', params })

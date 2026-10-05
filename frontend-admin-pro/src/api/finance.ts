@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 import { http } from '@/utils/http'
 import type { ListResp } from '@/types/api'
-import type { ExportJobOut } from '@/api/production'
 
 export type CustomerStatementOut = {
   id: number
@@ -196,7 +195,7 @@ export const financeApi = {
     return http.request<ProfitOut>({ url: '/admin/finance/profit', method: 'GET', params })
   },
   exportStatementsExcel(params: { customer_id?: number; status?: string }) {
-    return http.request<ExportJobOut>({ url: '/admin/finance/statements/export', method: 'POST', params })
+    return http.downloadBlob({ url: '/admin/finance/statements/export', method: 'GET', params })
   },
 
   listSupplierStatements(params: any) {

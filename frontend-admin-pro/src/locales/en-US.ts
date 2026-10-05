@@ -210,6 +210,8 @@ export default {
     "refresh": "Refresh",
     "save": "Save",
     "cancel": "Cancel",
+    "exportExcel": "Export Excel",
+    "exported": "Exported",
     "edit": "Edit",
     "create": "Add record",
     "noData": "No records",

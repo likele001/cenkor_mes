@@ -210,6 +210,8 @@ export default {
     refresh: '刷新',
     save: '保存',
     cancel: '取消',
+    exportExcel: '导出 Excel',
+    exported: '已导出',
     edit: '编辑',
     create: '补录',
     noData: '暂无记录',
