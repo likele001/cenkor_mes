@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.attachment import create_attachment
 from app.crud.customer import get_customer_by_id, list_customers
@@ -50,7 +50,9 @@ from app.services.order_import import (
     build_import_template_bytes,
     import_single_order_from_excel)
 
-router = APIRouter(dependencies=[Depends(require_permissions(["order.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["order.manage", "order.view", "order.create", "order.edit"]))]
+)
 
 def _sku_ref_out(sku) -> dict:
     product = sku.product if hasattr(sku, "product") and sku.product else None
@@ -150,7 +152,7 @@ def _list_out(order) -> dict:
     data["can_delete"] = order.status == "draft"
     return data
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_any_permissions(["order.view", "order.manage"]))])
 def list_api(
     keyword: str | None = Query(default=None),
     customer_id: int | None = Query(default=None, ge=1),
@@ -172,7 +174,7 @@ def list_api(
         limit=limit)
     return ok({"items": [_list_out(x) for x in items]})
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_any_permissions(["order.view", "order.manage"]))])
 def export_orders_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
@@ -190,7 +192,7 @@ def export_orders_api(
             ])
     return make_excel_response(headers, rows, "orders.xlsx", "订单")
 
-@router.get("/import-template")
+@router.get("/import-template", dependencies=[Depends(require_permissions(["order.manage"]))])
 def download_import_template_api():
     """下载订单导入 Excel 模板。"""
     data = build_import_template_bytes()
@@ -226,7 +228,7 @@ def _form_unit_price(raw: str | None) -> Decimal:
         raise HTTPException(status_code=400, detail="默认工价不能为负数")
     return v
 
-@router.post("/import-excel")
+@router.post("/import-excel", dependencies=[Depends(require_permissions(["order.manage"]))])
 def import_orders_excel_api(
     file: UploadFile = File(...),
     customer_id: int = Form(..., ge=1),
@@ -259,7 +261,7 @@ def import_orders_excel_api(
     db.commit()
     return ok(result)
 
-@router.get("/meta/form-options")
+@router.get("/meta/form-options", dependencies=[Depends(require_any_permissions(["order.view", "order.create", "order.manage"]))])
 def create_form_options_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
@@ -310,7 +312,7 @@ def create_form_options_api(
         }
     )
 
-@router.get("/{order_id}")
+@router.get("/{order_id}", dependencies=[Depends(require_any_permissions(["order.view", "order.manage"]))])
 def get_api(
     order_id: int,
     db: Session = Depends(get_db),
@@ -320,7 +322,7 @@ def get_api(
         raise HTTPException(status_code=400, detail="订单不存在")
     return ok(_order_detail_out(db, item))
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_any_permissions(["order.create", "order.manage"]))])
 def create_api(
     payload: OrderCreateIn,
     db: Session = Depends(get_db),
@@ -362,7 +364,7 @@ def create_api(
         raise HTTPException(status_code=500, detail="创建失败")
     return ok(_order_detail_out(db, item))
 
-@router.delete("/{order_id}")
+@router.delete("/{order_id}", dependencies=[Depends(require_permissions(["order.manage"]))])
 def delete_api(
     order_id: int,
     db: Session = Depends(get_db),
@@ -374,7 +376,7 @@ def delete_api(
         raise HTTPException(status_code=400, detail=str(e))
     return ok(None)
 
-@router.put("/{order_id}")
+@router.put("/{order_id}", dependencies=[Depends(require_any_permissions(["order.edit", "order.manage"]))])
 def update_api(
     order_id: int,
     payload: OrderUpdateIn,
@@ -416,7 +418,7 @@ def update_api(
         raise HTTPException(status_code=500, detail="更新失败")
     return ok(_order_detail_out(db, item))
 
-@router.post("/{order_id}/reject")
+@router.post("/{order_id}/reject", dependencies=[Depends(require_permissions(["order.manage"]))])
 def reject_api(
     order_id: int,
     reason: str = Query(min_length=1, max_length=500),
@@ -446,7 +448,7 @@ def reject_api(
     db.commit()
     return ok({"id": order.id, "status": order.status})
 
-@router.post("/{order_id}/confirm")
+@router.post("/{order_id}/confirm", dependencies=[Depends(require_permissions(["order.manage"]))])
 def confirm_api(
     order_id: int,
     db: Session = Depends(get_db),
@@ -528,7 +530,7 @@ def _order_items_html(items: list[dict]) -> str:
         rows.append("<tr><td colspan=\"4\" style=\"padding:10px;border:1px solid #ddd;color:#999;text-align:center;\">无明细</td></tr>")
     return "".join(rows)
 
-@router.get("/{order_id}/print")
+@router.get("/{order_id}/print", dependencies=[Depends(require_any_permissions(["order.view", "order.manage"]))])
 def print_api(
     order_id: int,
     template_id: int | None = Query(default=None, ge=1),
@@ -597,7 +599,7 @@ def print_api(
         })
     return ok({"html": html, "order_id": order.id, "code": order.code, "template_id": tpl.id})
 
-@router.get("/{order_id}/print-pdf")
+@router.get("/{order_id}/print-pdf", dependencies=[Depends(require_any_permissions(["order.view", "order.manage"]))])
 def print_pdf_api(
     order_id: int,
     template_id: int | None = Query(default=None, ge=1),

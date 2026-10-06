@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.material_bom import get_effective_bom_map_by_sku_ids
 from app.crud.kanban import get_orders_progress_map
@@ -66,7 +66,9 @@ from app.services.plan_capacity_settings import (
     task_load_qty)
 from app.crud.process_skill import get_process_skills_map
 
-router = APIRouter(dependencies=[Depends(require_permissions(["plan.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["plan.manage", "production.plan"]))]
+)
 
 def _out(
     plan,
@@ -1067,7 +1069,7 @@ def list_api(
         ]
     })
 
-@router.post("/plans")
+@router.post("/plans", dependencies=[Depends(require_permissions(["plan.manage"]))])
 def create_api(
     payload: ProductionPlanCreateIn,
     db: Session = Depends(get_db),
@@ -1113,7 +1115,7 @@ def create_api(
     out["pipeline_queued"] = pipeline_queued
     return ok(out)
 
-@router.post("/plans/{plan_id}/release")
+@router.post("/plans/{plan_id}/release", dependencies=[Depends(require_permissions(["plan.manage"]))])
 def release_plan_api(
     plan_id: int,
     payload: ProductionPlanReleaseIn,
@@ -1145,7 +1147,7 @@ def get_api(
     wo_flag = order_has_work_orders(db, order_id=plan.order_id)
     return ok(_out(plan, order_code, customer_name, qty, has_work_orders=wo_flag, order_status=order_status))
 
-@router.put("/plans/{plan_id}")
+@router.put("/plans/{plan_id}", dependencies=[Depends(require_permissions(["plan.manage"]))])
 def update_api(
     plan_id: int,
     payload: ProductionPlanUpdateIn,

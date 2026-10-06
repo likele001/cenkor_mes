@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok
 from app.crud.notification import create_notification
 from app.crud.attachment import get_attachments_by_ids
@@ -47,7 +47,7 @@ from app.services.approval_flow_resolver import (
     is_terminal_status,
     format_step_label)
 
-router = APIRouter(prefix="/report-units", dependencies=[Depends(require_permissions(["report.audit"]))])
+router = APIRouter(prefix="/report-units", dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve", "report.approve"]))])
 
 class InspectionResultIn(BaseModel):
     template_item_id: int
@@ -138,7 +138,7 @@ def _unit_list_out(u: ReportUnit) -> dict:
         ),
     }
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve", "report.approve"]))])
 def list_api(
     task_id: int | None = Query(default=None, ge=1),
     user_id: int | None = Query(default=None, ge=1),
@@ -172,7 +172,7 @@ def list_api(
     total = db.scalar(select(func.count(ReportUnit.id)).where(*count_filters))
     return ok({"items": [_unit_list_out(u) for u in items], "total": int(total or 0)})
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve", "report.approve"]))])
 def export_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
@@ -197,7 +197,7 @@ def export_api(
         filename="report_units.xlsx",
         sheet_name="报工件次")
 
-@router.get("/approval-steps")
+@router.get("/approval-steps", dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve", "report.approve"]))])
 def get_approval_steps_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
@@ -205,7 +205,7 @@ def get_approval_steps_api(
     steps = get_report_approval_steps(db)
     return ok({"steps": steps})
 
-@router.get("/{unit_id}")
+@router.get("/{unit_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve", "report.approve"]))])
 def get_api(
     unit_id: int,
     db: Session = Depends(get_db),
@@ -230,7 +230,7 @@ def get_api(
     ]
     return ok(data)
 
-@router.post("/{unit_id}/approve")
+@router.post("/{unit_id}/approve", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve", "report.approve"]))])
 def approve_api(
     unit_id: int,
     payload: QcApproveIn | None = None,
@@ -421,7 +421,7 @@ def approve_api(
     db.commit()
     return ok({"id": unit.id, "status": unit.status, "step_index": step_index})
 
-@router.post("/{unit_id}/reject")
+@router.post("/{unit_id}/reject", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve", "report.approve"]))])
 def reject_api(
     unit_id: int,
     reason: str | None = Query(default=None, max_length=500),

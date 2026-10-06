@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok, fail
 from app.crud.quality import (
     create_defect_code,
@@ -28,7 +28,9 @@ from app.schemas.quality import (
 )
 from app.tasks._sync_excel import make_excel_response
 
-router = APIRouter(dependencies=[Depends(require_permissions(["report.audit"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["report.audit", "qc.inspect", "qc.approve"]))]
+)
 
 
 # ── 质检模板 ──
@@ -56,13 +58,13 @@ def get_template_api(template_id: int, db: Session = Depends(get_db), user: User
     return ok(_tmpl_out(t))
 
 
-@router.post("/inspection-templates")
+@router.post("/inspection-templates", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def create_template_api(payload: TemplateIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     t = create_template(db, payload.model_dump())
     return ok(_tmpl_out(t))
 
 
-@router.put("/inspection-templates/{template_id}")
+@router.put("/inspection-templates/{template_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def update_template_api(template_id: int, payload: TemplateIn,
                         db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     t = update_template(db, template_id, payload.model_dump())
@@ -71,7 +73,7 @@ def update_template_api(template_id: int, payload: TemplateIn,
     return ok(_tmpl_out(t))
 
 
-@router.delete("/inspection-templates/{template_id}")
+@router.delete("/inspection-templates/{template_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def delete_template_api(template_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ok_ = delete_template(db, template_id)
     if not ok_:
@@ -151,14 +153,14 @@ def export_defect_codes_api(
     )
 
 
-@router.post("/defect-codes")
+@router.post("/defect-codes", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def create_defect_code_api(payload: DefectCodeCreateIn, db: Session = Depends(get_db),
                            user: User = Depends(get_current_user)):
     d = create_defect_code(db, payload.model_dump())
     return ok({"id": d.id})
 
 
-@router.put("/defect-codes/{code_id}")
+@router.put("/defect-codes/{code_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def update_defect_code_api(code_id: int, payload: DefectCodeUpdateIn,
                            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     d = update_defect_code(db, code_id, payload.model_dump())
@@ -167,7 +169,7 @@ def update_defect_code_api(code_id: int, payload: DefectCodeUpdateIn,
     return ok({"id": d.id})
 
 
-@router.delete("/defect-codes/{code_id}")
+@router.delete("/defect-codes/{code_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def delete_defect_code_api(code_id: int, db: Session = Depends(get_db),
                            user: User = Depends(get_current_user)):
     ok_ = delete_defect_code(db, code_id)

@@ -17,6 +17,9 @@ from app.services.ws_hub import dashboard_ws_hub
 
 router = APIRouter()
 
+# 空闲窗口：同时也是「事件漏推」时的兜底重载间隔
+IDLE_SECONDS = 45.0
+
 
 def _user_from_token(token: str) -> User | None:
     db: Session = SessionLocal()
@@ -46,11 +49,17 @@ async def dashboard_ws(websocket: WebSocket, token: str = Query(default="")):
     try:
         while True:
             try:
-                msg = await asyncio.wait_for(websocket.receive_text(), timeout=15.0)
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=IDLE_SECONDS)
                 if msg.strip().lower() in {"ping", '{"type":"ping"}'}:
                     await websocket.send_json({"type": "pong"})
             except asyncio.TimeoutError:
-                await websocket.send_json({"type": "refresh", "channel": "dashboard"})
+                # 正常刷新由 dashboard_events 在业务 commit 时推送；
+                # 这里只是长时间无事件时的兜底重载（漏推不至于让大屏停格）
+                await websocket.send_json({
+                    "type": "refresh",
+                    "channel": "dashboard",
+                    "reason": "heartbeat",
+                })
     except WebSocketDisconnect:
         pass
     finally:

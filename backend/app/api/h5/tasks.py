@@ -4,6 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.h5.self_service import (
+    REPORT_READ,
+    REPORT_SUBMIT,
+    SALARY_VIEW,
+    TASK_READ,
+    ensure_permission)
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
 from app.crud.dashboard import get_employee_dashboard_summary
@@ -28,9 +34,19 @@ from app.services.task_qr import task_qr_payload
 router = APIRouter()
 
 def _ensure_employee(user: User) -> None:
-    roles = {r.code for r in user.roles}
-    if not ({"employee", "leader"} & roles):
-        raise HTTPException(status_code=403, detail="无权限")
+    ensure_permission(user, TASK_READ)
+
+
+def _ensure_report_submit(user: User) -> None:
+    ensure_permission(user, REPORT_SUBMIT)
+
+
+def _ensure_report_read(user: User) -> None:
+    ensure_permission(user, REPORT_READ)
+
+
+def _ensure_salary_view(user: User) -> None:
+    ensure_permission(user, SALARY_VIEW)
 
 def _my_assignment_fields(db: Session, task: Task, user_id: int) -> dict:
     report_mode = get_default_report_mode(db)
@@ -201,7 +217,7 @@ def submit_report_api(
     attachment_ids: str | None = Query(default=None, max_length=512),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_report_submit(user)
     task = get_task_by_code(db, task_code=task_code, with_refs=False)
     if not task:
         raise HTTPException(status_code=400, detail="任务不存在")
@@ -270,7 +286,7 @@ def my_reports_api(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_report_read(user)
     from app.crud.report import list_reports
     items = list_reports(db, report_user_id=user.id, offset=offset, limit=limit)
     return ok({
@@ -296,7 +312,7 @@ def my_salary_api(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_salary_view(user)
     from app.models.process import Process
 
     items = get_salary_items(db, user_id=user.id, month=month, offset=offset, limit=limit)
@@ -327,7 +343,7 @@ def my_salary_summary_api(
     month: str | None = Query(default=None, max_length=7),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_salary_view(user)
     data = get_salary_summary(db, month=month, user_id=user.id)
     return ok({"items": data})
 

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.equipment import (
     create_equipment,
@@ -38,12 +38,14 @@ def _equipment_code_exists(db: Session, code: str) -> bool:
     return get_equipment_by_code(db, code) is not None
 
 
-router = APIRouter(dependencies=[Depends(require_permissions(["equipment.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["equipment.manage", "equipment.view"]))]
+)
 
 
 # ==================== 设备 ====================
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_any_permissions(["equipment.view", "equipment.manage"]))])
 def list_equipment_api(
     status: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -57,7 +59,7 @@ def list_equipment_api(
             "created_at": e.created_at} for e in items]})
 
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_any_permissions(["equipment.view", "equipment.manage"]))])
 def export_equipment_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -68,7 +70,7 @@ def export_equipment_api(
     return make_excel_response(headers, rows, "equipment.xlsx", "设备")
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def create_equipment_api(
     payload: EquipmentCreateIn,
     db: Session = Depends(get_db),
@@ -93,7 +95,7 @@ def create_equipment_api(
     return ok({"id": e.id, "code": e.code, "name": e.name})
 
 
-@router.put("/{equipment_id}")
+@router.put("/{equipment_id}", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def update_equipment_api(
     equipment_id: int,
     payload: EquipmentUpdateIn,
@@ -125,7 +127,7 @@ def update_equipment_api(
 
 # ==================== 设备巡检 ====================
 
-@router.post("/{equipment_id}/check")
+@router.post("/{equipment_id}/check", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def check_equipment_api(
     equipment_id: int,
     check_type: str = Query(default="daily"),
@@ -149,7 +151,7 @@ def check_equipment_api(
     return ok({"id": ck.id, "equipment_id": ck.equipment_id, "result": ck.result})
 
 
-@router.get("/{equipment_id}/checks")
+@router.get("/{equipment_id}/checks", dependencies=[Depends(require_any_permissions(["equipment.view", "equipment.manage"]))])
 def list_checks_api(
     equipment_id: int,
     db: Session = Depends(get_db),
@@ -162,7 +164,7 @@ def list_checks_api(
 
 # ==================== 设备保养计划 ====================
 
-@router.get("/maintenance-plans")
+@router.get("/maintenance-plans", dependencies=[Depends(require_any_permissions(["equipment.view", "equipment.manage"]))])
 def list_maintenance_plans_api(
     equipment_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -178,7 +180,7 @@ def list_maintenance_plans_api(
     ]})
 
 
-@router.post("/maintenance-plans")
+@router.post("/maintenance-plans", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def create_maintenance_plan_api(
     payload: EquipmentMaintenancePlanCreateIn,
     db: Session = Depends(get_db),
@@ -202,7 +204,7 @@ def create_maintenance_plan_api(
     return ok({"id": p.id, "equipment_id": p.equipment_id, "plan_type": p.plan_type})
 
 
-@router.put("/maintenance-plans/{plan_id}")
+@router.put("/maintenance-plans/{plan_id}", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def update_maintenance_plan_api(
     plan_id: int,
     payload: EquipmentMaintenancePlanUpdateIn,
@@ -227,7 +229,7 @@ def update_maintenance_plan_api(
     return ok({"id": p.id})
 
 
-@router.delete("/maintenance-plans/{plan_id}")
+@router.delete("/maintenance-plans/{plan_id}", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def delete_maintenance_plan_api(
     plan_id: int,
     db: Session = Depends(get_db),
@@ -243,7 +245,7 @@ def delete_maintenance_plan_api(
 
 # ==================== 设备保养日志 ====================
 
-@router.get("/maintenance-logs")
+@router.get("/maintenance-logs", dependencies=[Depends(require_any_permissions(["equipment.view", "equipment.manage"]))])
 def list_maintenance_logs_api(
     equipment_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -258,7 +260,7 @@ def list_maintenance_logs_api(
     ]})
 
 
-@router.post("/maintenance-logs")
+@router.post("/maintenance-logs", dependencies=[Depends(require_permissions(["equipment.manage"]))])
 def create_maintenance_log_api(
     payload: EquipmentMaintenanceLogCreateIn,
     db: Session = Depends(get_db),

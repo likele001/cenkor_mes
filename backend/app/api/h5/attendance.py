@@ -5,6 +5,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from app.api.h5.self_service import SELF_SERVICE, ensure_permission
 from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.attendance import check_in, check_out, list_attendance_records
@@ -18,9 +19,7 @@ router = APIRouter(prefix="/attendance", tags=["h5-attendance"])
 
 
 def _ensure_employee(user: User) -> None:
-    roles = {r.code for r in user.roles}
-    if not ({"employee", "leader"} & roles):
-        raise HTTPException(status_code=403, detail="无权限")
+    ensure_permission(user, SELF_SERVICE)
 
 
 def _out(x) -> dict:
