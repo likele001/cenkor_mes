@@ -127,6 +127,8 @@
 
 ## 6. 建议的下一步（按性价比排序）
 
+> 下面 8 条已全部落地：1/2/4/5/7/8 见 §7，3/6 见 §8。`DB_AUTO_CREATE` 保持开启（开发期）。
+
 1. 拆 `reports.py` 的 `salary/*` 接口并挂 `salary.manage`（P1.1，越权改钱，改动小）。
 2. 外协 router 补权限依赖（P1.2）。
 3. 决策 WS 的去留：接上 broadcast 生产者，或整条摘掉（P1.3）。
@@ -168,3 +170,74 @@
 **回归钉死**：`tests/test_permission_codes_live.py`（23 例）逐码验证「无码 403 → 有码 200 → view 码不能写」，并有一条防漂移用例：扫描 `app/` 全量源码，seed 里声明的每个码（除上表三个例外）必须出现在某个校验依赖里，否则测试失败。以后新增权限点忘了挂，CI 会直接红。
 
 **前端同步**：`router/index.ts` 20 条 meta 与 `AppMenu.vue` 19 条菜单项补上对应的 `.view`/`.assign`/`.approve` 码，否则只读角色拿得到接口却进不了页面。**尚未做**：页面内写操作按钮的按码隐藏（本仓历来没有按钮级 `v-if` 权限约定，只读角色点开按钮会收到 403 提示）——需要的话按页面逐个补。
+
+---
+
+## 8. 第三轮落地（2026-10-06，`pytest 327 passed`）
+
+### 8.1 §3 P1.3 —— 看板 WebSocket 从「只有消费者」变成有生产者
+
+原先 `dashboard_ws_hub.broadcast` 零调用者，`/api/ws/dashboard` 每 15 秒给每个连接
+硬发一条 `refresh`，等于把事件推送做成了轮询。现在：
+
+- `app/services/dashboard_events.py`（新）：在 `Session` 类级事件上挂钩子
+  ——`before_flush` 记下本事务改到了哪几张看板表，`after_commit` 才广播，`after_rollback` 丢弃。
+  监听的是 `Report / ReportUnit / ReportUnitAudit / Order / OrderItem / WorkOrder / Task / TaskAssignment / SalaryItem`，
+  对应 `changed: ["reports"|"orders"|"tasks"|"salary"]`。
+  选这个挂点而不是逐个端点手写调用：这些表的写入点散在 admin、h5、自动化、脚本里，逐个补必漏。
+- `app/services/ws_hub.py`：`publish()` 用 `run_coroutine_threadsafe` 把消息从同步线程
+  （线程池里的端点）投回事件循环；`publish_refresh()` 带 3 秒合并窗口，窗口内的多次提交
+  只推一次，并在窗口结束时补发一次，保证最后一笔改动一定被看到。推送失败只记日志，不影响已提交的业务事务。
+- `app/api/ws/dashboard.py`：空闲窗口 15s → 45s，`refresh` 从「唯一来源」降级为漏推兜底。
+- 前端不用改：`utils/ws.ts` 仍只认 `type === "refresh"`，nginx 的 `/api/ws/` 已配好
+  `Upgrade`+`proxy_read_timeout 86400s`，`:8500` 单进程 → 进程内存连接池够用。多 worker 部署要换 Redis pub/sub。
+
+证据：`tests/test_dashboard_ws_refresh.py`（11 例，含跨线程投递、合并窗口、僵尸 handle 重挂、死 socket 摘除）
++ `tests/test_dashboard_ws_live_push.py`（3 例，真接口 `POST /api/admin/production/orders`
+commit 后，已连接的 WS 客户端真的收到 `{"type":"refresh","changed":["orders",...]}`）。
+
+### 8.2 §4 第 6 条 —— 迁移链现在能单独建出完整库
+
+跑之前先说结论：**在此之前它跑不通第二遍**。`0001_init_schema.upgrade()` 是
+`Base.metadata.create_all(bind=app.core.db.engine)`，于是：
+
+| 问题 | 后果 |
+| --- | --- |
+| 建表内容取决于 `app/models/__init__.py` 当时导入了哪些模块 | `molds/quotations/spc_*/wechat` 共 9 张表既没进迁移也没被建出来（老库和新库结构不一致） |
+| 用的是 `settings.DB_URL` 的 engine，而不是 alembic 的 bind | `alembic -x` / `ALEMBIC_DB_URL` 指哪都没用，永远迁主库 |
+| 0005/0007 无守卫地 `create_table` / `add_column` | 空库跑到 0005 直接 `table cloud_storage_config already exists` —— 链不可重放 |
+| 0002/0003/0008–0012 的幂等守卫写死 `information_schema` | 只能在 MySQL 上跑，「能不能从零建库」无法在不碰真实库的前提下验证 |
+
+改动：
+
+1. `alembic/env.py`：新增 `ALEMBIC_DB_URL` 覆盖（未设置时回落 `settings.DB_URL`）；
+   导入 `app/models` 下全部模块 + `crm_adapter` 模型，让 metadata 不再依赖导入副作用。
+2. `0001`：改用 `op.get_bind()`；离线 `--sql` 模式给出明确报错（create_all 无法渲染成 SQL）。
+3. `0005`、`0007`：逐条加 `has_table` / `has_column` / `has_index` 守卫，`drop_table(if_exists=True)`。
+4. `0002/0003/0008/0009/0010/0011/0012`：7 个文件里的 15 个守卫函数从裸 `information_schema`
+   换成 `sa.inspect(conn)`，语义不变但方言无关。
+5. `0013_orphan_model_tables`（新）：按名字补齐上述 9 张表，DDL 取模型元数据（不复制第二份定义）。
+   **已在开发库执行**：125 → 134 张表，`current = 0013_orphan_model_tables (head)`。
+   回滚就是 `downgrade 0012`（已在 SQLite 上验证会干净地删掉这 9 张）。
+
+验证（全程不碰 MySQL）：空库 `alembic upgrade head` → 126 张表，覆盖 125 个模型表，
+之后再跑 `create_all` 增量为 0；链在 dev 式模拟库上单独补建出那 9 张；dev 与「空库跑链」
+在 116 张共有表上**列级零漂移**。回归用例见 `tests/test_alembic_chain_complete.py`（4 例）。
+
+`ai_alert_events / ai_conversations / ai_messages / platform_ai_* / wecom_push_logs / dingtalk_push_logs`
+这 8 张表：模型已删、代码零引用、链也不建，只躺在老库里 —— 是历史遗留，不动它（不删别人的数据），
+但加了用例守住「链不建的表不能有代码引用」。
+
+**`DB_AUTO_CREATE` 现在可以关了**，但你在开发期关掉之后，新增模型必须自己配一条像 0013 那样的
+迁移，否则老库不会长出这张表（新库反而会）—— 建议发布前再关。
+
+### 8.3 §6 第 8 条相关 —— 演示数据脚本的租户列
+
+`scripts/seed_demo_finance_data.py` 全文按 `tenant_id` 过滤/插入，而
+`orders / work_orders / order_items / finance_ledgers` 四张表都没有这一列（已用开发库
+`information_schema` 只读确认），脚本一进去就 `Unknown column`。已去掉租户过滤与
+`tenant_id=` 入参，`_is_already_seeded` 改为全表判断。在隔离 SQLite 上干跑通过
+（orders 7 / work_orders 6 / 台账 18 条，二次运行正确跳过）。**脚本会写库，仍由你自己决定何时跑。**
+
+注：`_is_already_seeded` 现在只要 `finance_ledgers` 有任何一行就跳过 —— 开发库已有 1 行，
+所以现在跑它会 `[SKIP]`。这是原本就有的保守语义，没有改。

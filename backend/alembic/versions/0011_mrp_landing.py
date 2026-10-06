@@ -20,27 +20,22 @@ _FK_COL = "purchase_order_id"
 
 
 def _table_exists(conn, table_name: str) -> bool:
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLES "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-    ), {"t": table_name})
-    return result.scalar() > 0
+    # sa.inspect 而非 information_schema：迁移链要能在临时 SQLite 上验证「从零建库」
+    return sa.inspect(conn).has_table(table_name)
 
 
 def _column_exists(conn, table: str, column: str) -> bool:
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.COLUMNS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c"
-    ), {"t": table, "c": column})
-    return result.scalar() > 0
+    insp = sa.inspect(conn)
+    if not insp.has_table(table):
+        return False
+    return any(c["name"] == column for c in insp.get_columns(table))
 
 
 def _index_exists(conn, table: str, index: str) -> bool:
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.STATISTICS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
-    ), {"t": table, "i": index})
-    return result.scalar() > 0
+    insp = sa.inspect(conn)
+    if not insp.has_table(table):
+        return False
+    return any(ix["name"] == index for ix in insp.get_indexes(table))
 
 
 def _fk_on_column(conn, table: str, column: str) -> str | None:
@@ -49,12 +44,13 @@ def _fk_on_column(conn, table: str, column: str) -> str | None:
     create_all 建的表，外键名是 MySQL 自动生成的（mrp_items_ibfk_N），按名字查不出来，
     所以按列查——否则这里会再叠一个同列外键。
     """
-    row = conn.execute(sa.text(
-        "SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND COLUMN_NAME = :c "
-        "AND REFERENCED_TABLE_NAME IS NOT NULL LIMIT 1"
-    ), {"t": table, "c": column}).first()
-    return str(row[0]) if row else None
+    insp = sa.inspect(conn)
+    if not insp.has_table(table):
+        return None
+    for fk in insp.get_foreign_keys(table):
+        if column in (fk.get("constrained_columns") or []):
+            return fk.get("name")
+    return None
 
 
 def upgrade() -> None:

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 
 import pytest
 from sqlalchemy import create_engine
@@ -204,6 +205,24 @@ def test_coalesce_window_merges_and_still_flushes(hub):
     assert len(client.received) == 2
     assert client.received[1]["changed"] == ["salary", "tasks"]
     assert ws_hub._flush_handle is None
+
+
+def test_stale_handle_does_not_swallow_refresh(hub):
+    """旧 handle 属于已关闭的 loop 时必须重挂，否则积压的 channel 永远发不出去。"""
+    ws_hub, loop = hub
+    client = FakeWS()
+    _run(loop, ws_hub.connect(client))
+
+    ws_hub._pending_channels.add("tasks")          # 上一个 loop 死掉时没发出去的
+    ws_hub._last_flush_at = time.monotonic()       # 仍处在合并窗口内
+    ws_hub._flush_handle = object()                # 属于已关闭 loop 的僵尸 handle
+
+    assert ws_hub.publish_refresh({"orders"}) is False
+    assert isinstance(ws_hub._flush_handle, asyncio.TimerHandle)
+
+    ws_hub.publish_refresh_scheduled()
+    _settle(loop)
+    assert client.received[-1]["changed"] == ["orders", "tasks"]
 
 
 def test_dead_socket_is_dropped(hub):

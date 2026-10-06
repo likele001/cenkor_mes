@@ -17,11 +17,8 @@ depends_on = None
 
 
 def _table_exists(conn, table_name: str) -> bool:
-    result = conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLES "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-    ), {"t": table_name})
-    return result.scalar() > 0
+    # sa.inspect 而非 information_schema：迁移链要能在临时 SQLite 上验证「从零建库」
+    return sa.inspect(conn).has_table(table_name)
 
 
 def upgrade() -> None:

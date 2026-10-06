@@ -4,6 +4,9 @@
 
 生产者在同步代码里（线程池中的 FastAPI 端点、脚本），消费者在事件循环里，
 因此广播必须经 run_coroutine_threadsafe 回主循环。
+
+连接池是进程内存态：多 worker 部署时每台只有自己连接的客户端能看到自己的
+提交，跨进程需要换成 Redis pub/sub。当前 :8500 单进程，先不做这层。
 """
 
 from __future__ import annotations
@@ -100,11 +103,11 @@ class DashboardWSHub:
             return False
 
     def _schedule_flush_locked(self, delay: float, reason: str) -> None:
-        if self._flush_handle is not None:
-            return
         loop = self._loop
         if loop is None or loop.is_closed():
             return
+        # 总是重挂：旧 handle 可能属于一个已经关闭的 loop，留着它就再没人补发了
+        self._flush_handle = None
         try:
             self._flush_handle = loop.call_later(
                 delay, lambda: self.publish_refresh_scheduled(reason)
