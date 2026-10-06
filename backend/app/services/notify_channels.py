@@ -86,6 +86,10 @@ EVENT_GROUP_CODES: dict[str, list[str]] = {
 }
 
 
+# 分发器认识的全部事件：不在这里的事件码走不到任何推送分支
+KNOWN_EVENTS = PERSONAL_EVENTS | GROUP_ONLY_EVENTS | MIXED_EVENTS | RULE_BASED_EVENTS
+
+
 def is_personal_event(event_code: str) -> bool:
     return event_code in PERSONAL_EVENTS
 
@@ -100,3 +104,7 @@ def is_mixed_event(event_code: str) -> bool:
 
 def is_rule_based_event(event_code: str) -> bool:
     return event_code in RULE_BASED_EVENTS
+
+
+def is_known_event(event_code: str) -> bool:
+    return event_code in KNOWN_EVENTS

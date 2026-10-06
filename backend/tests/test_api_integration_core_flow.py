@@ -80,15 +80,23 @@ def _auth(user) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _grant_report_audit(session, role):
-    """给角色真实写入 report.audit 权限点（验证 RBAC 查询链路而非空覆盖）。"""
-    p = Permission(code="report.audit", name="报工审核")
+def _grant(session, role, code: str):
+    """给角色真实写入某个权限点（验证 RBAC 查询链路而非空覆盖）。"""
+    p = Permission(code=code, name=code)
     session.add(p)
     session.flush()
     session.execute(
         role_permissions.insert().values(role_id=role.id, permission_id=p.id)
     )
     session.flush()
+
+
+def _grant_report_audit(session, role):
+    _grant(session, role, "report.audit")
+
+
+def _grant_salary_manage(session, role):
+    _grant(session, role, "salary.manage")
 
 
 # ── 鉴权闸门 ──
@@ -127,6 +135,7 @@ def test_api_report_audit_flow_generates_salary(
     api, session, admin_role, test_user, task, assignment, process_price, sku, process
 ):
     _grant_report_audit(session, admin_role)
+    _grant_salary_manage(session, admin_role)  # 工资明细接口只认 salary.manage
     headers = _auth(test_user)
 
     # 员工报工由 H5 侧提交，这里用 crud 造一条 submitted 记录，再走管理端 HTTP 审核
@@ -195,6 +204,7 @@ def test_api_qc_approve_requires_leader_first(
 ):
     """跳过初审直接终审必须被拦截（submitted 状态不可 qc_approved）。"""
     _grant_report_audit(session, admin_role)
+    _grant_salary_manage(session, admin_role)
     headers = _auth(test_user)
 
     report = create_report(
@@ -210,3 +220,70 @@ def test_api_qc_approve_requires_leader_first(
     # 未生成工资
     items = api.get(f"{BASE}/salary/items?user_id={test_user.id}", headers=headers).json()["data"]["items"]
     assert items == []
+
+
+# ── 工资接口的权限归属（P1.1 回归） ──
+
+_ALLOWANCE_BODY = {
+    "user_id": 1,
+    "allowance_type": "bonus",
+    "amount": 100.0,
+    "month": "2026-10",
+    "reason": "夜班补贴",
+}
+
+
+def test_salary_allowances_blocked_for_report_audit_only(api, session, admin_role, test_user):
+    """只有 report.audit（班组长/质检员预设里有）不得新增补贴——改钱要 salary.manage。"""
+    _grant_report_audit(session, admin_role)
+    resp = api.post(f"{BASE}/salary/allowances", headers=_auth(test_user), json=_ALLOWANCE_BODY)
+    assert resp.json()["code"] == 403
+
+
+def test_salary_allowances_blocked_for_salary_view_only(api, session, admin_role, test_user):
+    """salary.view 也不能写钱，只有 salary.manage 可以。"""
+    _grant(session, admin_role, "salary.view")
+    resp = api.post(f"{BASE}/salary/allowances", headers=_auth(test_user), json=_ALLOWANCE_BODY)
+    assert resp.json()["code"] == 403
+
+
+def test_salary_allowances_allowed_with_salary_manage(api, session, admin_role, test_user):
+    """salary.manage 下同一请求必须通过，且 URL 未变（仍是 reports/salary/allowances）。"""
+    _grant_salary_manage(session, admin_role)
+    body = {**_ALLOWANCE_BODY, "user_id": test_user.id}
+    resp = api.post(f"{BASE}/salary/allowances", headers=_auth(test_user), json=body)
+    payload = resp.json()
+    assert payload["code"] == 200, payload
+    assert payload["data"]["allowance_type"] == "bonus"
+    assert float(payload["data"]["amount"]) == 100.0
+
+
+def test_salary_reads_blocked_for_report_audit_only(api, session, admin_role, test_user):
+    """工资明细/汇总/补贴列表不再跟着报工审核权限走：只有 report.audit 一律 403。"""
+    _grant_report_audit(session, admin_role)
+    headers = _auth(test_user)
+    for path in ("/salary/items", "/salary/summary", "/salary/allowances"):
+        assert api.get(f"{BASE}{path}", headers=headers).json()["code"] == 403, path
+
+
+def test_salary_reads_allowed_with_salary_manage(api, session, admin_role, test_user):
+    """同一批接口在 salary.manage 下全部可达，URL 未因拆分改动。"""
+    _grant_salary_manage(session, admin_role)
+    headers = _auth(test_user)
+    for path in ("/salary/items", "/salary/summary", "/salary/allowances"):
+        assert api.get(f"{BASE}{path}", headers=headers).json()["code"] == 200, path
+
+
+# ── 外协接口权限闸门（P1.2 回归） ──
+
+SUBCONTRACT = "/api/admin/subcontract"
+
+
+def test_subcontract_blocked_for_login_only(api, session, test_user):
+    """外协单此前只要登录就能增删改，现在必须 purchase.manage。"""
+    assert api.get(SUBCONTRACT, headers=_auth(test_user)).json()["code"] == 403
+
+
+def test_subcontract_allowed_with_purchase_manage(api, session, admin_role, test_user):
+    _grant(session, admin_role, "purchase.manage")
+    assert api.get(SUBCONTRACT, headers=_auth(test_user)).json()["code"] == 200

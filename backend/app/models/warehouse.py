@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -26,7 +26,11 @@ class Warehouse(Base):
 class Stock(Base):
     """库存"""
     __tablename__ = "stocks"
-    __table_args__ = (UniqueConstraint("warehouse_id", "sku_id", name="uq_stocks_warehouse_sku"),)
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "sku_id", name="uq_stocks_warehouse_sku"),
+        # 库存不能为负：应用层 adjust_stock 已拦一道，但补数脚本和并发出库会绕过它
+        CheckConstraint("qty >= 0", name="ck_stocks_qty_non_negative"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id", ondelete="CASCADE"), nullable=False, index=True)

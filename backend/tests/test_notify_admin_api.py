@@ -625,6 +625,10 @@ def test_rules_lists_catalog_and_extra_codes(session: Session, test_user):
     by_code = {i["event_code"]: i for i in data["items"]}
     assert by_code["custom.event"]["feishu_rule"]["targets"] == ["boss"]
     assert by_code["custom.event"]["wecom_rule"] == {}
+    # 目录内事件分发器认识；界面外手写的事件码没有推送分类，必须标出来
+    assert by_code["alert"]["dispatchable"] is True
+    assert by_code["custom.event"]["dispatchable"] is False
+    assert data["undispatchable"] == ["custom.event"]
 
 
 def test_alert_recipients_roundtrip_preserves_other_targets(session: Session, test_user, bound_user):

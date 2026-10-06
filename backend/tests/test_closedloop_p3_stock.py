@@ -418,3 +418,13 @@ def test_multi_warehouse_shipment_requires_a_warehouse(
     body = resp.json()
     assert body["code"] == 400, body
     assert "必须指定仓库" in str(body["msg"])
+
+
+def test_database_itself_rejects_negative_qty(session: Session, warehouse: Warehouse, sku: Sku):
+    """绕过 adjust_stock 直接写库（补数脚本、迁移补数据）也必须被数据库挡住。"""
+    from sqlalchemy.exc import IntegrityError
+
+    session.add(Stock(warehouse_id=warehouse.id, sku_id=sku.id, qty=-1))
+    with pytest.raises(IntegrityError):
+        with session.begin_nested():
+            session.flush()

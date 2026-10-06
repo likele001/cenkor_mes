@@ -159,6 +159,7 @@ const groups: Group[] = [
           { path: '/production/customers', i18nKey: 'menu.customers', permissions: ['customer.manage', 'crm.sales'], icon: UserFilled },
           { path: '/production/orders', i18nKey: 'menu.orders', permissions: ['order.manage'], icon: DocumentCopy },
           { path: '/plans', i18nKey: 'menu.plans', permissions: ['plan.manage'], icon: Calendar },
+          { path: '/system/automation-settings', i18nKey: 'menu.automationSettings', permissions: ['setting.manage'], icon: Operation },
           { path: '/production/mrp', i18nKey: 'menu.mrp', permissions: ['work.manage'], icon: DataLine },
         ],
       },

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.subcontract import (
     add_receive_log,
@@ -20,7 +20,7 @@ from app.schemas.subcontract import (
     SubcontractOrderCreate,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_permissions(["purchase.manage"]))])
 
 
 def _sku_fields(sku) -> dict:

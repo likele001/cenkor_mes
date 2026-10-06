@@ -81,6 +81,14 @@ def _resolve_rule_cfg(db: Session, event_code: str) -> dict:
     return {}
 
 
+def _rule_disabled(db: Session, event_code: str) -> bool:
+    """管理端把某条规则关掉后必须真的不发。
+
+    此前 rules[event].enabled 只是界面状态，分发器从不读它。
+    """
+    return _resolve_rule_cfg(db, event_code).get("enabled", True) is False
+
+
 def _get_user_personal_targets(db: Session, user: User) -> list[PushTarget]:
     targets: list[PushTarget] = []
     if (user.feishu_open_id or "").strip() and is_feishu_enabled(db):
@@ -251,6 +259,9 @@ def dispatch(
     payload = payload or {}
     created = 0
 
+    if _rule_disabled(db, event_code):
+        return 0
+
     if is_personal_event(event_code):
         if user_id:
             user = db.get(User, user_id)
@@ -374,4 +385,28 @@ def dispatch(
         )
         return created
 
+    # 四个分类各自 return，走到这里说明事件码没人认识。调用方通常只想要一条站内信，
+    # 这种情况不发飞书是预期行为；但若管理端为它配过规则，就说明有人期待它推送，
+    # 必须留下可见记录，否则「配了规则却一条不发」永远查不出来。
+    if _resolve_rule_cfg(db, event_code):
+        logger.warning(
+            "notify_dispatcher: 事件 %s 配了规则但未注册推送分类，消息未发出", event_code
+        )
+        db.add(
+            FeishuPushLog(
+                tenant_id=1,
+                event_code=event_code,
+                target_kind="system",
+                target_ref="-",
+                title=title[:128],
+                content=content,
+                level=level,
+                biz_type=biz_type,
+                biz_id=biz_id,
+                payload_json=json.dumps(payload, ensure_ascii=False) if payload else None,
+                status="skipped",
+                error_msg=f"事件 {event_code} 已配置规则但未注册推送分类，消息没有发出",
+            )
+        )
+        db.flush()
     return 0
