@@ -369,3 +369,53 @@ docker run --rm -v cenkormes_storage_data:/data -v "$PWD/backup":/backup \
 - 恢复前备份当前库；导入新 dump 前最好清空目标库避免主键冲突。
 - 先验证 dump 中账号数据完整（`users` / `roles` / `orders` 等表），再切换流量。
 - 对象存储（阿里云 OSS 等）建议同时开启服务商侧回收站 / 跨区冗余。
+
+---
+
+## 8. 升级（自托管用户）
+
+> 版本号真源为根目录 `VERSION`；「关于/版本」页显示当前实例所跑版本，
+> 对照 [CHANGELOG](../backend/CHANGELOG.json) 决定是否升级。
+
+### 8.1 获取新版本
+
+- **GitHub Releases（推荐）**：每个 `vX.Y.Z` tag 提供 Source code (tar.gz/zip)，下载后覆盖部署目录。
+- **git**：`git clone` 后 `git checkout v2.1.0`（切到目标 tag）或 `git pull` 跟最新分支。
+
+### 8.2 一键升级脚本（裸机 / 宝塔）
+
+```bash
+# 仓库根执行；脚本会：备份库 → 拉代码 → 装依赖 → alembic 迁移 → 重建前端
+bash scripts/upgrade.sh                 # 按当前分支 pull 升级
+bash scripts/upgrade.sh --target v2.1.0 # 升级到指定 tag
+bash scripts/upgrade.sh --dry-run       # 只打印将执行的动作
+bash scripts/upgrade.sh --no-pull       # 代码已手动更新，只做迁移+构建
+```
+
+> 脚本**不会重启任何服务**。跑完后需**手动重启后端**（uvicorn / celery）才生效。
+
+### 8.3 手动升级步骤（务必按此顺序）
+
+```bash
+# ① 备份数据库（见第 7 节）+ 备份 backend/.env
+# ② 停旧后端（避免 create_all 在迁移前抢建表）
+# ③ 拉新代码：git pull  或  下载 Release 源码覆盖
+cd backend
+# ④ 更新依赖
+pip install -r requirements.txt
+# ⑤ 先迁移数据库（此时 app 未运行，不会抢建表）
+alembic upgrade head
+# ⑥ 重建前端（覆盖 dist，nginx 直接服务，无需重启）
+cd ../frontend-admin-pro && npm ci && npm run build
+# ⑦ 最后再启动新后端（加载新路由 + 同步版本页）
+```
+
+Docker 部署则：`git pull` → `docker compose build` → 进 backend 容器 `alembic upgrade head` → `docker compose up -d`。
+
+### 8.4 关键注意事项
+
+- **先迁移、后启动**：生产 `DB_AUTO_CREATE` 建议保持 `false`（本仓库默认已改），schema 完全由 alembic 权威管理。若为 `true`，新后端启动时 `create_all` 会抢在新迁移前建表，导致 `alembic upgrade head` 报 `1050 Table already exists`。
+- **全新安装**：首次部署需先跑 `alembic upgrade head` 建表（或临时置 `DB_AUTO_CREATE=true` 启动一次建表后再改回 `false`）。
+- **迁移不可跳**：`alembic upgrade head` 会按序补齐所有中间版本迁移，无需逐版升级；升级前务必先备份。
+- **回滚**：数据库用 8.4 前的备份 dump 恢复；代码 `git checkout` 回旧 tag 后重建前端并重启。
+- **重启由运维执行**：本仓库约定服务启停由人工完成，升级脚本与文档均不自动重启。
