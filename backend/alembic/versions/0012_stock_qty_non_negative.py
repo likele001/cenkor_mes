@@ -19,18 +19,14 @@ _CHECK = "ck_stocks_qty_non_negative"
 
 
 def _table_exists(conn) -> bool:
-    return conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLES "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
-    ), {"t": _TABLE}).scalar() > 0
+    return sa.inspect(conn).has_table(_TABLE)
 
 
 def _check_exists(conn) -> bool:
-    return conn.execute(sa.text(
-        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
-        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t "
-        "AND CONSTRAINT_TYPE = 'CHECK' AND CONSTRAINT_NAME = :n"
-    ), {"t": _TABLE, "n": _CHECK}).scalar() > 0
+    insp = sa.inspect(conn)
+    if not insp.has_table(_TABLE):
+        return False
+    return any(c["name"] == _CHECK for c in insp.get_check_constraints(_TABLE))
 
 
 def upgrade() -> None:
