@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.h5.self_service import REPORT_READ, REPORT_SUBMIT, TASK_READ, ensure_permission
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
 from app.crud.notification import create_notification
@@ -34,9 +35,15 @@ from app.models.user import User
 router = APIRouter()
 
 def _ensure_employee(user: User) -> None:
-    roles = {r.code for r in user.roles}
-    if not ({"employee", "leader"} & roles):
-        raise HTTPException(status_code=403, detail="无权限")
+    ensure_permission(user, TASK_READ)
+
+
+def _ensure_report_submit(user: User) -> None:
+    ensure_permission(user, REPORT_SUBMIT)
+
+
+def _ensure_report_read(user: User) -> None:
+    ensure_permission(user, REPORT_READ)
 
 def _unit_out(u, piece: WorkOrderPiece | None = None, *, task_ctx: dict | None = None) -> dict:
     row = {
@@ -136,7 +143,7 @@ def submit_report_unit_api(
     payload: ReportUnitSubmitIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_report_submit(user)
     if not use_unit_report_mode(db):
         raise HTTPException(status_code=400, detail="当前为批量报工模式，请使用「扫码报工」填写合格/不良数量")
     task = get_task_by_code(db, task_code=payload.task_code.strip(), with_refs=False)
@@ -245,7 +252,7 @@ def my_report_units_api(
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_report_read(user)
     items = list_report_units(db, user_id=user.id, status=status, offset=offset, limit=limit
     )
     return ok(
@@ -270,7 +277,7 @@ def my_report_unit_detail_api(
     unit_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    _ensure_employee(user)
+    _ensure_report_read(user)
     unit = get_unit_by_id(db, unit_id)
     if not unit or unit.user_id != user.id:
         raise HTTPException(status_code=404, detail="记录不存在")

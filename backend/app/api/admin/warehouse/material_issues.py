@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.warehouse import get_stock
 from app.crud.material_issue import (
@@ -25,7 +25,9 @@ from app.models.material_issue import MaterialIssue, MaterialReturn
 from app.models.user import User
 from app.services.code_generator import BizType, resolve_code
 
-router = APIRouter(dependencies=[Depends(require_permissions(["warehouse.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["warehouse.manage", "warehouse.view"]))]
+)
 
 
 class IssueItemIn(BaseModel):
@@ -170,7 +172,7 @@ def get_issue_api(
     return ok(_issue_detail_out(x))
 
 
-@router.post("/issues")
+@router.post("/issues", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def create_issue_api(
     payload: IssueCreateIn,
     db: Session = Depends(get_db),
@@ -197,7 +199,7 @@ def create_issue_api(
     return ok(_issue_detail_out(x if x else issue))
 
 
-@router.post("/issues/{issue_id}/issue")
+@router.post("/issues/{issue_id}/issue", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def issue_api(
     issue_id: int,
     db: Session = Depends(get_db),
@@ -215,7 +217,7 @@ def issue_api(
     return ok(_issue_detail_out(x2 if x2 else x))
 
 
-@router.post("/issues/{issue_id}/cancel")
+@router.post("/issues/{issue_id}/cancel", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def cancel_issue_api(
     issue_id: int,
     db: Session = Depends(get_db),
@@ -260,7 +262,7 @@ def get_return_api(
     return ok(_return_detail_out(x))
 
 
-@router.post("/returns")
+@router.post("/returns", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def create_return_api(
     payload: ReturnCreateIn,
     db: Session = Depends(get_db),
@@ -288,7 +290,7 @@ def create_return_api(
     return ok(_return_detail_out(x if x else ret))
 
 
-@router.post("/returns/{return_id}/confirm")
+@router.post("/returns/{return_id}/confirm", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def confirm_return_api(
     return_id: int,
     db: Session = Depends(get_db),
@@ -306,7 +308,7 @@ def confirm_return_api(
     return ok(_return_detail_out(x2 if x2 else x))
 
 
-@router.post("/returns/{return_id}/cancel")
+@router.post("/returns/{return_id}/cancel", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def cancel_return_api(
     return_id: int,
     db: Session = Depends(get_db),

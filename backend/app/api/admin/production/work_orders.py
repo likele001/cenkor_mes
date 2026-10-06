@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok
 from app.crud.work_order import get_work_order_by_id, list_work_orders
 from app.models.sku import Sku
@@ -17,7 +17,9 @@ from app.services.product_label_print import build_product_trace_labels_html
 from app.services.trace_public import list_label_pieces_for_work_order
 
 
-router = APIRouter(dependencies=[Depends(require_permissions(["work.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["work.manage", "workorder.view", "workorder.manage"]))]
+)
 
 
 def _task_out(x) -> dict:
@@ -57,7 +59,7 @@ def _out(x) -> dict:
     }
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_any_permissions(["workorder.view", "workorder.manage", "work.manage"]))])
 def list_api(
     order_id: int | None = Query(default=None, ge=1),
     status: str | None = Query(default=None),
@@ -70,7 +72,7 @@ def list_api(
     return ok({"items": [_out(x) for x in items]})
 
 
-@router.get("/export")
+@router.get("/export", dependencies=[Depends(require_any_permissions(["workorder.view", "workorder.manage", "work.manage"]))])
 def export_api(
     order_id: int | None = Query(default=None, ge=1),
     status: str | None = Query(default=None),
@@ -92,7 +94,7 @@ def export_api(
     )
 
 
-@router.get("/{work_order_id}")
+@router.get("/{work_order_id}", dependencies=[Depends(require_any_permissions(["workorder.view", "workorder.manage", "work.manage"]))])
 def get_api(
     work_order_id: int,
     db: Session = Depends(get_db),
@@ -123,7 +125,7 @@ def _get_work_order_for_print(db: Session, work_order_id: int) -> WorkOrder | No
     )
 
 
-@router.get("/{work_order_id}/print-product-labels")
+@router.get("/{work_order_id}/print-product-labels", dependencies=[Depends(require_any_permissions(["workorder.view", "workorder.manage", "work.manage"]))])
 def print_product_labels_api(
     work_order_id: int,
     piece_no_from: int | None = Query(default=None, ge=1),
@@ -142,7 +144,7 @@ def print_product_labels_api(
     return ok({"html": html, "count": len(pieces), "work_order_id": work_order_id})
 
 
-@router.post("/{work_order_id}/print-product-labels")
+@router.post("/{work_order_id}/print-product-labels", dependencies=[Depends(require_any_permissions(["workorder.manage", "work.manage"]))])
 def print_product_labels_post_api(
     work_order_id: int,
     payload: ProductLabelPrintIn,

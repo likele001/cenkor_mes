@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_permissions
+from app.core.deps import get_db, require_any_permissions
 from app.core.response import ok
 from app.integration.crm_adapter.client import notify_crm_status
 from app.integration.crm_adapter.models import CrmAdapterConfig, CrmInboundOrder, CrmProductMap
@@ -45,7 +45,7 @@ CONFIG_ID = 1
 inbound_router = APIRouter(tags=["crm-adapter-inbound"])
 admin_router = APIRouter(
     tags=["crm-adapter-config"],
-    dependencies=[Depends(require_permissions(["setting.manage"]))],
+    dependencies=[Depends(require_any_permissions(["setting.manage", "crm.admin"]))],
 )
 
 

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.h5.self_service import SALARY_VIEW, ensure_permission
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
 from app.crud.notification import create_notification, notify_superusers
@@ -14,9 +15,7 @@ router = APIRouter(prefix="/salary", tags=["h5-salary"])
 
 
 def _ensure_employee(user: User) -> None:
-    roles = {r.code for r in user.roles}
-    if not ({"employee", "leader"} & roles):
-        raise HTTPException(status_code=403, detail="无权限")
+    ensure_permission(user, SALARY_VIEW)
 
 
 @router.get("/slip")

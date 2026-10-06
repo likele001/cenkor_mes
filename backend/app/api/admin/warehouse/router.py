@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.warehouse import create_warehouse, list_warehouses, list_stocks, adjust_stock, list_stock_logs
 from app.models.user import User
@@ -27,7 +27,9 @@ def _warehouse_code_exists(db: Session, code: str) -> bool:
     return db.scalar(select(Warehouse.id).where(Warehouse.code == code)) is not None
 
 
-router = APIRouter(dependencies=[Depends(require_permissions(["warehouse.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["warehouse.manage", "warehouse.view"]))]
+)
 router.include_router(shipments_router)
 router.include_router(material_issues_router)
 router.include_router(warehouse_entries_router)
@@ -64,7 +66,7 @@ def export_warehouses_api(
     )
 
 
-@router.post("/warehouses")
+@router.post("/warehouses", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def create_warehouse_api(
     payload: WarehouseCreateIn,
     db: Session = Depends(get_db),
@@ -82,7 +84,7 @@ def create_warehouse_api(
     return ok({"id": wh.id, "code": wh.code, "name": wh.name})
 
 
-@router.put("/warehouses/{warehouse_id}")
+@router.put("/warehouses/{warehouse_id}", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def update_warehouse_api(
     warehouse_id: int,
     code: str = Query(min_length=1),
@@ -149,7 +151,7 @@ def export_stocks_api(
     return make_excel_response(headers, rows, "stocks.xlsx", "库存")
 
 
-@router.post("/stocks/adjust")
+@router.post("/stocks/adjust", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def adjust_stock_api(
     warehouse_id: int = Query(ge=1),
     sku_id: int = Query(ge=1),

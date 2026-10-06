@@ -4,7 +4,7 @@
 CenkorMES 老板看板演示数据填充脚本
 --------------------------------
 
-为 DEMO 租户（tenant_code=DEMO）补齐 5 大财务/经营指标所依赖的演示数据：
+为老板看板的 5 大财务/经营指标补齐演示数据：
   1. orders.amount / cost_amount：订单销售额与成本
   2. orders.actual_completed_at：完成时间（用于交付率）
   3. work_orders.standard_hours / actual_hours：工时（用于产能利用率）
@@ -36,8 +36,6 @@ from app.models.finance_ledger import FinanceLedger
 from app.models.order import Order, OrderItem
 from app.models.work_order import WorkOrder
 
-DEMO_TENANT_ID = 2  # tenants 表里 DEMO 的 id（运行时会自动校验）
-
 # 单价（按 line_no 顺序 / 订单 id 顺序 循环分配）
 UNIT_PRICES = [
     Decimal("128.00"),   # SKU 1：电子件
@@ -56,39 +54,24 @@ STD_HOURS_PER_WO = [8.0, 12.0, 16.0, 6.0, 10.0, 14.0, 20.0, 9.0, 7.0, 11.0, 13.0
 ACTUAL_RATIO_RANGE = (0.80, 0.95)
 
 
-def _get_tenant_id(db: Session) -> int:
-    """从 tenants 表里查找 DEMO 租户"""
-    row = db.execute(
-        text("SELECT id FROM tenants WHERE code = 'DEMO' LIMIT 1")
-    ).first()
-    if not row:
-        raise SystemExit("ERROR: tenants 表里没有 code='DEMO' 的租户")
-    return int(row[0])
-
-
-def _is_already_seeded(db: Session, tenant_id: int) -> bool:
+def _is_already_seeded(db: Session) -> bool:
     """检测是否已填充（任一表已有非零数据即视为已 seed）"""
     has_amount = db.execute(
-        text("SELECT COUNT(*) FROM orders WHERE tenant_id=:t AND amount > 0"),
-        {"t": tenant_id},
+        text("SELECT COUNT(*) FROM orders WHERE amount > 0")
     ).scalar() or 0
     has_std = db.execute(
-        text("SELECT COUNT(*) FROM work_orders WHERE tenant_id=:t AND standard_hours > 0"),
-        {"t": tenant_id},
+        text("SELECT COUNT(*) FROM work_orders WHERE standard_hours > 0")
     ).scalar() or 0
     has_ledger = db.execute(
-        text("SELECT COUNT(*) FROM finance_ledgers WHERE tenant_id=:t"),
-        {"t": tenant_id},
+        text("SELECT COUNT(*) FROM finance_ledgers")
     ).scalar() or 0
     return (has_amount + has_std + has_ledger) > 0
 
 
-def seed_orders(db: Session, tenant_id: int) -> int:
+def seed_orders(db: Session) -> int:
     """为 orders 补 amount / cost_amount / actual_completed_at"""
     orders = db.execute(
-        select(Order)
-        .where(Order.tenant_id == tenant_id)
-        .order_by(Order.id)
+        select(Order).order_by(Order.id)
     ).scalars().all()
 
     if not orders:
@@ -130,12 +113,10 @@ def seed_orders(db: Session, tenant_id: int) -> int:
     return n_updated
 
 
-def seed_work_orders(db: Session, tenant_id: int) -> int:
+def seed_work_orders(db: Session) -> int:
     """为 work_orders 补 standard_hours / actual_hours"""
     wos = db.execute(
-        select(WorkOrder)
-        .where(WorkOrder.tenant_id == tenant_id)
-        .order_by(WorkOrder.id)
+        select(WorkOrder).order_by(WorkOrder.id)
     ).scalars().all()
 
     if not wos:
@@ -161,7 +142,7 @@ def seed_work_orders(db: Session, tenant_id: int) -> int:
     return n_updated
 
 
-def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
+def seed_finance_ledgers(db: Session) -> int:
     """为 finance_ledgers 补充回款与支出记录
 
     规则：
@@ -172,7 +153,6 @@ def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
     orders = db.execute(
         select(Order)
         .where(
-            Order.tenant_id == tenant_id,
             Order.status.in_(("completed", "shipped", "producing", "confirmed")),
         )
         .order_by(Order.confirmed_at)
@@ -198,7 +178,6 @@ def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
             biz_date = now.date() - timedelta(days=(idx % 5) + 1)
 
         ledger = FinanceLedger(
-            tenant_id=tenant_id,
             direction="in",
             category="sales",
             party_type="customer",
@@ -224,7 +203,6 @@ def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
     for idx, amt in enumerate(purchase_amounts):
         biz_date = now.date() - timedelta(days=(idx + 1) * 4)
         db.add(FinanceLedger(
-            tenant_id=tenant_id,
             direction="out",
             category="purchase",
             party_type="supplier",
@@ -249,7 +227,6 @@ def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
     for idx, (amt, remark) in enumerate(expense_amounts):
         biz_date = now.date() - timedelta(days=(idx + 1) * 5)
         db.add(FinanceLedger(
-            tenant_id=tenant_id,
             direction="out",
             category="expense",
             party_type="other",
@@ -268,25 +245,22 @@ def seed_finance_ledgers(db: Session, tenant_id: int) -> int:
 def main():
     db: Session = SessionLocal()
     try:
-        tenant_id = _get_tenant_id(db)
-        print(f"[INFO] DEMO tenant_id = {tenant_id}")
-
-        if _is_already_seeded(db, tenant_id):
+        if _is_already_seeded(db):
             print("[SKIP] 已检测到演示数据，跳过 seed（若需重置，请先清空相关表）")
             print("       清空命令：")
-            print("         DELETE FROM finance_ledgers WHERE tenant_id=2;")
-            print("         UPDATE orders SET amount=0, cost_amount=0, actual_completed_at=NULL, status='producing' WHERE tenant_id=2;")
-            print("         UPDATE order_items SET unit_price=0, subtotal=0 WHERE tenant_id=2;")
-            print("         UPDATE work_orders SET standard_hours=0, actual_hours=0, started_at=NULL, finished_at=NULL WHERE tenant_id=2;")
+            print("         DELETE FROM finance_ledgers;")
+            print("         UPDATE orders SET amount=0, cost_amount=0, actual_completed_at=NULL, status='producing';")
+            print("         UPDATE order_items SET unit_price=0, subtotal=0;")
+            print("         UPDATE work_orders SET standard_hours=0, actual_hours=0, started_at=NULL, finished_at=NULL;")
             return
 
-        n_orders = seed_orders(db, tenant_id)
+        n_orders = seed_orders(db)
         print(f"[OK ] orders  更新 {n_orders} 个（含 amount / cost_amount / status / actual_completed_at）")
 
-        n_wos = seed_work_orders(db, tenant_id)
+        n_wos = seed_work_orders(db)
         print(f"[OK ] work_orders 更新 {n_wos} 个（含 standard_hours / actual_hours）")
 
-        n_ledgers = seed_finance_ledgers(db, tenant_id)
+        n_ledgers = seed_finance_ledgers(db)
         print(f"[OK ] finance_ledgers 新增 {n_ledgers} 条（销售回款 + 采购支出 + 运营费用）")
 
         db.commit()

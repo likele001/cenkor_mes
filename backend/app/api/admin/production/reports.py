@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok
 from app.crud.notification import create_notification
 from app.crud.report import (
@@ -22,7 +22,9 @@ from app.services.mold_shot_tracker import increment_mold_shots_for_task
 from app.services.production_rollup import sync_after_report
 
 
-router = APIRouter(dependencies=[Depends(require_permissions(["report.audit"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["report.audit", "report.approve", "qc.approve"]))]
+)
 
 
 def _report_out(x) -> dict:
@@ -127,7 +129,7 @@ def get_api(
     return ok(data)
 
 
-@router.post("/{report_id}/leader-approve")
+@router.post("/{report_id}/leader-approve", dependencies=[Depends(require_any_permissions(["report.audit", "report.approve"]))])
 def leader_approve_api(
     report_id: int,
     db: Session = Depends(get_db),
@@ -155,7 +157,7 @@ def leader_approve_api(
     return ok({"report_id": report.id, "status": "leader_approved"})
 
 
-@router.post("/{report_id}/qc-approve")
+@router.post("/{report_id}/qc-approve", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def qc_approve_api(
     report_id: int,
     db: Session = Depends(get_db),
@@ -214,7 +216,7 @@ def qc_approve_api(
     })
 
 
-@router.post("/{report_id}/reject")
+@router.post("/{report_id}/reject", dependencies=[Depends(require_any_permissions(["report.audit", "report.approve", "qc.approve"]))])
 def reject_api(
     report_id: int,
     reason: str | None = Query(default=None, max_length=500),

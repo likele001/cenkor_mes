@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_permissions, get_current_user, get_db, require_any_permissions
+from app.core.deps import get_current_permissions, get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.attachment import create_attachment
 from app.crud.customer import create_customer, get_customer_by_code, get_customer_by_id, list_customers, update_customer
@@ -25,7 +25,9 @@ from app.services.code_generator import BizType, resolve_code
 from app.services.customer_account import ensure_customer_login_user
 from app.storage import get_active_storage
 
-router = APIRouter(dependencies=[Depends(require_any_permissions(["customer.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["customer.manage", "customer.view"]))]
+)
 
 
 def _out(x, db: Session | None = None) -> dict:
@@ -114,7 +116,7 @@ def list_customer_products_api(
     )
 
 
-@router.put("/{customer_id}/products")
+@router.put("/{customer_id}/products", dependencies=[Depends(require_permissions(["customer.manage"]))])
 def set_customer_products_api(
     customer_id: int,
     payload: CustomerProductsSetIn,
@@ -127,7 +129,7 @@ def set_customer_products_api(
     return ok({"customer_id": c.id, "product_ids": ids})
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_permissions(["customer.manage"]))])
 def create_api(
     payload: CustomerCreateIn,
     db: Session = Depends(get_db),
@@ -162,7 +164,7 @@ def create_api(
     return ok(_out(item, db))
 
 
-@router.put("/{customer_id}")
+@router.put("/{customer_id}", dependencies=[Depends(require_permissions(["customer.manage"]))])
 def update_api(
     customer_id: int,
     payload: CustomerUpdateIn,

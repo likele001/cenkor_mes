@@ -135,3 +135,36 @@
 6. 把 `approval_flows/approval_steps/finance_ledgers/salary_*/report_units/mrp_*` 的建表补进 migration 链，让 `alembic upgrade` 单独能建出完整库（§4 第 1 条），之后关掉 `DB_AUTO_CREATE`。
 7. 自动化排产 `dry-run`/`logs` 的前端入口（P2.4）——这是「自动化敢不敢用」的前提。
 8. 权限码收敛：要么补校验、要么摘掉角色预设里的空转码（P3.7）。
+
+---
+
+## 7. 第二轮落地（2026-10-06，`pytest 309 passed` / `vue-tsc` 干净）
+
+第 6 节 **1、2、4、5、7、8 已全部完成**，走的是「补校验」而不是「摘码」。3（WS 去留）和 6（建表补进 migration 链后关 `DB_AUTO_CREATE`）仍待决策/排期。
+
+### P3.7 空转权限码 → 全部挂上真实校验
+
+原则：**只做加法**。原来能用的授权通道一律保留，新码作为并列放行条件（`require_any_permissions`），因此没有任何现有角色会因为这次修复从 200 变 403；同时读/写职责真正分开——`.view` 码只解锁读，写仍需 `.manage`。
+
+| 码 | 挂在哪 |
+| --- | --- |
+| `order.view` / `order.create` / `order.edit` | `production/orders.py` 逐路由：列表/详情/导出/打印走 view，`POST` 走 create，`PUT` 走 edit；删除、导入、`confirm`/`reject` 仍需 `order.manage` |
+| `workorder.view` / `workorder.manage` | `work_orders.py`：5 条读接口 view 即可，批量打标 POST 需 manage |
+| `task.view` / `task.assign` | `tasks.py`：任务列表/详情走 view，`PUT assignments`、`POST assign` 走 assign（`dispatch.manage` 仍是等价通道） |
+| `production.plan` | `plans.py`：计划查询、排产看板、容量/日历走 production.plan；建/改/下发计划仍需 `plan.manage` |
+| `equipment.view` | `equipment/router.py`：设备与维保的 5 个 GET 放开 view，7 个写接口逐条钉 `equipment.manage` |
+| `warehouse.view` | `warehouse/router.py`+`material_issues.py`+`warehouse_entries.py`：库存、流水、领退料、入库单的 GET 放开 view；`stocks/adjust`、建单、确认、取消仍需 manage |
+| `qc.inspect` / `qc.approve` / `report.approve` | `quality.py`（模板/缺陷码读=inspect，写=approve）、`report_units.py`（读=inspect，审批=approve/report.approve）、`reports.py`（`leader-approve` 认 report.approve，`qc-approve` 认 qc.approve） |
+| `customer.view` | `production/customers.py` 读放开 view，建/改仍需 `customer.manage` |
+| `crm.admin` | `/crm-adapter` 管理端与 `setting.manage` 并列 |
+| `report.submit` / `salary.view` / `task.view` | H5 自助端：`POST /h5/reports`、`POST /h5/report-units` 认 report.submit；工资与工资单三条认 salary.view；任务/逐件读取认 task.view |
+
+**顺带修掉一个被 §3.7 掩盖的真 bug**：H5 五个模块各自复制了一份 `_ensure_employee(user)`，判定写死 `{"employee","leader"}` 角色名 —— 开发库里 `worker`（7 个账号）、`workshop_leader`、`production_manager` 这些自建角色**在小程序/H5 上整片 403**，与权限点无关。现已改为按权限码判定（`app/api/h5/self_service.py`，一份判定四处复用），自建角色只要拿到 `task.view`/`report.submit`/`salary.view` 就能正常工作。
+
+**没有校验对象的三个码保持原样**（如实说明，不假装修好）：`ai.use`、`ai.alert.view`、`erp.manage`。本仓 AI 只剩 `app/api/ai_compat/router.py` 三条返回固定空数据的占位路由（无 db、无 user、故意免登录以免 404），ERP 接口已整体移除 —— 没有可挂的读/写面。要它们真正管事，得先把功能做回来，或者按第 8 条建议从种子里摘除。
+
+**H5 与仓储下拉保持「登录即可」，是有意的**：`/h5/attendance/*`（本人打卡）、`/h5/notifications/*`（本人消息）、`/h5/customer/*`（已按 `get_customer_by_user_id` 严格限定到当前账号自己，越权访问返回 403「仅客户账号可访问」）、`/admin/warehouse/options`（MRP、出入库页面都要用，`worker` 角色并不持有 warehouse.* 码）。给它们加权限只会把功能锁死，不解决任何越权。
+
+**回归钉死**：`tests/test_permission_codes_live.py`（23 例）逐码验证「无码 403 → 有码 200 → view 码不能写」，并有一条防漂移用例：扫描 `app/` 全量源码，seed 里声明的每个码（除上表三个例外）必须出现在某个校验依赖里，否则测试失败。以后新增权限点忘了挂，CI 会直接红。
+
+**前端同步**：`router/index.ts` 20 条 meta 与 `AppMenu.vue` 19 条菜单项补上对应的 `.view`/`.assign`/`.approve` 码，否则只读角色拿得到接口却进不了页面。**尚未做**：页面内写操作按钮的按码隐藏（本仓历来没有按钮级 `v-if` 权限约定，只读角色点开按钮会收到 403 提示）——需要的话按页面逐个补。

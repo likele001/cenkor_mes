@@ -22,6 +22,8 @@ from app.crud.tenant import ensure_default_tenant
 from app.crud.user import create_user
 from app.models.base import Base
 from app.models.user import User
+# 导入即注册 Session 级监听：看板相关表 commit 后推 WebSocket 刷新
+from app.services import dashboard_events as _dashboard_events  # noqa: F401
 
 
 app = FastAPI(title=settings.APP_NAME)

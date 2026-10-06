@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.attachment import create_attachment
 from app.crud.print_template import ensure_print_template, get_print_template_by_code, get_print_template_by_id, render_print_template
@@ -30,7 +30,9 @@ from app.storage import get_active_storage
 from app.services.dispatch_candidates import list_dispatch_candidate_users
 from app.services.entity_refs import equipment_ref_dict, process_ref_dict, product_ref_dict, sku_ref_dict
 
-router = APIRouter(dependencies=[Depends(require_permissions(["task.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["task.manage", "task.view", "task.assign"]))]
+)
 
 def _assignment_out(a) -> dict:
     u = getattr(a, "user", None)
@@ -121,7 +123,7 @@ def _extract_head_body(html: str) -> tuple[str, str] | None:
         return None
     return (m_head.group(1), m_body.group(1))
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_any_permissions(["task.view", "task.manage", "task.assign"]))])
 def list_api(
     work_order_id: int | None = Query(default=None, ge=1),
     assigned_user_id: int | None = Query(default=None, ge=1),
@@ -367,7 +369,7 @@ def render_task_label_pdf_api(
     db.refresh(att)
     return ok({"attachment_id": att.id, "filename": att.original_filename, "url": f"/api/files/{att.id}?download=true"})
 
-@router.get("/{task_id}/assignments", dependencies=[Depends(require_permissions(["dispatch.manage"]))])
+@router.get("/{task_id}/assignments", dependencies=[Depends(require_any_permissions(["task.view", "task.assign", "dispatch.manage"]))])
 def list_assignments_api(
     task_id: int,
     db: Session = Depends(get_db),
@@ -389,7 +391,7 @@ def list_assignments_api(
         "items": out,
     })
 
-@router.put("/{task_id}/assignments", dependencies=[Depends(require_permissions(["dispatch.manage"]))])
+@router.put("/{task_id}/assignments", dependencies=[Depends(require_any_permissions(["task.assign", "dispatch.manage"]))])
 def set_assignments_api(
     task_id: int,
     payload: TaskAssignmentsIn,
@@ -424,7 +426,7 @@ def set_assignments_api(
         raise HTTPException(status_code=500, detail="派工失败")
     return ok(_out(item, db=db))
 
-@router.post("/{task_id}/assign", dependencies=[Depends(require_permissions(["dispatch.manage"]))])
+@router.post("/{task_id}/assign", dependencies=[Depends(require_any_permissions(["task.assign", "dispatch.manage"]))])
 def assign_api(
     task_id: int,
     payload: TaskAssignIn,
@@ -440,7 +442,7 @@ def assign_api(
     body = TaskAssignmentsIn(items=items, equipment_id=payload.equipment_id)
     return set_assignments_api(task_id=task_id, payload=body, db=db, user=user)
 
-@router.get("/{task_id}")
+@router.get("/{task_id}", dependencies=[Depends(require_any_permissions(["task.view", "task.manage", "task.assign"]))])
 def get_api(
     task_id: int,
     db: Session = Depends(get_db),

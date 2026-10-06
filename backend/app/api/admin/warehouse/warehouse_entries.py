@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.warehouse_entry import (
     cancel_entry,
@@ -20,7 +20,9 @@ from app.models.material import Material
 from app.models.user import User
 from app.services.code_generator import BizType, resolve_code
 
-router = APIRouter(dependencies=[Depends(require_permissions(["warehouse.manage"]))])
+router = APIRouter(
+    dependencies=[Depends(require_any_permissions(["warehouse.manage", "warehouse.view"]))]
+)
 
 
 class EntryItemIn(BaseModel):
@@ -98,7 +100,7 @@ def get_api(entry_id: int, db: Session = Depends(get_db)):
     return ok(_entry_out(x))
 
 
-@router.post("/entries")
+@router.post("/entries", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def create_api(
     payload: EntryCreateIn,
     db: Session = Depends(get_db),
@@ -148,7 +150,7 @@ def create_api(
     return ok(_entry_out(get_entry_by_id(db, entry.id)))
 
 
-@router.post("/entries/{entry_id}/confirm")
+@router.post("/entries/{entry_id}/confirm", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def confirm_api(
     entry_id: int,
     db: Session = Depends(get_db),
@@ -165,7 +167,7 @@ def confirm_api(
     return ok(_entry_out(get_entry_by_id(db, entry.id)))
 
 
-@router.post("/entries/{entry_id}/cancel")
+@router.post("/entries/{entry_id}/cancel", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
 def cancel_api(
     entry_id: int,
     db: Session = Depends(get_db),
