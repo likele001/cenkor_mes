@@ -27,6 +27,7 @@ from app.services.feishu.settings import (
     save_feishu_settings,
 )
 from app.services.feishu.urls import get_events_callback_url, get_oauth_redirect_uri
+from app.services.notify_channels import KNOWN_EVENTS
 from app.services.notify_migration import run_migration
 
 router = APIRouter(dependencies=[Depends(require_permissions(["setting.manage"]))])
@@ -193,10 +194,17 @@ def list_rules(db: Session = Depends(get_db), user: User = Depends(get_current_u
             "feishu_rule": rules.get(code) or {},
             "wecom_rule": {},
             "dingtalk_rule": {},
+            # 规则存下来不等于会发：分发器只认注册过分类的事件码
+            "dispatchable": code in KNOWN_EVENTS,
         }
         for code in codes
     ]
-    return ok({"items": items, "event_catalog": EVENT_CATALOG, "target_options": TARGET_OPTIONS})
+    return ok({
+        "items": items,
+        "event_catalog": EVENT_CATALOG,
+        "target_options": TARGET_OPTIONS,
+        "undispatchable": [code for code in codes if code not in KNOWN_EVENTS],
+    })
 
 
 @router.get("/user-bindings")

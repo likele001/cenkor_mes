@@ -43,6 +43,8 @@ export type MessageRule = {
   feishu_rule: Record<string, unknown>
   wecom_rule: Record<string, unknown>
   dingtalk_rule: Record<string, unknown>
+  /** false = 分发器不认识这个事件码，规则存了也不会推送 */
+  dispatchable?: boolean
 }
 
 export type UserBinding = {
@@ -113,6 +115,7 @@ export const messageCenterApi = {
       items: MessageRule[]
       event_catalog: { code: string; name: string; category: string }[]
       target_options: { code: string; name: string }[]
+      undispatchable?: string[]
     }>({
       url: '/admin/system/message-center/rules',
       method: 'GET',

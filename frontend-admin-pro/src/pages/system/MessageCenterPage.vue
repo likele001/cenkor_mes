@@ -93,11 +93,27 @@
       <!-- 3. 推送规则 -->
       <el-tab-pane :label="t('messageCenter.tabRules')" name="rules">
         <div class="mt-4">
+          <el-alert
+            v-if="deadRules.length"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="mb-3"
+            :title="t('messageCenter.deadRulesHint', { codes: deadRules.map((r) => r.event_code).join('、') })"
+          />
           <el-table :data="rules" border stripe>
             <el-table-column :label="t('messageCenter.eventName')" min-width="180">
               <template #default="{ row }">
                 <div class="font-medium">{{ getEventName(row.event_code) }}</div>
                 <div class="text-xs text-zinc-500">{{ row.event_code }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('messageCenter.colDispatchable')" width="120" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.dispatchable === false" type="danger" size="small">
+                  {{ t('messageCenter.ruleDead') }}
+                </el-tag>
+                <span v-else class="text-xs text-zinc-400">{{ t('messageCenter.ruleLive') }}</span>
               </template>
             </el-table-column>
             <el-table-column :label="t('messageCenter.feishuTargets')" min-width="200">
@@ -252,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import AdminPage from '@/components/admin/AdminPage.vue'
@@ -275,6 +291,7 @@ const migrating = ref(false)
 const overview = ref<MessageCenterOverview | null>(null)
 const groups = ref<MessageGroup[]>([])
 const rules = ref<MessageRule[]>([])
+const deadRules = computed(() => rules.value.filter((r) => r.dispatchable === false))
 const eventCatalog = ref<{ code: string; name: string; category: string }[]>([])
 const targetOptions = ref<{ code: string; name: string }[]>([])
 

@@ -21,6 +21,7 @@ from app.crud.salary_item import (
     get_hourly_summary as _hourly_summary,
     list_hourly_items as _list_hourly_items,
 )
+from app.crud.report import get_salary_items, get_salary_summary
 from app.crud.salary_ledger import list_hourly_ledger, list_salary_ledger
 from app.crud.salary_slip import (
     ensure_salary_slip,
@@ -36,7 +37,7 @@ from app.models.salary import SalaryItem
 from app.models.salary_allowance import SalaryAllowance
 from app.models.salary_slip import SalarySlip
 from app.models.user import User
-from app.schemas.salary import SalarySlipPayIn, SalarySlipUnpayIn
+from app.schemas.salary import SalaryAllowanceCreateIn, SalarySlipPayIn, SalarySlipUnpayIn
 
 
 router = APIRouter(dependencies=[Depends(require_permissions(["salary.manage"]))])
@@ -537,3 +538,96 @@ def hourly_ledger_api(
         db, month=month, user_id=user_id, offset=offset, limit=limit
     )
     return ok({"items": items, "total": total})
+
+
+@router.get("/salary/items")
+def salary_items_api(
+    user_id: int | None = Query(default=None, ge=1),
+    month: str | None = Query(default=None, max_length=7),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """计件工资明细"""
+    items = get_salary_items(db, user_id=user_id, month=month, offset=offset, limit=limit)
+    return ok({
+        "items": [
+            {
+                "id": s.id,
+                "report_id": s.report_id,
+                "user_id": s.user_id,
+                "sku_id": s.sku_id,
+                "process_id": s.process_id,
+                "unit_price": float(s.unit_price),
+                "good_qty": s.good_qty,
+                "amount": float(s.amount),
+                "month": s.month,
+                "created_at": s.created_at,
+            }
+            for s in items
+        ]
+    })
+
+
+@router.get("/salary/summary")
+def salary_summary_api(
+    month: str | None = Query(default=None, max_length=7),
+    user_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """工资汇总"""
+    data = get_salary_summary(db, month=month, user_id=user_id)
+    return ok({"items": data})
+
+
+@router.get("/salary/allowances")
+def salary_allowances_api(
+    user_id: int | None = Query(default=None, ge=1),
+    month: str | None = Query(default=None, max_length=7),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """补贴/扣款明细"""
+    stmt = select(SalaryAllowance)
+    if user_id is not None:
+        stmt = stmt.where(SalaryAllowance.user_id == user_id)
+    if month:
+        stmt = stmt.where(SalaryAllowance.month == month)
+    stmt = stmt.order_by(SalaryAllowance.id.desc())
+    items = db.scalars(stmt).all()
+    return ok({
+        "items": [
+            {
+                "id": a.id,
+                "user_id": a.user_id,
+                "allowance_type": a.allowance_type,
+                "amount": float(a.amount),
+                "month": a.month,
+                "reason": a.reason,
+                "created_at": a.created_at,
+            }
+            for a in items
+        ]
+    })
+
+
+@router.post("/salary/allowances")
+def create_allowance_api(
+    payload: SalaryAllowanceCreateIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """新增补贴/扣款"""
+    a = SalaryAllowance(
+        user_id=payload.user_id,
+        allowance_type=payload.allowance_type,
+        amount=Decimal(str(payload.amount)),
+        month=payload.month,
+        reason=payload.reason,
+        created_by=user.id,
+    )
+    db.add(a)
+    db.commit()
+    return ok({"id": a.id, "allowance_type": a.allowance_type, "amount": float(a.amount)})
