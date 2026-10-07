@@ -80,6 +80,16 @@ api_router.include_router(push_monitor_router, prefix="/admin/push-monitor", tag
 from app.api.miniapp.auth import router as miniapp_auth_router
 
 api_router.include_router(miniapp_auth_router, prefix="/miniapp/auth", tags=["miniapp"])
+
+# 扩展宿主固定 API：扩展列表 + 前端插件获取（供 admin 前端扩展加载器使用）
+from app.api.admin.extensions.router import router as admin_extensions_router
+
+api_router.include_router(admin_extensions_router, prefix="/admin/extensions", tags=["admin-extensions"], dependencies=_admin_deps)
+
+# 功能市场 API：浏览仓库应用目录、安装扩展、配置仓库连接
+from app.api.admin.market.router import router as admin_market_router
+
+api_router.include_router(admin_market_router, prefix="/admin", tags=["admin-market"], dependencies=_admin_deps)
 # 独立版兼容层：AI 智能中心占位接口（独立版不开放 AI，确保 /api/ai/* 不出现 404）
 try:
     from app.api.ai_compat.router import router as ai_compat_router

@@ -15,6 +15,11 @@
       <span>{{ t('menu.home') }}</span>
     </el-menu-item>
 
+    <el-menu-item v-if="hasMarketPermission" index="/market">
+      <el-icon><Shop /></el-icon>
+      <span>{{ t('menu.market') }}</span>
+    </el-menu-item>
+
     <el-sub-menu v-for="g in visibleGroups" :key="g.key" :index="g.key">
       <template #title>
         <el-icon><component :is="g.icon" /></el-icon>
@@ -40,6 +45,17 @@
           </el-menu-item>
         </el-sub-menu>
       </template>
+    </el-sub-menu>
+
+    <el-sub-menu v-if="extMenuItems.length" index="ext-apps">
+      <template #title>
+        <el-icon><Grid /></el-icon>
+        <span>{{ t('menu.extensions') }}</span>
+      </template>
+      <el-menu-item v-for="it in extMenuItems" :key="it.path" :index="it.path">
+        <el-icon><component :is="iconOf(it.icon)" /></el-icon>
+        <span>{{ extMenuLabel(it) }}</span>
+      </el-menu-item>
     </el-sub-menu>
 
     <el-menu-item index="/account/profile">
@@ -101,8 +117,10 @@ import {
   Stamp,
   Promotion,
   ChatDotRound,
+  Shop,
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
+import { extensionMenus, type ExtensionMenu } from '@/utils/extensionLoader'
 
 const { t } = useI18n()
 
@@ -126,6 +144,8 @@ const route = useRoute()
 const auth = useAuthStore()
 
 const active = computed(() => route.path)
+
+const hasMarketPermission = computed(() => auth.hasAnyPermission(['setting.manage']))
 
 const groups: Group[] = [
   {
@@ -349,6 +369,69 @@ const groups: Group[] = [
 ]
 
 const canSee = (x: Leaf) => auth.hasAnyPermission(x.permissions)
+
+/** 扩展菜单图标（插件声明的 Element Plus 图标名 → 组件）；未知名称回退 Grid */
+const EXT_ICONS: Record<string, Component> = {
+  House,
+  DataBoard,
+  DataLine,
+  Setting,
+  Box,
+  Operation,
+  Histogram,
+  Monitor,
+  User,
+  Key,
+  Lock,
+  OfficeBuilding,
+  Tools,
+  Document,
+  Bell,
+  Calendar,
+  Star,
+  CollectionTag,
+  FolderOpened,
+  Notebook,
+  InfoFilled,
+  Goods,
+  Grid,
+  Van,
+  Connection,
+  Share,
+  Money,
+  UserFilled,
+  DocumentCopy,
+  List,
+  DocumentChecked,
+  EditPen,
+  Search,
+  DataAnalysis,
+  Clock,
+  Wallet,
+  Sell,
+  ShoppingCart,
+  Aim,
+  Files,
+  SetUp,
+  Tickets,
+  Cloudy,
+  Stamp,
+  Promotion,
+  ChatDotRound,
+}
+
+/** 已加载扩展的菜单项（按当前用户权限过滤） */
+const extMenuItems = computed(() =>
+  extensionMenus.value.filter((m) => auth.hasAnyPermission(m.permission ? [m.permission] : undefined))
+)
+
+function iconOf(name?: string): Component {
+  return (name && EXT_ICONS[name]) || Grid
+}
+
+function extMenuLabel(m: ExtensionMenu & { key: string }): string {
+  return m.i18nKey ? t(m.i18nKey) : m.title
+}
 
 const visibleGroups = computed(() =>
   groups

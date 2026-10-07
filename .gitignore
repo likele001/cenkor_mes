@@ -146,3 +146,8 @@ tmp/
 *.pth
 *.onnx
 *.model
+# 应用中心(独立项目 cenkormes-center)开发期软链,勿入库
+.center-staging
+# 扩展宿主运行时目录(本地安装的扩展包与状态,勿入库)
+backend/extensions/ quotation_demo-1.0.0.zip
+dist.bak*/

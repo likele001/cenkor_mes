@@ -223,6 +223,7 @@ export default {
   },
   menu: {
     home: '홈',
+    extensions: '확장 앱',
     dashboard: '데이터 대시보드',
     kanban: '진행 현황판',
     screen: '생산 현장 대시보드',
