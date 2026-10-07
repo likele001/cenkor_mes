@@ -44,6 +44,11 @@ class Settings(BaseSettings):
         "video/mp4,video/quicktime,video/webm,video/3gpp,video/x-msvideo"
     )
 
+    # 扩展宿主（MES 侧）：扩展加载机制。功能市场连接信息（hub 地址 / 实例令牌等）
+    # 改由后台「功能市场」页写入 PlatformSetting，无需在此配置 .env
+    EXTENSIONS_ENABLED: bool = True            # 扩展宿主总开关
+    EXTENSIONS_DIR: str = "./extensions"       # 扩展安装目录（相对 backend/，也可用绝对路径）
+
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://127.0.0.1:6379/1"

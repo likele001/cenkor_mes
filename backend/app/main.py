@@ -20,6 +20,7 @@ from app.core.security import ensure_secure_jwt_secret
 from app.crud.rbac import ensure_permissions, create_default_roles
 from app.crud.tenant import ensure_default_tenant
 from app.crud.user import create_user
+from app.extension_host import mount_all, startup_host
 from app.models.base import Base
 from app.models.user import User
 # 导入即注册 Session 级监听：看板相关表 commit 后推 WebSocket 刷新
@@ -54,6 +55,10 @@ enable_slow_query_logging(engine)
 app.add_middleware(RequestContextMiddleware)
 
 app.include_router(api_router, prefix="/api")
+
+# 扩展宿主：扫描 backend/extensions/ 并挂载 /api/extensions/{key} 路由。
+# 零管理界面——应用目录/发卡/绑定/吊销全部在独立应用中心完成。
+mount_all(app)
 
 
 @app.get("/api/health")
@@ -136,4 +141,10 @@ def on_startup():
             db.close()
     except Exception as e:
         logger.warning("seed system versions failed: %s", e)
+
+    # 扩展宿主启动：执行扩展迁移 + 注入权限点 + 启动授权同步线程（异常不阻塞主流程）
+    try:
+        startup_host()
+    except Exception as e:
+        logger.warning("extension host startup failed: %s", e)
 

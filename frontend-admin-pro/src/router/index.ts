@@ -5,11 +5,13 @@ import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { i18n } from '@/locales'
 import { tryRecoverStaleChunk } from '@/utils/chunk-reload'
+import { ensureExtensionsLoaded, hasExtensionRoute } from '@/utils/extensionLoader'
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('@/pages/LoginPage.vue'), meta: { public: true, title: () => i18n.global.t('menu.login') } },
   {
     path: '/',
+    name: 'app-layout',
     component: () => import('@/layouts/AppLayout.vue'),
     redirect: '/home',
     children: [
@@ -63,6 +65,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'system/automation-settings', name: 'system-automation-settings', component: () => import('@/pages/system/AutomationPage.vue'), meta: { title: () => i18n.global.t('menu.automationSettings'), permissions: ['setting.manage'] } },
       { path: 'system/cloud-storage', name: 'system-cloud-storage', component: () => import('@/pages/system/CloudStoragePage.vue'), meta: { title: () => i18n.global.t('menu.cloudStorage'), permissions: ['cloud_storage.manage'] } },
       { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['setting.manage'] } },
+      { path: 'market', name: 'market', component: () => import('@/views/market/MarketPage.vue'), meta: { title: () => i18n.global.t('menu.market'), permissions: ['setting.manage'] } },
       { path: 'account/profile', name: 'account-profile', component: () => import('@/pages/account/ProfilePage.vue'), meta: { title: () => i18n.global.t('menu.profile') } },
 
       { path: 'master/products', name: 'master-products', component: () => import('@/pages/master/ProductsPage.vue'), meta: { title: () => i18n.global.t('menu.products'), permissions: ['product.manage'] } },
@@ -227,6 +230,15 @@ router.beforeEach(async (to) => {
     } catch {
       auth.logout()
       return { path: '/login', query: { redirect: to.fullPath } }
+    }
+  }
+
+  // 首次进入时加载扩展前端（注册动态路由/菜单/多语言）；
+  // deep-link 命中扩展路由时解析早于注册会被兜底重定向，需按原路径重试一次
+  if (await ensureExtensionsLoaded()) {
+    const orig = to.redirectedFrom
+    if (orig && hasExtensionRoute(orig.path)) {
+      return { path: orig.fullPath, replace: true }
     }
   }
 
