@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.celery_app import celery
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_permissions, require_pro
 from app.core.response import ok
 from app.crud.export_job import create_export_job, list_export_jobs
 from app.crud.report_stats import get_daily_trend, get_process_rank, get_production_summary, get_yield_summary
@@ -17,7 +17,8 @@ from app.models.user import User
 
 from app.api.admin.reports.purchase import router as purchase_router
 
-router = APIRouter(dependencies=[Depends(require_permissions(["report.view"]))])
+# open-core：高级报表分析（缺陷柏拉图/良率/工序排行/趋势/导出）为专业版功能，社区版 403
+router = APIRouter(dependencies=[Depends(require_permissions(["report.view"])), Depends(require_pro("高级报表分析"))])
 router.include_router(purchase_router)
 
 
