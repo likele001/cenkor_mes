@@ -10,7 +10,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.deps import get_current_user, get_db, require_permissions, require_pro
 from app.core.response import ok
 from app.crud.exec_dashboard import (
     get_capacity_utilization,
@@ -29,7 +29,8 @@ from app.crud.exec_dashboard import (
 from app.models.user import User
 
 
-router = APIRouter(dependencies=[Depends(require_permissions(["exec_dashboard.view"]))])
+# open-core：经营驾驶舱为专业版功能，社区版 403
+router = APIRouter(dependencies=[Depends(require_permissions(["exec_dashboard.view"])), Depends(require_pro("经营驾驶舱"))])
 
 
 @router.get("/summary")
