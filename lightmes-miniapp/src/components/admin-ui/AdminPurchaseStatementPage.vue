@@ -36,8 +36,8 @@
               <view class="input picker">{{ supplierLabels[supplierIndex] || '请选择' }}</view>
             </picker>
           </view>
-          <view class="field"><text class="label">期间起</text><input v-model="form.period_from" class="input" placeholder="YYYY-MM-DD" /></view>
-          <view class="field"><text class="label">期间止</text><input v-model="form.period_to" class="input" placeholder="YYYY-MM-DD" /></view>
+          <view class="field"><text class="label">期间起</text><picker mode="date" :value="form.period_from" @change="(e) => form.period_from = e.detail.value"><view class="input picker" :style="form.period_from ? '' : 'color:#999'">{{ form.period_from || '选择日期' }}</view></picker></view>
+          <view class="field"><text class="label">期间止</text><picker mode="date" :value="form.period_to" @change="(e) => form.period_to = e.detail.value"><view class="input picker" :style="form.period_to ? '' : 'color:#999'">{{ form.period_to || '选择日期' }}</view></picker></view>
         </scroll-view>
         <view class="foot"><button class="btn primary" :loading="saving" @tap="submitCreate">创建</button></view>
       </view>

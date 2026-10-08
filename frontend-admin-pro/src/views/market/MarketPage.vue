@@ -110,7 +110,7 @@
               卸载
             </el-button>
           </template>
-          <el-button v-if="!app.licensed" size="small" plain @click="openPortal">
+          <el-button v-if="!app.licensed" size="small" plain @click="openPortal(app.key)">
             前往门户
           </el-button>
         </div>
@@ -119,7 +119,9 @@
       </div>
     </div>
 
-    <el-empty v-else-if="!loading && status.bound" description="暂无可用应用，请前往门户浏览购买" />
+    <el-empty v-else-if="!loading && status.bound" description="暂无可用应用，请前往门户浏览购买">
+      <el-button type="primary" plain @click="openPortal()">前往门户浏览</el-button>
+    </el-empty>
 
     <div v-if="loading" class="flex items-center justify-center py-20">
       <el-icon class="is-loading mr-2 text-2xl"><Loading /></el-icon>
@@ -135,10 +137,10 @@
           <span class="font-medium text-gray-800">门户地址</span>
         </div>
         <div class="flex gap-2">
-          <el-input v-model="hubUrl" placeholder="https://admin.cenkor.cn" clearable @keyup.enter="saveHub" />
+          <el-input v-model="hubUrl" placeholder="https://portal.cenkor.cn" clearable @keyup.enter="saveHub" />
           <el-button type="primary" :loading="savingHub" @click="saveHub">保存</el-button>
         </div>
-        <p class="mt-1 text-xs text-gray-400">填写 Cenkor 门户 hub 地址（如 https://admin.cenkor.cn），保存后即可发起绑定。</p>
+        <p class="mt-1 text-xs text-gray-400">填写 Cenkor 门户地址（如 https://portal.cenkor.cn，它与后台 API 同源），保存后即可发起绑定。</p>
       </div>
 
       <!-- 步骤 2：设备码绑定 -->
@@ -269,8 +271,11 @@ function hasUpdate(app: MarketApp): boolean {
   return app.installed && !!app.latest_version && app.latest_version !== app.installed_version
 }
 
-function openPortal() {
-  const url = status.hub_url || 'https://admin.cenkor.cn'
+function openPortal(appKey?: string) {
+  // hub 地址即门户同源（portal.cenkor.cn 反代了 /api/v1/store）；
+  // “前往门户”应打开门户应用中心，而非后台 API 根地址。
+  const base = (status.hub_url || 'https://portal.cenkor.cn').replace(/\/+$/, '')
+  const url = appKey ? `${base}/apps/${appKey}` : `${base}/apps`
   window.open(url, '_blank')
 }
 

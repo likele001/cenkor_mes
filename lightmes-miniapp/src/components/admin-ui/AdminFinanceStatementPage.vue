@@ -40,8 +40,8 @@
             <text class="label">订单ID*</text>
             <input v-model="form.order_ids" class="input" placeholder="多个用逗号分隔，如 1,2,3" />
           </view>
-          <view class="field"><text class="label">期间起</text><input v-model="form.period_start" class="input" placeholder="YYYY-MM-DD" /></view>
-          <view class="field"><text class="label">期间止</text><input v-model="form.period_end" class="input" placeholder="YYYY-MM-DD" /></view>
+          <view class="field"><text class="label">期间起</text><picker mode="date" :value="form.period_start" @change="(e) => form.period_start = e.detail.value"><view class="input picker" :style="form.period_start ? '' : 'color:#999'">{{ form.period_start || '选择日期' }}</view></picker></view>
+          <view class="field"><text class="label">期间止</text><picker mode="date" :value="form.period_end" @change="(e) => form.period_end = e.detail.value"><view class="input picker" :style="form.period_end ? '' : 'color:#999'">{{ form.period_end || '选择日期' }}</view></picker></view>
           <view class="field"><text class="label">备注</text><textarea v-model="form.remark" class="input area" /></view>
         </scroll-view>
         <view class="foot"><button class="btn primary" :loading="saving" @tap="submitCreate">创建</button></view>

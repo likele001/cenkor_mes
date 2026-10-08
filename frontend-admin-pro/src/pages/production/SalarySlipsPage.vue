@@ -214,7 +214,7 @@ onMounted(() => {
 
       <el-form :model="query" inline>
         <el-form-item :label="t('production.salary.month')">
-          <el-input v-model="query.month" placeholder="YYYY-MM" style="width: 140px" />
+          <el-date-picker v-model="query.month" type="month" value-format="YYYY-MM" :placeholder="t('production.salary.monthPlaceholder')" style="width: 140px" />
         </el-form-item>
         <el-form-item :label="t('production.salary.employeeId')">
           <el-input-number v-model="query.user_id" :min="1" placeholder="全部" style="width: 160px" clearable />

@@ -148,6 +148,8 @@ tmp/
 *.model
 # 应用中心(独立项目 cenkormes-center)开发期软链,勿入库
 .center-staging
-# 扩展宿主运行时目录(本地安装的扩展包与状态,勿入库)
-backend/extensions/ quotation_demo-1.0.0.zip
+# 扩展宿主运行时目录(本地安装的扩展包、授权快照、迁移指纹等运行期产物，勿入库)
+backend/extensions/
+# 备份/临时副本(含带时间戳的 .bak-*)
+*.bak-*
 dist.bak*/

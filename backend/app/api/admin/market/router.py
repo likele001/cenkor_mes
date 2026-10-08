@@ -460,6 +460,33 @@ def list_market_apps(db: Session = Depends(get_db)):
             "enabled": runtime.is_enabled(key) if info else False,
         })
 
+    # 本地已装、但既不在目录也不在已购里的（样例/定向安装/hub 未上架）：
+    # 仍列入以便在本页启用/禁用/卸载（修复“装了却在市场看不到”的可见性问题）。
+    for key, info in runtime.installed.items():
+        if key in seen:
+            continue
+        seen.add(key)
+        manifest = info.get("manifest")
+        lic = licensed.get(key)
+        installed_version = getattr(manifest, "version", "") or ""
+        items.append({
+            "key": key,
+            "name": getattr(manifest, "name", "") or key,
+            "description": getattr(manifest, "description", "") or "",
+            "icon": getattr(manifest, "icon", "") or "",
+            "category": getattr(manifest, "category", "") or "",
+            "latest_version": installed_version,
+            "price": (lic or {}).get("price"),
+            "licensed": lic is not None,
+            "license_state": (lic or {}).get("status", ""),
+            "license_expires_at": (lic or {}).get("expires_at"),
+            "bound_instances": (lic or {}).get("bound_instances", 0),
+            "max_instances": (lic or {}).get("max_instances", 1),
+            "installed": True,
+            "installed_version": installed_version,
+            "enabled": runtime.is_enabled(key),
+        })
+
     return ok({
         "items": items,
         "hub_url": _hub_url(db),

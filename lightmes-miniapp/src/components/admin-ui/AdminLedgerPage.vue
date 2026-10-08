@@ -60,7 +60,7 @@
             </picker>
           </view>
           <view class="field"><text class="label">金额*</text><input v-model="form.amount" class="input" type="digit" placeholder=">0" /></view>
-          <view class="field"><text class="label">业务日期*</text><input v-model="form.biz_date" class="input" placeholder="YYYY-MM-DD" /></view>
+          <view class="field"><text class="label">业务日期*</text><picker mode="date" :value="form.biz_date" @change="(e) => form.biz_date = e.detail.value"><view class="input picker" :style="form.biz_date ? '' : 'color:#999'">{{ form.biz_date || '选择日期' }}</view></picker></view>
           <view class="field"><text class="label">备注</text><input v-model="form.remark" class="input" /></view>
         </scroll-view>
         <view class="foot"><button class="btn primary" :loading="saving" @tap="submit">保存</button></view>

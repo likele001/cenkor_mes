@@ -205,7 +205,7 @@ onMounted(() => {
       </el-tabs>
 
       <div class="flex flex-wrap items-center gap-2 mb-4">
-        <el-input v-model="query.month" :placeholder="t('production.salary.monthPlaceholder')" style="width: 130px" />
+        <el-date-picker v-model="query.month" type="month" value-format="YYYY-MM" :placeholder="t('production.salary.monthPlaceholder')" style="width: 130px" />
         <el-input-number v-model="query.user_id" :min="1" :controls="false" :placeholder="t('production.salary.employeeId')" style="width: 110px" />
         <el-select v-model="query.status" clearable :placeholder="t('production.common.status')" style="width: 120px">
           <el-option label="待确认" value="submitted" />
