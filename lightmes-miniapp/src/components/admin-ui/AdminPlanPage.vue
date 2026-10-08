@@ -67,8 +67,8 @@
               <view class="input picker">{{ currentStatusLabel }}</view>
             </picker>
           </view>
-          <view class="field"><text class="label">开始日期</text><input v-model="form.start_date" class="input" placeholder="YYYY-MM-DD" /></view>
-          <view class="field"><text class="label">结束日期</text><input v-model="form.end_date" class="input" placeholder="YYYY-MM-DD" /></view>
+          <view class="field"><text class="label">开始日期</text><picker mode="date" :value="form.start_date" @change="(e) => form.start_date = e.detail.value"><view class="input picker" :style="form.start_date ? '' : 'color:#999'">{{ form.start_date || '选择日期' }}</view></picker></view>
+          <view class="field"><text class="label">结束日期</text><picker mode="date" :value="form.end_date" @change="(e) => form.end_date = e.detail.value"><view class="input picker" :style="form.end_date ? '' : 'color:#999'">{{ form.end_date || '选择日期' }}</view></picker></view>
           <view class="field"><text class="label">工期(天)</text><input v-model="form.work_days" class="input" type="number" placeholder="可选" /></view>
           <view class="field"><text class="label">备注</text><textarea v-model="form.remark" class="input area" /></view>
         </scroll-view>

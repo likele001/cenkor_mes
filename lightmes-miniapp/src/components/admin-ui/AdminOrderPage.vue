@@ -43,7 +43,7 @@
             </picker>
           </view>
           <view class="field"><text class="label">订单号</text><input v-model="form.code" class="input" placeholder="留空自动生成" /></view>
-          <view class="field"><text class="label">交期</text><input v-model="form.due_date" class="input" placeholder="YYYY-MM-DD" /></view>
+          <view class="field"><text class="label">交期</text><picker mode="date" :value="form.due_date" @change="(e) => form.due_date = e.detail.value"><view class="input picker" :style="form.due_date ? '' : 'color:#999'">{{ form.due_date || '选择日期' }}</view></picker></view>
           <view class="field"><text class="label">备注</text><textarea v-model="form.remark" class="input area" /></view>
           <view class="lines-head">
             <text class="label">明细*</text>
