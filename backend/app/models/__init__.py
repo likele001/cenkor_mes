@@ -50,6 +50,7 @@ from app.models.crm import CustomerContact, CrmOpportunity, CrmOpportunityActivi
 from app.models.mrp import MrpPlan, MrpItem
 from app.models.subcontract import SubcontractOrder, SubcontractOrderItem, SubcontractSendLog, SubcontractReceiveLog
 from app.models.system_version import SystemVersion
+from app.models.ai import PlatformAiProfile, PlatformAiGateway, PlatformAiModel
 
 __all__ = [
     "Base",
@@ -137,6 +138,9 @@ __all__ = [
     "Statement",
     "StatementItem",
     "StatementPayment",
+    "PlatformAiProfile",
+    "PlatformAiGateway",
+    "PlatformAiModel",
 ]
 
 from app.models.supplier_statement import SupplierStatement, SupplierStatementItem

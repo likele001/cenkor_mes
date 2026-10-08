@@ -118,6 +118,7 @@ import {
   Promotion,
   ChatDotRound,
   Shop,
+  MagicStick,
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { extensionMenus, type ExtensionMenu } from '@/utils/extensionLoader'
@@ -358,6 +359,7 @@ const groups: Group[] = [
         icon: SetUp,
         items: [
           { path: '/system/settings', i18nKey: 'menu.settings', permissions: ['setting.manage'], icon: Tools },
+          { path: '/system/ai-gateway', i18nKey: 'menu.aiModels', permissions: ['setting.manage'], icon: MagicStick },
           { path: '/system/dictionary', i18nKey: 'menu.dictionary', permissions: ['dict.manage'], icon: CollectionTag },
           { path: '/system/cron-jobs', i18nKey: 'menu.cronJobs', permissions: ['setting.manage'], icon: Clock },
           { path: '/system/operation-logs', i18nKey: 'menu.operationLogs', permissions: ['operation_log.view'], icon: Notebook },
