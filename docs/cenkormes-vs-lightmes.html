@@ -49,15 +49,17 @@
   <div>
     <span class="tag">版本定位核查</span>
     <span class="tag">开源决策参考</span>
-    <span class="tag">2026-08-21</span>
+    <span class="tag">初版 2026-08-21</span>
+    <span class="tag">复核更新 2026-10-08</span>
   </div>
-  <p>用于区分「商业收费的 SaaS 版」与「计划开源（AGPL）的独立版」，明确开源独立版应包含什么、收费项留在哪里。</p>
+  <p>用于区分「商业收费的 SaaS 版」与「计划开源（AGPL）的独立版」，明确开源独立版应包含什么、收费项留在哪里。<b>本页已按 2026-10-08 代码复核结果更正报价/模具/SPC 状态，并补充 AI·排查诊断缺口与已交付扩展清单。</b></p>
 </header>
 
 <div class="meta">
   <div><b>核查对象</b>：<code>lightmes/backend</code>（SaaS 主仓）　×　<code>cenkormes/backend</code>（独立版）</div>
-  <div><b>核查方式</b>：服务端实际 Model / API 路由注册比对（非关键词表象）</div>
-  <div><b>API 规模</b>（@router 计数，非精确 endpoint）：lightmes <span class="count">748</span> 条　vs　cenkormes <span class="count">539</span> 条</div>
+  <div><b>核查方式</b>：服务端实际 Model / API 路由 / <code>services/ai</code> 模块比对（非关键词表象）</div>
+  <div><b>API 规模</b>（@router 计数，非精确 endpoint）：lightmes <span class="count">748</span> 条　vs　cenkormes 核心 <span class="count">539</span> 条（另有 <span class="count">10</span> 个付费扩展 zip 于仓外交付）</div>
+  <div><b>AI 服务模块</b>：<code>lightmes/services/ai</code> <span class="count">32</span> 个　vs　<code>cenkormes</code> 仅 <span class="count">3</span> 个占位 stub</div>
 </div>
 
 <div class="legend">
@@ -108,7 +110,7 @@
       <tr><td>执行看板（exec_dashboard）</td><td><span class="pill ok">双方都有</span></td><td>独立版独有的可视化亮点</td></tr>
       <tr><td>文档打印模板（print_template）</td><td><span class="pill ok">双方都有</span></td><td>（已核实，非 SaaS 独有）</td></tr>
       <tr><td>第三方消息通道（飞书/钉钉/企微）</td><td><span class="pill ok">双方都有</span></td><td>feishu·dingtalk·wecom 均有（已核实）</td></tr>
-      <tr><td>AI 助手 / 配置（api/admin/ai）</td><td><span class="pill ok">双方都有</span></td><td>独立版含基础 AI 能力</td></tr>
+      <tr><td>AI 简报 / 告警（<code>ai_compat</code>）</td><td><span class="pill half">半成品</span></td><td>独立版仅 3 个占位 stub（<code>/brief</code>·<code>/alerts</code>·<code>/alerts/run</code>），<b>无真实 LLM 对话/知识库/排产</b>，详见第三节缺口</td></tr>
     </tbody>
   </table>
 </div>
@@ -116,51 +118,70 @@
 <h2>三、SaaS 独有 / 独立版差异项（开源决策重点）</h2>
 <div class="grid2">
   <div class="card">
-    <h2 style="margin-top:0">仅 lightmes（SaaS）有</h2>
+    <h2 style="margin-top:0">仅 lightmes（SaaS）有 · 独立版缺口</h2>
+    <p class="sub" style="margin-top:0"><b>🤖 AI 能力层</b>：lightmes 有 <span class="count">32</span> 个 <code>services/ai/*</code> 模块 + 多个 AI 路由；cenkormes 仅 <code>ai_compat</code> 占位。</p>
     <table>
-      <thead><tr><th>功能</th><th>层级</th></tr></thead>
+      <thead><tr><th>能力</th><th>lightmes</th><th>cenkormes</th></tr></thead>
       <tbody>
-        <tr><td><b>AI 员工</b>（ai_employee）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td><b>行业模板</b>（industry）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td><b>报价</b>（quotation）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td><b>模具管理</b>（mold API）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td><b>SPC 统计过程控制</b>（spc API）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td><b>SaaS 平台层</b>（api/platform：租户/套餐/订阅）</td><td><span class="pill both">SaaS 独有</span></td></tr>
-        <tr><td>平台用户 / 套餐 / 订阅订单表</td><td><span class="pill both">SaaS 独有</span></td></tr>
+        <tr><td>AI 对话 / 流式（<code>/ai/chat</code>）</td><td><span class="pill both">SaaS 有</span></td><td><span class="pill no">缺（仅 stub）</span></td></tr>
+        <tr><td>知识库 RAG 帮助（<code>/help·search·reindex</code>）</td><td><span class="pill both">SaaS 有</span></td><td><span class="pill half">有 chroma 未接线</span></td></tr>
+        <tr><td>智能排产（<code>schedule-suggest·optimize·apply</code>）</td><td><span class="pill both">SaaS 有</span></td><td><span class="pill no">缺</span></td></tr>
+        <tr><td>数字员工（<code>ai_employee</code>）</td><td><span class="pill both">SaaS 有</span></td><td><span class="pill no">缺</span></td></tr>
+        <tr><td>可执行助手（<code>assistant · /act</code>）</td><td><span class="pill both">SaaS 有</span></td><td><span class="pill no">缺</span></td></tr>
       </tbody>
     </table>
-    <p class="sub">建议：这些留在 SaaS / Pro 侧，作为商业收费差异化项，不入开源独立版。</p>
+    <p class="sub"><b>🔍 排查 / 诊断层</b>（cenkormes 完全没有）：</p>
+    <table>
+      <thead><tr><th>诊断引擎</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>report_anomaly</code> 报工异常检测</td><td>识别异常报工</td></tr>
+        <tr><td><code>causal / causal_inference</code> 根因分析</td><td>质量因果推断</td></tr>
+        <tr><td><code>quality / visual_quality</code> 质检诊断</td><td>质量与视觉质检</td></tr>
+        <tr><td><code>report_risk_score</code> 风险评分</td><td>报工风险打分</td></tr>
+        <tr><td><code>proactive / task_recommend</code> 预警·任务推荐</td><td>提前提醒</td></tr>
+      </tbody>
+    </table>
+    <p class="sub"><b>其它</b>：行业模板包 <code>industry</code>（6 套 seed）、更完整的 <code>workflow</code> 引擎、ERP 凭证/折旧/成本增强、<code>platform</code> 租户/套餐/订阅。</p>
+    <p class="sub">建议：AI + 排查计算重、依赖外部 LLM key/向量库，是核心差异化 → <b>收编为 Pro / 付费扩展</b>，不入开源主干。</p>
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">仅 cenkormes（独立版）有 / 半成品</h2>
+    <h2 style="margin-top:0">cenkormes 已具备 / 已补齐</h2>
+    <p class="sub" style="margin-top:0"><b>独立版原生亮点</b>：</p>
     <table>
-      <thead><tr><th>功能</th><th>层级</th></tr></thead>
+      <thead><tr><th>功能</th><th>状态</th></tr></thead>
       <tbody>
-        <tr><td><b>追溯树</b>（trace/tree/{product_code}）</td><td><span class="pill ok">独立版亮点</span></td></tr>
-        <tr><td><b>CRM 适配器</b>（crm-adapter）</td><td><span class="pill ok">独立版亮点</span></td></tr>
-        <tr><td colspan="2" class="sub">注意：独立版 <b>无任何独有 Model</b>，上述独有均为 API/路由特色。</td></tr>
-        <tr><td><b>模具</b>：只有 <code>models/mold.py</code> 表</td><td><span class="pill half">有表无功能</span></td></tr>
-        <tr><td><b>SPC</b>：只有 <code>models/spc.py</code> 表</td><td><span class="pill half">有表无功能</span></td></tr>
-        <tr><td><b>报价</b>：只有模型，无独立模块</td><td><span class="pill half">有表无功能</span></td></tr>
+        <tr><td>追溯树 <code>trace/tree/{product_code}</code></td><td><span class="pill ok">独立版亮点</span></td></tr>
+        <tr><td>CRM 适配器 <code>crm-adapter</code></td><td><span class="pill ok">独立版亮点</span></td></tr>
+        <tr><td>经营驾驶舱 <code>exec_dashboard</code></td><td><span class="pill both">已门控 Pro</span></td></tr>
       </tbody>
     </table>
-    <p class="sub">「有表无功能」= 模型文件在，但 <code>/admin/*</code> 未挂载对应路由，属未完成的半成品。</p>
+    <p class="sub"><b>旧文档「有表无功能」项，2026-10-08 复核已全部补齐</b>：</p>
+    <table>
+      <thead><tr><th>功能</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td><b>报价 / CPQ</b>（quotation）</td><td><span class="pill ok">已实现</span> <span class="sub">crm.py 全生命周期</span></td></tr>
+        <tr><td><b>模具管理</b>（mold）</td><td><span class="pill ok">已交付扩展</span></td></tr>
+        <tr><td><b>SPC</b>（spc）</td><td><span class="pill ok">已交付扩展</span></td></tr>
+      </tbody>
+    </table>
+    <p class="sub"><b>已交付付费扩展（10 个 zip、仓外开发）</b>：<br>andon、energy_monitor、equipment_health、equipment_productivity、skill_matrix、delivery_ontime、inventory_analysis、workforce_attendance、mold_management、spc_control。</p>
   </div>
 </div>
 
 <h2>四、落地上建议</h2>
 <div class="card">
   <ul>
-    <li><b>开源独立版（cenkormes）直接开源即可</b>：核心制造闭环完整，天然不含 AI 员工 / 行业模板 / 报价 / SPC / 模具功能 / SaaS 平台层，这些收费项本就在 SaaS 侧，无需「砍功能」。</li>
-    <li>独立版推荐额外打磨的差异化亮点：<b>trace/tree 追溯树</b>、<b>crm-adapter</b>、<b>exec_dashboard 执行看板</b>——这些作为开源版的特色，利于推广。</li>
-    <li>若决定做「批次级溯源」，再考虑补 <b>incoming_batch（来料批次）</b>；当前它只是采购验收时写入的一条批次记录，无独立页面、未接入 trace，是否补齐取决于产品规划。</li>
-    <li>独立版的「有表无功能」（mold / spc / quotation）要么补全挂路由，要么在文档中标注「未开放」，避免使用者误以为功能缺失是 Bug。</li>
+    <li><b>核心制造闭环</b>（计划/工单/报工/质量/库存/采购/财务/CRM/考勤/追溯）在独立版已完整，开源主干无需砍除。</li>
+    <li><b>报价 CPQ / 模具 / SPC</b>：旧文档标注的“有表无功能”已过时——报价在 <code>crm.py</code> 已实现，模具/SPC 已作为独立付费扩展交付。</li>
+    <li><b>AI 能力层 + 排查诊断层</b> 是 cenkormes 与 lightmes 的<b>最大真实缺口</b>（cenkormes 仅 3 个占位 stub，lightmes 有 32 个 AI 服务模块）。因依赖外部 LLM key/向量库且为核心差异化，建议做成<b>需自备 key 的付费扩展 / Pro 门控</b>，不进开源主干。</li>
+    <li><b>落地优先级</b>：① 先做 <code>production_diagnosis</code>（规则+统计的异常排查预警扩展，纯复用核心数据、只读、可真实回测，<b>不依赖 LLM</b>）；② 再做 <code>ai_assistant</code>（对话+RAG，用户自备 OpenAI 兼容 key，复用已有 chroma）；③ 行业模板包；④ workflow/ERP 属地基走核心补全或门控。</li>
+    <li><b>推进节奏</b>：A 线（纯扩展、仓库外开发打包、零风险）持续产出可售 zip；B 线（<code>require_pro</code> 门控 reports / exec_dashboard）收编高价值核心功能；C 线由 hub 侧完成上传→审核→定价→购买→安装。</li>
   </ul>
 </div>
 
 <footer>
-  数据来源：lightmes / cenkormes 服务端实际 Model 与 API 路由注册比对 · 核查时间 2026-08-21 · 统计口径为 @router 装饰器数量，非精确 endpoint。
+  数据来源：lightmes / cenkormes 服务端实际 Model、API 路由与 <code>services/ai</code> 模块比对 · 初次核查 2026-08-21 · <b>复核更新 2026-10-08</b>（更正 quotation/mold/spc 状态，新增 AI·排查诊断缺口与 10 个已交付扩展清单）· @router 计数为近似规模，非精确 endpoint。
 </footer>
 
 </div>

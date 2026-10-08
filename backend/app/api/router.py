@@ -98,3 +98,12 @@ except Exception:
     # 兼容层导入失败不阻塞主路由
     pass
 
+# 平台 AI 配置层（波次 0）：网关/模型/总开关/Prompt/连通性测试，挂 /api/ai
+# 与 ai_compat 路径不重叠（compat 仅 brief/alerts/alerts-run）
+try:
+    from app.api.admin.ai.router import router as admin_ai_router
+    api_router.include_router(admin_ai_router, prefix="/ai", tags=["ai-config"], dependencies=_admin_deps)
+except Exception:
+    # AI 配置层导入失败不阻塞主路由
+    pass
+

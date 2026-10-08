@@ -55,5 +55,13 @@ class Settings(BaseSettings):
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     CELERY_ENABLE_UTC: bool = True
 
+    # AI 配置层兜底（.env 提供默认值；平台「AI 网关/模型」页的 DB 配置优先）
+    AI_ENABLED: bool = False                 # AI 总开关兜底（DB platform_ai_profiles.enabled 优先）
+    AI_BASE_URL: str = ""                    # 兜底 Base URL（网关未填时回退）
+    AI_API_KEY: str = ""                     # 兜底 API Key（网关未填时回退）
+    AI_DEFAULT_MODEL: str = ""               # 兜底模型标识
+    AI_TIMEOUT_SECONDS: int = 120            # LLM 调用超时（秒）
+    RAG_EMBEDDING_MODEL: str = ""            # 知识库向量模型（波次 2 RAG 用）
+
 
 settings = Settings()
