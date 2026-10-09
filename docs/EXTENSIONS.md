@@ -78,3 +78,22 @@ python scripts/extension.py sync              # 手动触发一次心跳同步
 
 > 扩展包制作规范（manifest / router / migrations / plugin.js）见应用中心仓库
 > `docs/extension-spec.md`；可运行样例见 `backend/extensions_samples/quotation_demo/`。
+
+### 八·补：本节的现状校正（2026-10-09 只读核对）
+
+上面 1–4 是设计初稿，与现在代码有几处出入，按代码为准：
+
+- **不走 `.env`**。hub 地址存 `platform_settings.market_hub_url`（市场页设置，`PUT /admin/market/hub`），
+  实例凭证经**设备码绑定**换发的 `market_instance_token`（`POST /admin/market/bind/start` → 门户
+  `/connect` 确认 → `GET /admin/market/bind/poll`），同样落 `platform_settings`。没有 uid/token 的 `.env` 项。
+- **发布有审核闸门**：开发者在 cenkor-admin「开发者应用中心」提交 zip → `app_submissions.status=pending`
+  → 人工审核 `POST /submissions/{id}/review`（approve/reject）→ 只有 `approved/installed` 才能被目录列出、
+  被 `cloud/packages/{app_key}` 分发。`approve` 即上架，没有独立的 publish 步骤。
+- **OTA 入口在市场页**，不是 CLI：`POST /admin/market/install`（需已持有该 app 的有效 license_key），
+  装完 `hot_setup_extension` 即时生效，**不需要重启后端**（前提：单进程 uvicorn）。
+  `backend/scripts/extension.py` 现在主要用于本地启停覆盖（`overrides.json`）。
+- 心跳周期：web 进程内 daemon 线程每 **15 分钟**刷一次已购快照（`ENTITLEMENT_SYNC_MINUTES`），
+  打开市场页也会顺手刷一次；hub 不可达时**保留上次快照**（fail-open，不误停用正在运行的扩展）。
+
+已知缺口（哈希不校验、hub_url 可写、审核权限复用 `rbac:role:write`、`latest_version` 缺失等）
+统一记在 `AUDIT_REPORT_2026-10.md` §9，待修复。

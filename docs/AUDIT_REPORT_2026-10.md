@@ -4,6 +4,8 @@
 口径：不看单点功能好不好用，看**一条业务数据从产生到能被对账、被追溯、被结算**这条路断在哪。
 不含：`h5.mes.cenkor.cn`（那是另一套多租户项目，cenkormes 的 `frontend-h5` 未挂载）。
 
+> §1–§8 是业务闭环那一轮（2026-10-05 ~ 10-06，已整改）。**§9 是 2026-10-09 单独一轮，只审计「扩展应用/功能市场」链路，没有改任何代码，清单待后续修复。**
+
 ---
 
 ## 1. 结论摘要
@@ -241,3 +243,114 @@ commit 后，已连接的 WS 客户端真的收到 `{"type":"refresh","changed":
 
 注：`_is_already_seeded` 现在只要 `finance_ledgers` 有任何一行就跳过 —— 开发库已有 1 行，
 所以现在跑它会 `[SKIP]`。这是原本就有的保守语义，没有改。
+
+---
+
+## 9. 扩展应用（功能市场）链路审计（2026-10-09，**纯只读，本轮未修改任何代码**）
+
+范围：`backend/app/extension_host/*`（638 行）、`app/api/admin/market/router.py`（616 行）、
+`app/api/admin/extensions/router.py`、前端 `utils/extensionLoader.ts` + `views/market/MarketPage.vue`；
+hub 侧为 `/www/wwwroot/cenkor-admin`（`127.0.0.1:8002`，对外即 `admin.cenkor.cn` / `portal.cenkor.cn`）。
+下线的实装扩展目前只有一个：`extensions/mold_management`（模具管理，336 行 router + 317 行 plugin.js）。
+
+### 9.1 分发链路：与既定设计一致，审核确实是硬闸门
+
+`开发 → cenkor-admin 开发者应用中心上传 → 人工审核 → 门户目录 → 实例购买/安装`，四步都在代码里：
+
+| 环节 | 实现位置 | 事实 |
+| --- | --- | --- |
+| 开发者账户 | `store_models.py:14`（`app_developers`） | 注册用 `require_portal_or_admin`（`store_router.py:118/:496`） |
+| 提交包 | `store_models.py:27`（`app_submissions`），唯一约束 `(product, app_key, version)` | 落盘 `backend/src/uploads/apps/{app_key}-{version}.zip`（`store_router.py:41/:536`），`product` 列做多产品目录隔离 |
+| 人工审核 | `POST /submissions/{id}/review`（`store_router.py:707`），action 仅 approve/reject | status 枚举 **pending / approved / rejected / installed**，写 `review_note/reviewed_by/reviewed_at` |
+| 门户目录 | `GET /api/v1/store/apps?product=cenkormes`（`store_router.py:182`） | 公开、免登录可读 |
+| 授权下载 | `GET cloud/packages/{app_key}`（`commerce_router.py:1301`） | `_fetch_package` 强制 `status IN ("approved","installed")`（`:1279-1281`）→ 未过审 404；再叠加 `_guard_license` + `lic.app_key != app_key → 403` |
+| 实例侧安装 | `market/router.py:564 install_app` | 先查已购 → `licenses/{key}/activate` 记账 → 下 zip → 解压 → 热生效 |
+
+MES 侧的六个 store 端点在 hub 全部存在，没有缺失或语义错位（唯一例外见 P2-1）。
+
+### 9.2 待修复清单（按性价比排序，留待后续处理）
+
+**P1-1 包 SHA256 算了、存了，然后没有任何读取方 —— 这条直接削弱审核的可信度。**
+`store_router.py:542` 计算哈希、`:649` 写入 `file_hash`（`store_models.py:44` 注释即「SHA256」），
+但全仓 grep `file_hash` 只有这三处：目录不返回、下载响应不返回（`commerce_router.py:1327-1332` 只给了
+`X-App-Version` 头）、MES 侧 `_download_package`（`market/router.py:517-525`）也完全不校验。
+后果：**审核通过 ≠ 实例装到的就是审核时那份**。就地覆盖 `uploads/apps/{key}-{version}.zip`、
+数据库 status 不动，即可绕过人工审核，且实例端无从察觉。
+最小修法：hub 下载响应带 `X-App-Sha256`（或目录带 `checksum` 字段），MES 安装前比对；不一致直接拒绝并告警。
+
+**P1-2 `hub_url` 可被写，等于把整条审核链路挂在一个字符串上。**
+`PUT /market/hub`（`market/router.py:148`）仅需 `setting.manage` 权限即可改 hub 地址；
+改指向攻击者控制的 hub 后，「开发者上传 + 人工审核」这一整套保护就不存在了，
+而扩展的 `router.py` 是被 `importlib` `exec_module` 直接执行的 Python —— 等价于远程代码执行。
+建议：`hub_url` 做成只读/白名单（或至少改地址时需要二次确认 + 留审计日志），并配合 P1-1 的校验和兜底。
+
+**P1-3 审核权限复用通用的 `rbac:role:write`。**
+`store_router.py:712`（审核）与 `:776`、`commerce_router.py:1339`（安装）都只查 `rbac:role:write`，
+没有专门的商店审核权限码。同一个人既能审核、又能覆盖包文件，审核的独立性只靠流程自觉。
+建议：新增 `app.store.review` 之类专用码，与角色写权限解耦。
+
+**P2-1 真 bug：hub 的 `my-purchases` 不返回 `latest_version`，导致宿主侧「可升级」永远判不出来。**
+MES 在 `market/router.py:339` 读 `p.get("latest_version")`，而 hub 侧构造已购条目的地方并没有这个字段
+（`cloud_router.py` 返回 license_key/app_key/status/expires_at/bound_instances/max_instances/price；
+全仓 `latest_version` 只出现在不相干的 `release_service.py:110`）。于是它恒为 `""` →
+`state.py:89 status_list()` 里的 `upgrade_available`（`:101`）永远 False。现网证据：
+`extensions/.state/entitlements.json` 里 `mold_management.latest_version` 就是空字符串。
+市场页那个「升级」按钮看着正常，是因为它走公开目录 `apps` 的 `version`（`market/router.py:426`），
+跟这条快照路径不是同一个来源。修法二选一：hub 在 my-purchases 补该字段，或 MES 改用目录版本填快照。
+
+**P2-2 `_install_extension` 对 `pkg_key` 没做字符合法性校验，且同名安装前先 `rmtree`。**
+`market/router.py:547-553`：`target_dir = extensions_dir / pkg_key`，`pkg_key` 取自包内 manifest，
+只比对了 `pkg_key == app_key`（而 `InstallIn.app_key` 只有长度约束、无 pattern）。畸形 key
+（如 `../../x`）会把删除与解包引出扩展目录。注意成员名本身是安全的 —— Python 的 `zipfile.extract`
+会清洗 `..` 与前导 `/`，所以这不是 zip-slip，越界面只在 `target_dir` 这一层。触发需要恶意 hub 或恶意包。
+修法：安装前校验 `pkg_key` 与 `app_key` 都匹配 `^[a-z0-9_]{1,64}$`，并在 rmtree 前断言 `target` 在 `base` 下
+（卸载侧 `:601` 已经有这个守卫，安装侧漏了）。
+
+**P2-3 `enforced` 落了盘但重启不读回 → 每次重启后有一段 fail-open 窗口。**
+`set_entitlement_snapshot` 把 `enforced` 写进 `entitlements.json`（`state.py:143`），
+但 `load_from_disk()`（`:107`）只取 `synced_at` 和 `entitlements`，没取 `enforced`。
+于是重启后 `entitlement_enforced=False` → `entitlement_state()` 返回 `local`（装了即启用），
+直到门控线程首轮同步成功才重新收紧。fail-open 本身是**有意的**设计（hub 不可达时不误停正在跑的扩展，
+见 `state.py:65-79` 的注释），这条只是它的一个非预期副作用。修法：读回 `enforced`。
+
+**P2-4 `approve` 即上架，没有独立的 publish/unpublish；「吊销授权」和「应用下架」是两套互不相干的开关。**
+`AppSubmission.status` 一个字段同时兼任审核态与上架态，`revoked/suspended` 只存在于 **License**
+（`LICENSE_STATUSES`）。想让一个应用不再被新实例拿到，目前只能把 status 手动改回 rejected。
+
+**P3-1 成为开发者零门槛。** 任何 active 门户账号可自助注册开发者并上传。上传校验有
+（`.zip` 后缀、app_key/version 正则、≤200MB、manifest 必存在且 `key` 与 app_key 一致、
+平台应用需 `manifest.py`+`__init__.py`、`router.py` import 路径启发式），但**没有恶意代码/禁止文件扫描**
+—— 扩展本质是任意 Python，人工审核就是人肉 code review，审核员要看的正是这个。
+
+**P3-2 扩展权限码注入后不回收。** `_sync_permissions()`（`extension_host/host.py:88`）把已启用扩展声明的
+权限点写库并**补授给 admin 角色**，卸载扩展时不清理，权限码留在库里。另外它按 `is_enabled()` 过滤，
+而 P2-3 的 fail-open 窗口内「已启用」等于「全部已装」，会连带注入未授权扩展的权限点。
+
+**P3-3 热挂载成立的前提是单进程 uvicorn。** 卸载靠原地改 `app.router.routes`（`loader.py:72-82`，
+Starlette 每请求实时遍历，故免重启）。当前 `:8500` 确实是单进程无 `--workers`；
+哪天改成多 worker，安装/卸载只会命中处理该请求的那个进程，其余 worker 需重启才同步。
+
+**P3-4 两处 docstring 已与现状矛盾。** `extension_host/__init__.py` 与
+`app/api/admin/extensions/router.py:5` 都还写着「MES 不提供任何应用安装/授权管理界面 ——
+均在独立应用中心完成」，而 admin 里已经有 `MarketPage.vue` 的安装/升级/卸载 UI。
+
+**P3-5 `instance_token` 明文存 `platform_settings.value`**（`INSTANCE_TOKEN_KEY`），随该表任何导出/备份外泄。
+
+**P3-6 扩展迁移的两个限制**：`_split_sql`（`loader.py:156`）按「行尾分号」拆句，含分号的字符串/触发器/存储过程
+会被拆坏；指纹是 `mtime:size`（`:199`），同尺寸且同 mtime 的改动会被跳过。另外
+`mold_management/migrations.sql` 是 MySQL 语法（`AUTO_INCREMENT` + 内联 `INDEX`），在 SQLite 上解析会失败 ——
+它自身注释已说明「核心模型已建表，此脚本对新装实例兜底」，但意味着这份 SQL 只在 MySQL 路径上成立。
+
+**P3-7 UI 没有启用/禁用按钮。** `is_enabled()` 的本地覆盖分支（`overrides.json`）只能靠
+`backend/scripts/extension.py` 这个 CLI 改；`MarketPage.vue` 只有安装/升级/卸载，`enabled` 是只读展示。
+不算 bug，但要用的时候得知道入口在哪。
+
+### 9.3 真动手修的时候
+
+- 需要改 **cenkor-admin** 的：P1-1（下载响应带校验和）、P1-3（专用审核权限码）、P2-1（my-purchases 补
+  `latest_version`）、P2-4（publish 与审核分离）。那是另一个项目和另一个进程，启停仍由你自己操作。
+- 只改 **cenkormes** 就能收口的：P2-2（key 合法性 + rmtree 前置守卫）、P2-3（读回 `enforced`）、
+  P3-4（docstring）、P1-2（hub_url 改只读/白名单）。
+- 验证仍走隔离 SQLite + 临时目录，不往 MySQL 写；扩展这条链路没有新表，`extensions/.state/*.json`
+  用临时目录测就行。
+- P1-1 与 P2-1 有先后关系：加校验和时顺手把 `latest_version` 一起返回，客户端一次改完。
