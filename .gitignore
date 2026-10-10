@@ -153,3 +153,5 @@ backend/extensions/
 # 备份/临时副本(含带时间戳的 .bak-*)
 *.bak-*
 dist.bak*/
+refcopy
+docs/pending/process-manufacturing-product-plan.md
