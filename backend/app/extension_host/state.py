@@ -115,6 +115,10 @@ class ExtensionRuntime:
             for x in (cached.get("entitlements") or [])
             if isinstance(x, dict) and x.get("app_key")
         }
+        # 不读回 enforced 的话，重启后到门控线程首轮同步成功之间所有已装扩展都按
+        # "local" 放行，到期/吊销的扩展会在这段窗口里继续可用（见 load 的 fail-open 判定）。
+        if "enforced" in cached:
+            self.entitlement_enforced = bool(cached.get("enforced"))
         self.overrides = {str(k): str(v) for k, v in (self.store.load("overrides", {}) or {}).items()}
 
     def apply_entitlements(self, body: dict, synced_at: str) -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
@@ -53,20 +54,44 @@ def require_extension(key: str):
 
 
 def _load_module(file: Path, module_name: str):
-    """按文件路径加载 Python 模块（不依赖 sys.path）。"""
+    """按文件路径加载 Python 模块（不依赖 sys.path）。
+
+    必须先注册进 ``sys.modules`` 再 ``exec_module``：pydantic 2.11+ 不再从定义处
+    的栈帧取父命名空间，而是按 ``cls.__module__`` 反查 ``sys.modules``。扩展普遍写了
+    ``from __future__ import annotations``（注解是字符串），未注册时模型会被标记为
+    「待补全」，直到生成 /openapi.json 或首次校验时才炸 ``class not fully defined``——
+    表现为路由能调通、但 ``/docs`` 整页 500。
+    """
     spec = importlib.util.spec_from_file_location(module_name, file)
     if spec is None or spec.loader is None:
         raise ImportError(f"无法加载模块: {file}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(module_name, None)  # 半个模块留在 sys.modules 更糟
+        raise
     return module
 
 
 def _extension_route_target(route, key: str) -> bool:
-    """判断某条 app 路由是否属于指定扩展（前缀 /api/extensions/{key}）。"""
+    """判断某条 app 顶层路由是否属于指定扩展（前缀 /api/extensions/{key}）。
+
+    兼容两种 FastAPI 行为：
+    - 新版（FastAPI>=0.143 / Starlette 1.x）：``include_router`` 追加的是
+      ``_IncludedRouter``，子路由嵌套其内、顶层无 ``path``；前缀记录在
+      ``route.include_context.prefix``。只按 ``path`` 判断会一条都删不掉，
+      卸载/更新后旧路由仍在。
+    - 旧版：子路由被摊平为顶层 ``APIRoute``，带完整 ``path``。
+    """
     prefix = f"/api/extensions/{key}"
+    ctx = getattr(route, "include_context", None)
+    if ctx is not None:
+        rp = getattr(ctx, "prefix", "") or ""
+        return rp == prefix or rp.startswith(prefix + "/")
     path = getattr(route, "path", "") or ""
-    return path == prefix or path.startswith(prefix + "/")
+    return bool(path) and (path == prefix or path.startswith(prefix + "/"))
 
 
 def unmount_extension_router(app: FastAPI, key: str) -> int:

@@ -219,6 +219,68 @@ def test_entitlements_cache_roundtrip(tmp_path: Path):
     assert runtime.synced_at == "2026-01-01T00:00:00Z"
 
 
+def test_enforced_flag_survives_restart(tmp_path: Path):
+    """门控开关也要随快照落盘：重启后仍按上次同步结果收紧，不留 fail-open 窗口。"""
+    _write_ext(tmp_path)
+    app = FastAPI()
+    mount_extensions(app, tmp_path, auth_dependencies=[])
+
+    runtime.set_entitlement_snapshot(
+        {"demo_ext": {"app_key": "demo_ext", "state": "expired"}},
+        "2026-01-01T00:00:00Z",
+        enforced=True,
+    )
+
+    # 模拟重启：内存态清空后仅从 .state 恢复
+    runtime.reset()
+    from app.extension_host.state import StateStore
+
+    runtime.extensions_dir = tmp_path
+    runtime.store = StateStore(tmp_path / ".state")
+    runtime.installed = scan_extensions(tmp_path)
+    runtime.load_from_disk()
+
+    assert runtime.entitlement_enforced is True
+    assert runtime.entitlement_state("demo_ext") == "expired"
+    assert runtime.is_enabled("demo_ext") is False
+
+    # 解绑落盘 enforced=False → 重启后应回到本地放行，而不是被旧快照卡住
+    runtime.clear_entitlement_enforcement()
+    runtime.reset()
+    runtime.store = StateStore(tmp_path / ".state")
+    runtime.installed = scan_extensions(tmp_path)
+    runtime.load_from_disk()
+    assert runtime.entitlement_enforced is False
+    assert runtime.entitlement_state("demo_ext") == "local"
+
+
+def test_unmount_handles_both_fastapi_route_shapes(tmp_path: Path):
+    """卸载判定同时兼容「摊平路由」与新版 FastAPI 的 _IncludedRouter(include_context.prefix)。"""
+    from types import SimpleNamespace
+
+    from app.extension_host.loader import _extension_route_target, unmount_extension_router
+
+    flattened = SimpleNamespace(path="/api/extensions/demo_ext/ping", include_context=None)
+    included = SimpleNamespace(path="", include_context=SimpleNamespace(prefix="/api/extensions/demo_ext"))
+    unrelated = SimpleNamespace(path="/api/admin/users", include_context=None)
+    other_ext = SimpleNamespace(path="/api/extensions/other_ext/ping", include_context=None)
+
+    assert _extension_route_target(flattened, "demo_ext") is True
+    assert _extension_route_target(included, "demo_ext") is True
+    assert _extension_route_target(unrelated, "demo_ext") is False
+    assert _extension_route_target(other_ext, "demo_ext") is False
+
+    # 真挂载 → 真卸载：接口先可用后 404
+    _write_ext(tmp_path)
+    app = FastAPI()
+    mount_extensions(app, tmp_path, auth_dependencies=[])
+    client = TestClient(app)
+    assert client.get("/api/extensions/demo_ext/ping").status_code == 200
+
+    assert unmount_extension_router(app, "demo_ext") >= 1
+    assert client.get("/api/extensions/demo_ext/ping").status_code == 404
+
+
 def test_sample_extension_package(tmp_path: Path):
     """仓库样例（extensions_samples/quotation_demo）可扫描/挂载/门控。"""
     shutil.copytree(SAMPLE_DIR, tmp_path / "quotation_demo")

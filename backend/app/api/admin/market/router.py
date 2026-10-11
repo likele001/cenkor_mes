@@ -514,7 +514,12 @@ def _activate_license(db: Session, license_key: str, request: Request) -> None:
         logger.warning("market.activate_failed: %s", e)
 
 
-def _download_package(db: Session, app_key: str, license_key: str) -> bytes:
+def _download_package(db: Session, app_key: str, license_key: str) -> tuple[bytes, str]:
+    """拉包，并带回 hub 权威的产品轴（X-App-Product，老 hub 无此头则空串）。
+
+    返回头而非改写包内 manifest：包是开发者自述，头是 hub 按 license.product 发的。
+    经 hub/spoke 中转的下发路径不透传响应头，此时退化为空串，由 manifest 那道闸兜底。
+    """
     url = _store_url(db, f"cloud/packages/{app_key}")
     with httpx.Client(timeout=120, follow_redirects=True) as client:
         resp = client.get(url, params={"license_key": license_key})
@@ -522,7 +527,7 @@ def _download_package(db: Session, app_key: str, license_key: str) -> bytes:
         raise HTTPException(status_code=403, detail="未授权或授权已失效，请先在门户购买/领取该扩展")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"hub 返回错误：{resp.status_code} {resp.text[:200]}")
-    return resp.content
+    return resp.content, (resp.headers.get("X-App-Product") or "").strip()
 
 
 def _install_extension(package_bytes: bytes, app_key: str) -> dict:
@@ -543,6 +548,16 @@ def _install_extension(package_bytes: bytes, app_key: str) -> dict:
         pkg_version = manifest_data.get("version", "")
         if pkg_key != app_key:
             raise HTTPException(status_code=400, detail=f"扩展 key 不匹配：{pkg_key} != {app_key}")
+
+        # 产品轴护栏：解压到 extensions/ 之前再认一次产品。错产品的包一旦落盘，
+        # 报错会推迟到 hot_setup 里 import 核心模型时，现场比 400 难查得多。
+        # 只在包自己声明了 product 才校验——mes-extensions 下 23 个包与现存扩展
+        # 都没写这个字段，写死 != 会让它们装不上。可信版见 install_app 里的 license.product。
+        pkg_product = manifest_data.get("product")
+        if pkg_product and pkg_product != PRODUCT:
+            raise HTTPException(
+                status_code=400, detail=f"扩展包产品不匹配：{pkg_product} != {PRODUCT}"
+            )
 
         target_dir = extensions_dir / pkg_key
         if target_dir.exists():
@@ -569,8 +584,24 @@ def install_app(payload: InstallIn, request: Request, db: Session = Depends(get_
         raise HTTPException(status_code=403, detail="尚未持有该扩展的有效授权，请先在 Cenkor 门户购买/领取")
 
     license_key = lic["license_key"]
+    # 可信版产品轴：license.product 来自 hub 库里的签发记录（老 hub 不返回该字段则跳过），
+    # 比包内自述的 manifest.product 更可信——前者是平台写的，后者是开发者写的。
+    # 放在激活/下载之前：不属于本产品的授权根本不该被 activate 绑到本实例上。
+    lic_product = lic.get("product")
+    if lic_product and lic_product != PRODUCT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该授权属于产品「{lic_product}」，与本实例「{PRODUCT}」不符",
+        )
     _activate_license(db, license_key, request)
-    package_bytes = _download_package(db, payload.app_key, license_key)
+    package_bytes, hub_product = _download_package(db, payload.app_key, license_key)
+    # hub 随包下发的权威产品轴：对不写 manifest.product 的包同样生效
+    # （mes-extensions 那 23 个包都没写，只靠包内字段等于没拦）。
+    if hub_product and hub_product != PRODUCT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该应用包属于产品「{hub_product}」，与本实例「{PRODUCT}」不符",
+        )
     result = _install_extension(package_bytes, payload.app_key)
 
     # 刷新运行时状态 + 运行期热挂载（迁移/权限/路由，无需重启）

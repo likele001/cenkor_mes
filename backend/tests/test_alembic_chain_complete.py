@@ -24,15 +24,13 @@ from sqlalchemy import create_engine, inspect
 
 BACKEND = Path(__file__).resolve().parents[1]
 
-# 历史遗留：这些表只在老库里存在，模型已删除，链也不建（无代码引用）
+# 历史遗留：这些表只在老库里存在，模型已删除，链也不建（无代码引用）。
+# platform_ai_* 三张已从"遗留"里移出 —— 0014 起它们是链内的正式表。
 _LEGACY_ONLY = {
     "ai_alert_events",
     "ai_conversations",
     "ai_messages",
     "dingtalk_push_logs",
-    "platform_ai_gateways",
-    "platform_ai_models",
-    "platform_ai_profiles",
     "wecom_push_logs",
 }
 
@@ -86,7 +84,11 @@ def test_chain_leaves_nothing_for_create_all_to_add(migrated_db):
 
 
 def test_migration_history_is_linear():
-    """单线历史：分叉后 `upgrade head` 会直接报 MultipleHeads。"""
+    """单线历史：分叉后 `upgrade head` 会直接报 MultipleHeads。
+
+    断言「只有一个 head」而不是「head 叫什么」——版本号会随每条新迁移往前挪，
+    钉死名字只会逼得人每加一条迁移就回来改测试。
+    """
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -94,11 +96,14 @@ def test_migration_history_is_linear():
     cfg.set_main_option("script_location", str(BACKEND / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
-    assert heads == ["0013_orphan_model_tables"], f"迁移链应有唯一 head，实际：{heads}"
+    assert len(heads) == 1, f"迁移链分叉了（upgrade head 会报 MultipleHeads）：{heads}"
+
+    walked = {rev.revision for rev in script.walk_revisions()}
+    assert "0013_orphan_model_tables" in walked, "0013 补的孤儿表建表语句不在链上了"
 
 
 def test_orphan_tables_are_not_referenced_by_code(migrated_db):
-    """链不建的 8 张遗留表，代码里也不能有人查——否则新库一上来就 no such table。"""
+    """链不建的这几张遗留表，代码里也不能有人查——否则新库一上来就 no such table。"""
     app_dir = BACKEND / "app"
     hits: list[str] = []
     for path in app_dir.rglob("*.py"):
