@@ -19,13 +19,23 @@ export interface MarketApp {
   enabled: boolean
 }
 
-/** 连接状态（hub 地址 / 绑定账号） */
+/** 连接状态（hub 地址 / 绑定账号 / 已购概况） */
 export interface MarketStatus {
   hub_url: string
   product: string
   bound: boolean
   account: string
   instance_uid: string
+  /** 最近一次授权快照同步时 hub 是否可达；null = 还没同步过（未绑定或刚重启） */
+  hub_reachable?: boolean | null
+  /** 已购且仍在有效期内的扩展数（含未安装的） */
+  purchased_count?: number
+  /** 已装、且 hub 上有更新版本的扩展数；hub 未给版本号时不计入 */
+  updatable_count?: number
+  /** 最早到期的授权（ISO 字符串）；全部为买断则 null */
+  nearest_expiry?: string | null
+  /** 以上统计所依据的快照时间 */
+  snapshot_synced_at?: string
 }
 
 /** 设备码绑定：发起后返回给用户去门户确认的信息 */
