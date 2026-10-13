@@ -38,6 +38,38 @@
       </template>
     </el-alert>
 
+    <!-- 已购概况：数字来自实例本地的授权快照，不是实时查 hub（见 fetchStatus 注释） -->
+    <div v-if="status.bound" class="mb-6">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="rounded-lg border border-gray-200 bg-white p-4">
+          <div class="text-xs text-gray-500">已购扩展</div>
+          <div class="mt-1 text-2xl font-bold text-gray-900">{{ status.purchased_count ?? 0 }}</div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-white p-4">
+          <div class="text-xs text-gray-500">可更新</div>
+          <div
+            class="mt-1 text-2xl font-bold"
+            :class="(status.updatable_count ?? 0) > 0 ? 'text-blue-600' : 'text-gray-900'"
+          >
+            {{ status.updatable_count ?? 0 }}
+          </div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-white p-4">
+          <div class="text-xs text-gray-500">最近到期</div>
+          <div class="mt-1 text-2xl font-bold" :class="expirySoon ? 'text-red-600' : 'text-gray-900'">
+            {{ expiryText }}
+          </div>
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-gray-400">
+        <span v-if="status.hub_reachable === false">门户最近一次同步未成功，以下为上次快照的数据。</span>
+        <span v-else-if="status.hub_reachable === null && !status.snapshot_synced_at">
+          首次同步后显示，打开本页或点上方刷新即可触发。
+        </span>
+        <span v-else-if="status.snapshot_synced_at">统计截至 {{ snapshotText }}。</span>
+      </p>
+    </div>
+
     <!-- 应用列表 -->
     <div
       v-if="status.bound && apps.length > 0"
@@ -206,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Link, Refresh, Loading } from '@element-plus/icons-vue'
 import {
@@ -226,7 +258,40 @@ import { reloadExtensions } from '@/utils/extensionLoader'
 
 const loading = ref(false)
 const apps = ref<MarketApp[]>([])
-const status = reactive<MarketStatus>({ hub_url: '', product: '', bound: false, account: '', instance_uid: '' })
+const status = reactive<MarketStatus>({
+  hub_url: '',
+  product: '',
+  bound: false,
+  account: '',
+  instance_uid: '',
+  hub_reachable: null,
+  purchased_count: 0,
+  updatable_count: 0,
+  nearest_expiry: null,
+  snapshot_synced_at: '',
+})
+
+// 概况数字口径：后端只读进程内授权快照，缺值按 0/「无」显示，不做乐观推断。
+function _date(raw?: string | null): Date | null {
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+const expiryDate = computed(() => _date(status.nearest_expiry))
+const expiryText = computed(() => {
+  const d = expiryDate.value
+  if (!d) return status.nearest_expiry ? String(status.nearest_expiry) : '无（均为买断）'
+  return d.toLocaleDateString('zh-CN')
+})
+// 30 天内到期标红：与列表里「到期 {d}」的提醒口径一致
+const expirySoon = computed(() => {
+  const d = expiryDate.value
+  return !!d && d.getTime() - Date.now() < 30 * 86400000
+})
+const snapshotText = computed(() => {
+  const d = _date(status.snapshot_synced_at)
+  return d ? d.toLocaleString('zh-CN') : String(status.snapshot_synced_at || '')
+})
 
 const installingKey = ref('')
 const uninstallingKey = ref('')
@@ -297,6 +362,9 @@ async function fetchApps() {
     status.bound = res.bound
     status.account = res.account
     status.hub_url = res.hub_url
+    // /apps 在后端会顺手刷新授权快照，所以紧接着再取一次概况：
+    // 点「刷新」后数字与列表同源，不会出现列表已更新、卡片还是旧数。
+    await fetchStatus()
   } catch (e) {
     console.error('fetchApps error:', e)
   } finally {

@@ -128,11 +128,92 @@ def _bearer(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+# ── 市场概况（供 /status 展示）────────────────────────────────────────────────
+
+# 最近一次授权快照同步的结果：True=hub 可达且快照已刷新；False=请求失败/非 200；
+# None=本进程还没同步过（刚重启、或未绑定 hub）。/status 用它报「hub 是否可达」，
+# 自己不发消息——市场页加载即调 /status，不能被 15s 的 hub 超时拖住。
+_LAST_SYNC_OK: bool | None = None
+
+
+def _ver_tuple(v: str) -> tuple[int, ...]:
+    """取版本号的数字段：'1.0.10'->(1,0,10)、'v1.2'->(1,2)、'1.0.1-rc2'->(1,0,1)。"""
+    head = str(v or "").strip().lstrip("vV")
+    cut = len(head)
+    for i, ch in enumerate(head):
+        if not (ch.isdigit() or ch == "."):
+            cut = i
+            break
+    return tuple(int(x) for x in head[:cut].split(".") if x.isdigit())
+
+
+def _is_newer(latest: str, installed: str) -> bool:
+    """latest 严格新于 installed 才算「可更新」。
+
+    任一为空、或补零比较后仍相等都不算——缺值即放行在这里反着用作「缺值即不提示」：
+    老 hub 不返回 latest_version 时，页面应当安静，不该催用户升级。
+    """
+    if not latest or not installed:
+        return False
+    a, b = _ver_tuple(latest), _ver_tuple(installed)
+    if not a or not b:
+        return False
+    n = max(len(a), len(b))
+    return (a + (0,) * (n - len(a))) > (b + (0,) * (n - len(b)))
+
+
+def _status_summary(db: Session) -> dict:
+    """已购数 / 可更新数 / 最近到期，全部读进程内授权快照（不打网络、不查库以外的事）。
+
+    快照由 sync_entitlements 写入：打开市场页时刷一次，另有门控线程每
+    ENTITLEMENT_SYNC_MINUTES 分钟刷一次。所以这些数字是「最近一次同步时」的口径，
+    页面同时返回 snapshot_synced_at 供前端标注新鲜度。
+    """
+    active = [
+        e for e in (runtime.entitlements or {}).values()
+        if isinstance(e, dict) and str(e.get("state") or "") == "active"
+    ]
+    updatable = 0
+    for e in active:
+        info = runtime.installed.get(str(e.get("app_key") or ""))
+        if not info:
+            continue
+        installed_v = str(getattr(info.get("manifest"), "version", "") or "")
+        if _is_newer(str(e.get("latest_version") or ""), installed_v):
+            updatable += 1
+
+    nearest_raw: str | None = None
+    nearest_dt: datetime | None = None
+    for e in active:
+        raw = e.get("expires_at")
+        if not raw:
+            continue          # 一次性买断：expires_at 为空，不参与「最近到期」
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if nearest_dt is None or dt < nearest_dt:
+            nearest_dt, nearest_raw = dt, str(raw)
+
+    return {
+        "hub_reachable": _LAST_SYNC_OK,
+        "purchased_count": len(active),
+        "updatable_count": updatable,
+        "nearest_expiry": nearest_raw,
+        "snapshot_synced_at": runtime.synced_at or "",
+    }
+
+
 # ── 连接状态 / hub 配置 ──────────────────────────────────────────────────────
 
 @router.get("/status")
 def market_status(db: Session = Depends(get_db)):
-    """连接状态：是否已配置 hub、是否已绑定门户账号。"""
+    """连接状态：是否已配置 hub、是否已绑定门户账号，外加已购/可更新概况。
+
+    概况字段是纯增量，老前端不读也不受影响。
+    """
     hub = _hub_url(db)
     token = _get_setting(db, INSTANCE_TOKEN_KEY)
     return ok({
@@ -141,6 +222,7 @@ def market_status(db: Session = Depends(get_db)):
         "bound": bool(token),
         "account": _get_setting(db, ACCOUNT_KEY),
         "instance_uid": _get_setting(db, INSTANCE_UID_KEY),
+        **_status_summary(db),
     })
 
 
@@ -320,12 +402,16 @@ def sync_entitlements(db: Session) -> bool:
 
     返回是否成功拉到快照并置位门控。未绑定→解除门控；hub 不可达/非 200 →
     保留上一次快照不变（不误停用）。
+    顺带把结果记进 `_LAST_SYNC_OK`，供 `/status` 回答「hub 可不可达」。
     """
+    global _LAST_SYNC_OK
     token = _get_setting(db, INSTANCE_TOKEN_KEY)
     if not token:
+        _LAST_SYNC_OK = None          # 未绑定：不谈可达性
         runtime.clear_entitlement_enforcement()
         return False
     success, purchases = _fetch_purchases_checked(db)
+    _LAST_SYNC_OK = success
     if not success:
         return False
     snapshot: dict[str, dict] = {}
