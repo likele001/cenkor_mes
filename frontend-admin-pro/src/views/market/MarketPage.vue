@@ -332,8 +332,21 @@ function formatDate(s: string | null): string {
   return isNaN(d.getTime()) ? s : d.toLocaleDateString()
 }
 
+function verCmp(a: string, b: string): number {
+  const pa = String(a || '').split('.').map((x) => parseInt(x, 10) || 0)
+  const pb = String(b || '').split('.').map((x) => parseInt(x, 10) || 0)
+  const n = Math.max(pa.length, pb.length)
+  for (let i = 0; i < n; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0)
+    if (d) return d > 0 ? 1 : -1
+  }
+  return 0
+}
+
 function hasUpdate(app: MarketApp): boolean {
-  return app.installed && !!app.latest_version && app.latest_version !== app.installed_version
+  // 只有 hub 发布版本 > 本地已装版本才算可更新：按字符串比会把降级（1.10 → 1.9）也催成升级
+  return app.installed && !!app.latest_version && !!app.installed_version
+    && verCmp(app.latest_version, app.installed_version) > 0
 }
 
 function openPortal(appKey?: string) {

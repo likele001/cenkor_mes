@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     EXTENSIONS_ENABLED: bool = True            # 扩展宿主总开关
     EXTENSIONS_DIR: str = "./extensions"       # 扩展安装目录（相对 backend/，也可用绝对路径）
 
+    # 功能市场（market）hub 地址白名单：实例会把 instance token / license_key 发到
+    # hub，这个值决定凭据送往谁。逗号分隔，按域后缀匹配（`cenkor.cn` 覆盖其全部子域）；
+    # `*` = 不限制（内网自建 hub 时用）。
+    MARKET_HUB_ALLOWED_HOSTS: str = "cenkor.cn,localhost,127.0.0.1"
+
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://127.0.0.1:6379/1"
