@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import shutil
@@ -23,6 +24,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -30,6 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.deps import get_db
 from app.core.response import ok
@@ -100,6 +103,38 @@ def _clear_setting(db: Session, key: str) -> None:
 
 def _hub_url(db: Session) -> str:
     return _get_setting(db, HUB_URL_KEY).rstrip("/")
+
+
+def _normalize_hub_url(raw: str) -> str:
+    """校验并归一化 hub 地址。
+
+    这不是一条普通文本配置：`_store_url` 把它的每个出站请求都带上 instance token /
+    license_key，所以它是**出站信任锚** —— 谁能写这个值，谁就能把实例凭据引到自己的
+    服务器上，再伪装成 hub 下发扩展包。约束：协议只允许 http/https、不许带
+    userinfo / query / fragment、主机必须命中白名单（`MARKET_HUB_ALLOWED_HOSTS`，
+    逗号分隔，按域后缀匹配，`*` 表示不限制）。
+    """
+    value = (raw or "").strip().rstrip("/")
+    parts = urlsplit(value)
+    if parts.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail=f"hub 地址协议须为 http/https，收到「{parts.scheme or '空'}」")
+    if not parts.hostname:
+        raise HTTPException(status_code=400, detail="hub 地址缺少主机名")
+    if parts.username or parts.password:
+        raise HTTPException(status_code=400, detail="hub 地址不允许携带用户名/密码")
+    if parts.query or parts.fragment:
+        raise HTTPException(status_code=400, detail="hub 地址不允许携带查询参数或锚点")
+    host = parts.hostname.lower()
+    allowed = [h.strip().lower().lstrip(".") for h in settings.MARKET_HUB_ALLOWED_HOSTS.split(",") if h.strip()]
+    if "*" not in allowed and not any(host == d or host.endswith(f".{d}") for d in allowed):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"hub 主机「{host}」不在白名单内（当前允许：{', '.join(allowed) or '（空）'}）。"
+                "确需接入其他 hub 请在 .env 追加 MARKET_HUB_ALLOWED_HOSTS"
+            ),
+        )
+    return value
 
 
 def _instance_uid(db: Session) -> str:
@@ -229,7 +264,7 @@ def market_status(db: Session = Depends(get_db)):
 @router.put("/hub")
 def save_hub(payload: HubIn, db: Session = Depends(get_db)):
     """设置 hub 地址（如 https://admin.cenkor.cn）。"""
-    _set_setting(db, HUB_URL_KEY, payload.hub_url.strip().rstrip("/"))
+    _set_setting(db, HUB_URL_KEY, _normalize_hub_url(payload.hub_url))
     return ok({"message": "hub 地址已保存", "hub_url": _hub_url(db)})
 
 
@@ -509,7 +544,9 @@ def list_market_apps(db: Session = Depends(get_db)):
             "description": app.get("description", "") or app.get("summary", ""),
             "icon": app.get("icon", ""),
             "category": app.get("category", ""),
-            "latest_version": app.get("version", ""),
+            # hub 若已下发 latest_version（同轴上架行里版本号最大的一条）就以它为准；
+            # 老 hub 只有 version 时等价退回。绝不拿字符串不等当「有更新」。
+            "latest_version": app.get("latest_version") or app.get("version", ""),
             "price": app.get("price"),
             "licensed": lic is not None,
             "license_state": (lic or {}).get("status", ""),
@@ -534,7 +571,8 @@ def list_market_apps(db: Session = Depends(get_db)):
             "description": "",
             "icon": "",
             "category": "",
-            "latest_version": "",
+            # 不在目录里也要能提示更新：hub 的已购接口自带最新可分发版本，缺值就安静
+            "latest_version": lic.get("latest_version") or "",
             "price": lic.get("price"),
             "licensed": True,
             "license_state": lic.get("status", ""),
@@ -613,7 +651,25 @@ def _download_package(db: Session, app_key: str, license_key: str) -> tuple[byte
         raise HTTPException(status_code=403, detail="未授权或授权已失效，请先在门户购买/领取该扩展")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"hub 返回错误：{resp.status_code} {resp.text[:200]}")
-    return resp.content, (resp.headers.get("X-App-Product") or "").strip()
+    # 包体指纹校验：hub 随包下发**发布当时**算好的 SHA256。缺值即放行（老 hub 无此头，
+    # 或经 spoke 中转被剥掉），有值而不等就是拿到的字节与目录里那条发布记录不是同一份。
+    content = resp.content
+    expected = (resp.headers.get("X-Package-Sha256") or "").strip().lower()
+    if expected:
+        actual = hashlib.sha256(content).hexdigest()
+        if actual != expected:
+            logger.error(
+                "market.package_sha256_mismatch app=%s expected=%s actual=%s size=%s",
+                app_key, expected, actual, len(content),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"扩展包校验失败：SHA256 与 hub 发布记录不一致"
+                    f"（期望 {expected[:12]}…，实得 {actual[:12]}…），已拒绝安装"
+                ),
+            )
+    return content, (resp.headers.get("X-App-Product") or "").strip()
 
 
 def _install_extension(package_bytes: bytes, app_key: str) -> dict:
