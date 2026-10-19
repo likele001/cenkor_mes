@@ -81,6 +81,14 @@ from app.api.miniapp.auth import router as miniapp_auth_router
 
 api_router.include_router(miniapp_auth_router, prefix="/miniapp/auth", tags=["miniapp"])
 
+# 微信订阅消息：模板列表 / 我的订阅 / 记录订阅结果
+# 小程序端 utils/subscribe.ts 与 notification/subscriptions 页面原本调用这两个接口均为 404
+from app.api.miniapp.wechat_mp import router as miniapp_wechat_mp_router
+
+api_router.include_router(
+    miniapp_wechat_mp_router, prefix="/miniapp/wechat-mp", tags=["miniapp-wechat-mp"]
+)
+
 # 扩展宿主固定 API：扩展列表 + 前端插件获取（供 admin 前端扩展加载器使用）
 from app.api.admin.extensions.router import router as admin_extensions_router
 
