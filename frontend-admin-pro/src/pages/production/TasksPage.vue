@@ -25,6 +25,7 @@
             批量打印({{ selectedTaskIds.length }})
           </el-button>
           <el-button @click="reload(true)">{{ t('production.common.refresh') }}</el-button>
+          <el-button v-if="skillMatrixLoaded" type="success" plain @click="goExt(skillMatrixRoute)">技能矩阵</el-button>
         </div>
     </template>
 
@@ -246,8 +247,16 @@ import { useAuthStore } from '@/stores/auth'
 import { http } from '@/utils/http'
 import { openPrintWindow } from '@/utils/print'
 import { equipmentOptionLabel, processRowLabel, skuRowLabel } from '@/utils/display'
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
 
 const { t } = useI18n()
+import { useRouter } from 'vue-router'
+const router = useRouter()
+
+// Tier 2 扩展集成
+const skillMatrixLoaded = computed(() => isExtensionLoaded('skill_matrix'))
+const skillMatrixRoute = computed(() => getExtensionRoute('skill_matrix'))
+function goExt(route: string | null) { if (route) router.push(route) }
 const auth = useAuthStore()
 const canDispatch = computed(() => auth.hasAnyPermission(['dispatch.manage']))
 

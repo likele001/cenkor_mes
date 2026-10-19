@@ -301,6 +301,12 @@ def approve_api(
                             biz_type="report_unit",
                             biz_id=unit.id,
                             feishu_event="report.rejected")
+                        from app.extension_host.events import event_bus
+
+                        event_bus.emit_after_commit(db, "report_unit.rejected", {
+                            "report_unit_id": unit.id, "task_id": unit.task_id,
+                            "approver_id": user.id, "reason": "致命缺陷（质检自动驳回）",
+                        }, actor_id=user.id)
                         db.commit()
                         return ok({"id": unit.id, "status": unit.status, "auto_rejected": True, "step_index": step_index})
 
@@ -401,6 +407,16 @@ def approve_api(
             ),
             level="info", biz_type="report_unit", biz_id=unit.id,
             feishu_event="report.qc_approved")
+        from app.extension_host.events import event_bus
+
+        event_bus.emit_after_commit(db, "report_unit.approved", {
+            "report_unit_id": unit.id,
+            "task_id": unit.task_id,
+            "approver_id": user.id,
+            "salary_item_id": salary.id if salary else None,
+            "piece_id": unit.piece_id,
+            "stage": "qc",
+        }, actor_id=user.id)
         db.commit()
         return ok({
             "id": unit.id, "status": unit.status, "step_index": step_index,
@@ -449,5 +465,11 @@ def reject_api(
         biz_type="report_unit",
         biz_id=unit.id,
         feishu_event="report.rejected")
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "report_unit.rejected", {
+        "report_unit_id": unit.id, "task_id": unit.task_id,
+        "approver_id": user.id, "reason": reason or "",
+    }, actor_id=user.id)
     db.commit()
     return ok({"id": unit.id, "status": unit.status})

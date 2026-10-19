@@ -100,6 +100,24 @@
         <AppMenu layout="drawer" />
       </div>
     </el-drawer>
+
+    <!-- AI 助手悬浮按钮（ai_assistant 扩展已加载时显示） -->
+    <div
+      v-if="aiAssistantLoaded"
+      class="fixed bottom-6 right-6 z-100"
+    >
+      <el-tooltip content="AI 助手" placement="left">
+        <el-button
+          type="primary"
+          circle
+          size="large"
+          class="!w-14 !h-14 shadow-lg hover:shadow-xl transition-shadow"
+          @click="openAiAssistant"
+        >
+          <el-icon :size="24"><ChatDotRound /></el-icon>
+        </el-button>
+      </el-tooltip>
+    </div>
   </el-container>
 </template>
 
@@ -109,6 +127,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   ArrowRight,
+  ChatDotRound,
   Expand,
   Fold,
   Menu as MenuIcon,
@@ -120,6 +139,7 @@ import { useAdminTheme } from '@/composables/useAdminTheme'
 import { useSidebarCollapse } from '@/composables/useSidebarCollapse'
 import { useAuthStore } from '@/stores/auth'
 import AppMenu from '@/layouts/AppMenu.vue'
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
 
 const NARROW_QUERY = '(max-width: 1023px)'
 
@@ -170,6 +190,16 @@ const userInitial = computed(() => {
   const base = me.full_name?.trim() || me.username?.trim() || '?'
   return base.slice(0, 1).toUpperCase()
 })
+
+// AI 助手悬浮按钮（ai_assistant 扩展已加载时显示）
+const aiAssistantLoaded = computed(() => isExtensionLoaded('ai_assistant'))
+const aiAssistantRoute = computed(() => getExtensionRoute('ai_assistant'))
+
+function openAiAssistant() {
+  if (aiAssistantRoute.value) {
+    router.push(aiAssistantRoute.value)
+  }
+}
 
 function goProfile() {
   router.push('/account/profile')

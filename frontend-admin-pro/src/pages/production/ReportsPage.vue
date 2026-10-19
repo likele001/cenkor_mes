@@ -4,14 +4,24 @@
 -->
 <script setup lang="ts">
 import AdminPage from '@/components/admin/AdminPage.vue'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { productionApi, type ReportOut } from '@/api/production'
 import { useStatus } from '@/utils/status-maps'
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
+const router = useRouter()
+
+// Tier 2 扩展集成
+const spcControlLoaded = computed(() => isExtensionLoaded('spc_control'))
+const spcControlRoute = computed(() => getExtensionRoute('spc_control'))
+const qualityCostLoaded = computed(() => isExtensionLoaded('quality_cost_analysis'))
+const qualityCostRoute = computed(() => getExtensionRoute('quality_cost_analysis'))
+function goExt(route: string | null) { if (route) router.push(route) }
 const route = useRoute()
 const { label: statusLabel, type: statusTagType } = useStatus('report')
 const loading = ref(false)
@@ -152,6 +162,8 @@ onMounted(async () => {
         <el-form-item>
           <el-button type="primary" @click="load">{{ t('production.common.search') }}</el-button>
           <el-button :loading="exporting" @click="exportExcel">{{ t('common.exportExcel') }}</el-button>
+          <el-button v-if="spcControlLoaded" type="success" plain size="small" @click="goExt(spcControlRoute)">SPC 控制图</el-button>
+          <el-button v-if="qualityCostLoaded" type="warning" plain size="small" @click="goExt(qualityCostRoute)">质量成本分析</el-button>
         </el-form-item>
       </el-form>
     </el-card>

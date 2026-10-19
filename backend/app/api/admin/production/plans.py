@@ -974,6 +974,12 @@ def auto_schedule_api(
         end = shift_workdays(start, int(work_days) - 1)
 
     update_plan(db, plan=plan, start_date=start, end_date=end, work_days=int(work_days))
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "plan.auto_scheduled", {
+        "plan_id": plan.id, "mode": mode,
+        "start_date": start, "end_date": end,
+    }, actor_id=user.id)
     db.commit()
     wo_flag = order_has_work_orders(db, order_id=plan.order_id)
     return ok(_out(plan, order_code, customer_name, qty, has_work_orders=wo_flag, order_status=order_status))
@@ -1100,6 +1106,11 @@ def create_api(
         work_days=payload.work_days,
         remark=payload.remark,
         created_by=user.id)
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "plan.created", {
+        "plan_id": plan.id, "order_id": payload.order_id, "code": plan_code,
+    }, actor_id=user.id)
     db.commit()
     from app.services.production_automation import maybe_trigger_plan_automation
 
@@ -1132,6 +1143,9 @@ def release_plan_api(
             allow_shortage=payload.allow_shortage)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "plan.released", {"plan_id": plan.id}, actor_id=user.id)
     db.commit()
     return ok(result)
 

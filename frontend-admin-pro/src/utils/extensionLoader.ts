@@ -223,3 +223,15 @@ export function setupExtensionLoader(opts: { router: Router }) {
   router = opts.router
   installBridge()
 }
+
+/** 查询指定扩展是否已加载（有前端且已注册） */
+export function isExtensionLoaded(key: string): boolean {
+  return extensionRegistrations.value.some((r) => r.key === key)
+}
+
+/** 获取指定扩展的第一个路由路径（用于跳转到扩展页面） */
+export function getExtensionRoute(key: string): string | null {
+  const reg = extensionRegistrations.value.find((r) => r.key === key)
+  if (!reg || !reg.routes?.length) return null
+  return reg.routes[0].path
+}

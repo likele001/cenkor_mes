@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # 改由后台「功能市场」页写入 PlatformSetting，无需在此配置 .env
     EXTENSIONS_ENABLED: bool = True            # 扩展宿主总开关
     EXTENSIONS_DIR: str = "./extensions"       # 扩展安装目录（相对 backend/，也可用绝对路径）
+    EXTENSION_HOOK_TIMEOUT: float = 5.0        # 拦截型事件钩子单 handler 超时（秒），超时 fail-open 放行
 
     # 功能市场（market）hub 地址白名单：实例会把 instance token / license_key 发到
     # hub，这个值决定凭据送往谁。逗号分隔，按域后缀匹配（`cenkor.cn` 覆盖其全部子域）；

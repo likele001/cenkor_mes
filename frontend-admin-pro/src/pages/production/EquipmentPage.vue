@@ -19,6 +19,8 @@
             </el-input>
             <el-button :loading="exporting" @click="exportExcel">导出 Excel</el-button>
             <el-button type="primary" @click="openCreate">{{ t('production.equipment.addEquipment') }}</el-button>
+            <el-button v-if="equipmentHealthLoaded" type="success" plain size="small" @click="goExt(equipmentHealthRoute)">设备健康分析</el-button>
+            <el-button v-if="energyMonitorLoaded" type="warning" plain size="small" @click="goExt(energyMonitorRoute)">能耗监控</el-button>
           </div>
         </div>
       </template>
@@ -240,8 +242,18 @@ import {
 import { systemApi, type UserOut } from '@/api/system'
 import { codeForSubmit, previewNextCode } from '@/utils/code'
 import { useStatus } from '@/utils/status-maps'
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
+const router = useRouter()
+
+// Tier 2 扩展集成
+const equipmentHealthLoaded = computed(() => isExtensionLoaded('equipment_health'))
+const equipmentHealthRoute = computed(() => getExtensionRoute('equipment_health'))
+const energyMonitorLoaded = computed(() => isExtensionLoaded('energy_monitor'))
+const energyMonitorRoute = computed(() => getExtensionRoute('energy_monitor'))
+function goExt(route: string | null) { if (route) router.push(route) }
 const { label: statusLabel, type: statusTagType } = useStatus('equipment')
 const loading = ref(false)
 const exporting = ref(false)

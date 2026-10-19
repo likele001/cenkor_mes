@@ -131,6 +131,26 @@ def mount_extension_router(app: FastAPI, key: str, ext_path: Path, auth_dependen
     return True
 
 
+def _register_events(module, key: str) -> None:
+    """调用扩展可选导出的 ``register_events(bus)``。
+
+    幂等：先按 key 反注册再订阅（热重载不产生双份 handler）。
+    失败仅记日志，**不影响路由挂载**——钩子是增强，不是加载前提。
+    注意：本函数在模块导入期被调用，扩展的 register_events 不得做 DB/网络 IO。
+    """
+    fn = getattr(module, "register_events", None)
+    if not callable(fn):
+        return
+    from .events import event_bus
+
+    event_bus.unsubscribe_extension(key)
+    try:
+        fn(event_bus)
+        logger.info("[extension] 已注册事件钩子: %s", key)
+    except Exception as e:  # noqa: BLE001 - 钩子注册失败不阻塞扩展加载
+        logger.error("[extension] %s register_events 失败（路由不受影响）: %s", key, e)
+
+
 def load_extension_router(ext_path: Path, key: str) -> APIRouter | None:
     """加载扩展的 router.py；无该文件返回 None。"""
     router_file = ext_path / "router.py"
@@ -142,6 +162,7 @@ def load_extension_router(ext_path: Path, key: str) -> APIRouter | None:
         raise ImportError(f"扩展 {key} 的 router.py 未定义 router 对象")
     if not isinstance(router, APIRouter):
         raise ImportError(f"扩展 {key} 的 router 必须是 fastapi.APIRouter")
+    _register_events(module, key)
     return router
 
 

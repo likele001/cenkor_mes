@@ -70,6 +70,14 @@ def sign_my_salary_slip_api(
         biz_type="salary_slip",
         biz_id=slip.id,
     )
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "salary.slip_signed", {
+        "slip_id": slip.id,
+        "user_id": user.id,
+        "action": "sign",
+        "month": slip.month,
+    }, actor_id=user.id)
     db.commit()
     return ok(
         {
@@ -126,6 +134,14 @@ def reject_my_salary_slip_api(
         )
     except Exception:
         pass
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "salary.slip_signed", {
+        "slip_id": slip.id,
+        "user_id": user.id,
+        "action": "reject",
+        "month": slip.month,
+    }, actor_id=user.id)
     db.commit()
     return ok(
         {

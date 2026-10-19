@@ -1029,12 +1029,13 @@ import { equipmentOptionLabel, partyOptionLabel } from '@/utils/display'
 import { aiApi, type PlanScheduleOut, type PlanOptimizeOut } from '@/api/ai'
 import { automationApi, type AutomationSettings } from '@/api/automation'
 import { useAuthStore } from '@/stores/auth'
+import { isExtensionLoaded } from '@/utils/extensionLoader'
 
 const { t } = useI18n()
 const router = useRouter()
 const { label: statusLabel, type: statusTagType } = useStatus('plan')
 const auth = useAuthStore()
-const canAi = computed(() => false)
+const canAi = computed(() => isExtensionLoaded('ai_scheduling'))
 const canAutomationSettings = computed(() => auth.hasAnyPermission(['setting.manage']))
 const automationSettings = ref<AutomationSettings | null>(null)
 

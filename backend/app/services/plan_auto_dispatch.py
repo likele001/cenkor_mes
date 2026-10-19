@@ -83,6 +83,8 @@ def execute_auto_dispatch(
         raise ValueError("生产计划不存在")
     plan, _, _, _, _ = row
 
+    from app.extension_host.events import event_bus
+
     release_info = ensure_plan_released_for_dispatch(
         db,
         plan=plan,
@@ -91,6 +93,8 @@ def execute_auto_dispatch(
         allow_shortage=payload.allow_shortage,
     )
     if release_info is not None:
+        # 自动下发也是真下发：与 release_plan_api 同语义发 plan.released
+        event_bus.emit_after_commit(db, "plan.released", {"plan_id": plan_id}, actor_id=user_id)
         db.commit()
 
     row = get_plan_with_order_info(db, plan_id=plan_id)
@@ -218,6 +222,9 @@ def execute_auto_dispatch(
             assigned += 1
         per_workshop_total[ws] = per_workshop_total.get(ws, 0) + ws_total
 
+    event_bus.emit_after_commit(db, "plan.auto_dispatched", {
+        "plan_id": plan_id, "dispatched_count": assigned, "task_count": len(tasks),
+    }, actor_id=user_id)
     db.commit()
 
     user_out = []

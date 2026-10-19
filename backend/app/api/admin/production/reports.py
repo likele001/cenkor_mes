@@ -153,6 +153,11 @@ def leader_approve_api(
         biz_id=report.id,
         feishu_event="report.leader_approved",
     )
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "report.leader_approved", {
+        "report_id": report.id, "task_id": report.task_id, "approver_id": user.id,
+    }, actor_id=user.id)
     db.commit()
     return ok({"report_id": report.id, "status": "leader_approved"})
 
@@ -206,6 +211,14 @@ def qc_approve_api(
         biz_id=report.id,
         feishu_event="report.qc_approved",
     )
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "report.qc_approved", {
+        "report_id": report.id,
+        "task_id": report.task_id,
+        "approver_id": user.id,
+        "salary_item_ids": [salary.id] if salary else [],
+    }, actor_id=user.id)
     db.commit()
     return ok({
         "report_id": report.id,
@@ -241,5 +254,11 @@ def reject_api(
         biz_id=report.id,
         feishu_event="report.rejected",
     )
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "report.rejected", {
+        "report_id": report.id, "task_id": report.task_id,
+        "approver_id": user.id, "reason": reason or "",
+    }, actor_id=user.id)
     db.commit()
     return ok({"report_id": report.id, "status": "rejected"})
