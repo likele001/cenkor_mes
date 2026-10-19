@@ -173,6 +173,10 @@ class ExtensionRuntime:
         self.overrides = {}
         self.synced_at = ""
         self.sync_thread = None
+        # 事件总线订阅一并清空（延迟导入避免环：events 依赖 state.runtime）
+        from .events import event_bus
+
+        event_bus.reset()
 
 
 runtime = ExtensionRuntime()

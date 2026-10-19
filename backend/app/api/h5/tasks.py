@@ -225,11 +225,11 @@ def submit_report_api(
     if not assignment:
         raise HTTPException(status_code=403, detail="您未被派工到此任务")
     try:
-        sync_assignment_units(db, assignment)
-        db.flush()
-        if count_draft_units(db, assignment.id) > 0 or count_user_reported_units(db, task.id, user.id
-        ) > 0:
-            raise HTTPException(status_code=400, detail="本任务已启用逐件报工，请使用逐件报工页面提交")
+        if use_unit_report_mode(db):
+            sync_assignment_units(db, assignment)
+            db.flush()
+            if count_draft_units(db, assignment.id) > 0 or count_user_reported_units(db, task.id, user.id) > 0:
+                raise HTTPException(status_code=400, detail="本任务已启用逐件报工，请使用逐件报工页面提交")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if task.status == "done":
@@ -254,6 +254,23 @@ def submit_report_api(
         bad_qty=bad_qty,
         remark=remark,
         attachment_ids=attachment_ids)
+
+    # 扩展拦截钩子（commit 前，fail-open）：否决则抛 400，本次 flush 随回滚丢弃
+    hook_payload = {
+        "report_id": report.id,
+        "task_id": task.id,
+        "task_code": task_code,
+        "report_user_id": user.id,
+        "good_qty": good_qty,
+        "bad_qty": bad_qty,
+        "remark": remark,
+    }
+    from app.extension_host.events import event_bus
+
+    hook_result = event_bus.intercept("report.submitting", hook_payload, actor_id=user.id)
+    if not hook_result.allowed:
+        raise HTTPException(status_code=400, detail=hook_result.http_detail())
+
     create_notification(
         db,
         user_id=user.id,
@@ -270,6 +287,7 @@ def submit_report_api(
         content=f"员工 {user.full_name or user.username} 提交报工：任务 {task_code}，合格 {good_qty}，不良 {bad_qty}",
         biz_type="report",
         biz_id=report.id)
+    event_bus.emit_after_commit(db, "report.submitted", hook_payload, actor_id=user.id)
     db.commit()
 
     return ok({

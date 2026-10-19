@@ -371,6 +371,14 @@ def pay_salary_slips_api(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "salary.slip_paid", {
+        "month": month,
+        "slip_ids": [s.id for s in slips],
+        "user_ids": [s.user_id for s in slips],
+        "total_amount": str(sum((Decimal(str(s.net_amount)) for s in slips), Decimal(0))),
+    }, actor_id=user.id)
     db.commit()
     return ok({
         "month": month,
@@ -394,6 +402,14 @@ def pay_salary_slip_api(
         slip = pay_slip(db, slip, operator_id=user.id, remark=(payload.remark if payload else None))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "salary.slip_paid", {
+        "month": slip.month,
+        "slip_ids": [slip.id],
+        "user_ids": [slip.user_id],
+        "total_amount": str(Decimal(str(slip.net_amount))),
+    }, actor_id=user.id)
     db.commit()
     return ok({"id": slip.id, "pay_status": slip.pay_status, "paid_at": slip.paid_at, "net_amount": float(slip.net_amount)})
 
@@ -508,6 +524,14 @@ def generate_time_items_api(
         items = []
         for u in users:
             items.extend(_generate_time_items(db, user_id=u.id, date_from=d_from, date_to=d_to))
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "salary.time_items_generated", {
+        "date_from": date_from,
+        "date_to": d_to.isoformat(),
+        "item_count": len(items),
+        "total_amount": str(sum((Decimal(str(i.amount)) for i in items), Decimal(0))),
+    }, actor_id=user.id)
     db.commit()
     return ok({"generated": len(items), "date_from": date_from, "date_to": d_to.isoformat()})
 

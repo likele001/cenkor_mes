@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../../lightmes"
+		},
+		{
+			"path": "../../cenkor-admin"
+		},
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../mes-extensions"
+		}
+	],
+	"settings": {}
+}

@@ -10,6 +10,7 @@
 应用目录、发卡、实例绑定、吊销等**全部管理动作均在独立应用中心完成**，
 MES 不提供任何应用安装/授权管理界面。
 """
+from .events import Event, EventBus, InterceptDecision, event_bus  # noqa: F401
 from .host import (  # noqa: F401
     extensions_base_dir,
     hot_setup_extension,

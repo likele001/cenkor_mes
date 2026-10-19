@@ -420,6 +420,13 @@ def set_assignments_api(
     else:
         replace_task_assignments(db, task=task, items=[], dispatcher_user_id=user.id)
     set_task_equipment(db, task=task, equipment_id=payload.equipment_id)
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "task.assignments_set", {
+        "task_id": task.id,
+        "task_code": task.task_code,
+        "assignments": items,
+    }, actor_id=user.id)
     db.commit()
     item = get_task_by_id(db, task_id=task.id, with_refs=True)
     if not item:

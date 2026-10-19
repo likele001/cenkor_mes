@@ -202,6 +202,22 @@ def submit_report_unit_api(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # 扩展拦截钩子（commit 前，fail-open）：否决则抛 400，本次 flush 随回滚丢弃
+    hook_payload = {
+        "report_unit_id": unit.id,
+        "task_id": unit.task_id,
+        "task_code": payload.task_code,
+        "unit_seq": unit.unit_seq,
+        "piece_id": unit.piece_id,
+        "result_type": payload.result_type,
+        "user_id": user.id,
+    }
+    from app.extension_host.events import event_bus
+
+    hook_result = event_bus.intercept("report_unit.submitting", hook_payload, actor_id=user.id)
+    if not hook_result.allowed:
+        raise HTTPException(status_code=400, detail=hook_result.http_detail())
+
     anomaly_suffix = ""
     if payload.anomaly_confirmed:
         anomaly_suffix = "（已确认异常）"
@@ -240,6 +256,10 @@ def submit_report_unit_api(
         ),
         biz_type="report_unit",
         biz_id=unit.id)
+    event_bus.emit_after_commit(
+        db, "report_unit.submitted",
+        {**hook_payload, "anomaly_confirmed": bool(payload.anomaly_confirmed)},
+        actor_id=user.id)
     db.commit()
     piece = _piece_for_unit(db, unit)
     out = _unit_out(unit, piece)

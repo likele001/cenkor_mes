@@ -1,0 +1,15 @@
+{
+  "key": "hook_demo",
+  "name": "事件钩子（演示扩展）",
+  "version": "1.0.0",
+  "description": "演示扩展如何挂到核心业务事件：报工提交后写自有统计表（通知型 report.submitted），报工提交前校验不良品备注（拦截型 report.submitting）",
+  "icon": "Connection",
+  "category": "production",
+  "vendor": "Cenkor",
+  "permissions": [
+    { "code": "ext.hook_demo.view", "name": "查看报工统计" }
+  ],
+  "menus": [
+    { "title": "报工统计（演示）", "path": "/ext/hook-demo", "icon": "Connection", "permission": "ext.hook_demo.view" }
+  ]
+}

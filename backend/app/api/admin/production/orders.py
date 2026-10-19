@@ -358,6 +358,16 @@ def create_api(
         remark=payload.remark,
         items=items,
         opportunity_id=None)
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "order.created", {
+        "order_id": order.id,
+        "code": order.code,
+        "customer_id": order.customer_id,
+        "item_count": len(items),
+        "total_qty": sum(i[2] for i in items),
+        "amount": str(order.amount or 0),
+    }, actor_id=user.id)
     db.commit()
     item = get_order_by_id(db, order_id=order.id, with_items=True)
     if not item:
@@ -445,6 +455,11 @@ def reject_api(
             level="warning",
             biz_type="order",
             biz_id=order.id)
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "order.rejected", {
+        "order_id": order.id, "code": order.code, "reason": reason,
+    }, actor_id=user.id)
     db.commit()
     return ok({"id": order.id, "status": order.status})
 
@@ -505,6 +520,11 @@ def confirm_api(
                 biz_type="order",
                 biz_id=order.id)
 
+    from app.extension_host.events import event_bus
+
+    event_bus.emit_after_commit(db, "order.confirmed", {
+        "order_id": order.id, "code": order.code, "customer_id": order.customer_id,
+    }, actor_id=user.id)
     db.commit()
     return ok({
         "order_id": order.id,

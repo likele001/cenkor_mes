@@ -125,8 +125,6 @@ def emit_feishu_event(
         department_id=department_id,
         workshop=workshop,
         scheduled_at=scheduled_at,
-        # 飞书入口：限制只产飞书通道的 log，避免与企微/钉钉 emit 重叠
-        restrict_channel="feishu",
         payload=payload,
     )
 

@@ -10,8 +10,16 @@ import { warehouseApi, type StockLogOut, type StockOut, type WarehouseOut } from
 import { partyOptionLabel } from '@/utils/display'
 import { saveBlob } from '@/utils/download'
 import { ElMessage } from 'element-plus'
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
+const router = useRouter()
+
+// Tier 2 扩展集成
+const inventoryAnalysisLoaded = computed(() => isExtensionLoaded('inventory_analysis'))
+const inventoryAnalysisRoute = computed(() => getExtensionRoute('inventory_analysis'))
+function goExt(route: string | null) { if (route) router.push(route) }
 
 const activeTab = ref<'stocks' | 'logs'>('stocks')
 
@@ -114,7 +122,10 @@ async function exportExcel() {
       <template #header>
         <div class="flex items-center justify-between">
           <span class="font-medium">{{ t('warehouse.stocks.title') }}</span>
-          <el-button size="small" :loading="exporting" @click="exportExcel">{{ t('common.exportExcel') }}</el-button>
+          <div class="flex items-center gap-2">
+            <el-button size="small" :loading="exporting" @click="exportExcel">{{ t('common.exportExcel') }}</el-button>
+            <el-button v-if="inventoryAnalysisLoaded" type="success" plain size="small" @click="goExt(inventoryAnalysisRoute)">库存分析</el-button>
+          </div>
         </div>
       </template>
 

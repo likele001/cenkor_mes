@@ -40,12 +40,16 @@ def hot_setup_extension(app, key: str) -> None:
 
 
 def hot_teardown_extension(app, key: str) -> None:
-    """卸载后运行期即时移除路由（无需重启）。"""
+    """卸载后运行期即时移除路由与事件钩子（无需重启）。"""
+    from .events import event_bus
     from .loader import unmount_extension_router
 
     removed = unmount_extension_router(app, key)
     if removed:
         logger.info("[extension] 运行期移除扩展路由 %d 条: %s", removed, key)
+    hooks = event_bus.unsubscribe_extension(key)
+    if hooks:
+        logger.info("[extension] 运行期反注册事件钩子 %d 个: %s", hooks, key)
 
 
 def extensions_base_dir() -> Path:

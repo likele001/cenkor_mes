@@ -148,3 +148,14 @@ def on_startup():
     except Exception as e:
         logger.warning("extension host startup failed: %s", e)
 
+
+@app.on_event("shutdown")
+def on_shutdown():
+    # 扩展事件总线线程池停止（不等待在飞 handler：通知型尽力而为）
+    try:
+        from app.extension_host.events import event_bus
+
+        event_bus.shutdown(wait=False)
+    except Exception as e:
+        logger.warning("extension event bus shutdown failed: %s", e)
+

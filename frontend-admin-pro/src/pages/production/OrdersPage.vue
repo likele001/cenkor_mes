@@ -19,6 +19,7 @@
             <el-option :label="t('production.orders.producing')" value="producing" />
           </el-select>
           <el-button @click="reload(true)">刷新</el-button>
+          <el-button v-if="deliveryOntimeLoaded" type="success" plain @click="goExt(deliveryOntimeRoute)">交期履约分析</el-button>
         </div>
     </template>
 
@@ -466,6 +467,12 @@ import { orderSkuOptionLabel, partyOptionLabel, type OrderSkuOption } from '@/ut
 import { useStatus } from '@/utils/status-maps'
 
 const { t } = useI18n()
+import { isExtensionLoaded, getExtensionRoute } from '@/utils/extensionLoader'
+
+// Tier 2 扩展集成
+const deliveryOntimeLoaded = computed(() => isExtensionLoaded('delivery_ontime'))
+const deliveryOntimeRoute = computed(() => getExtensionRoute('delivery_ontime'))
+function goExt(route: string | null) { if (route) router.push(route) }
 const { label: statusLabel, type: statusTagType } = useStatus('order')
 const router = useRouter()
 const loading = ref(false)
