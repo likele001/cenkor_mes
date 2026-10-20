@@ -28,6 +28,7 @@ import logging
 import threading
 import time
 import uuid
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
 from contextlib import contextmanager
@@ -187,6 +188,39 @@ EVENT_CATALOG: dict[str, dict] = {
         "phase": Phase.NOTIFY,
         "payload": {"slip_id": "工资条ID", "user_id": "员工ID", "action": "sign/reject"},
     },
+    # ── qcode 一物一码（扩展动态注册，此处声明供文档与 warning 过滤）──
+    "qcode.scanned": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "item_id": "码ID", "sn": "SN编码", "source": "来源"},
+    },
+    "qcode.form_submitted": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "item_id": "码ID", "form_id": "表单ID", "submission_id": "提交ID"},
+    },
+    "qcode.status_changed": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "item_id": "码ID", "from_status": "原状态", "to_status": "新状态"},
+    },
+    "qcode.item_voided": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "item_id": "码ID", "sn": "SN编码", "reason": "作废原因"},
+    },
+    "qcode.approved": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "submission_id": "提交ID", "approver_id": "审批人"},
+    },
+    "qcode.rejected": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "submission_id": "提交ID", "approver_id": "审批人", "reason": "驳回原因"},
+    },
+    "qcode.inspection_due": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "task_id": "巡检任务ID", "item_id": "码ID", "due_at": "到期时间"},
+    },
+    "qcode.inspection_overdue": {
+        "phase": Phase.NOTIFY,
+        "payload": {"tenant_id": "租户ID", "task_id": "巡检任务ID", "item_id": "码ID"},
+    },
 }
 
 
@@ -320,12 +354,17 @@ class EventBus:
         started = time.monotonic()
         try:
             sub.handler(ev)
-        except Exception:
+        except Exception as e:
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            event_recorder.record(ev, sub.key, ok=False, allowed=None,
+                                  elapsed_ms=elapsed_ms, error=repr(e))
             logger.exception("[ext-event] %s handler 失败（key=%s），已隔离", ev.name, sub.key)
         else:
-            elapsed = time.monotonic() - started
-            if elapsed > 3.0:
-                logger.warning("[ext-event] %s handler 耗时 %.1fs（key=%s），请移入异步任务", ev.name, elapsed, sub.key)
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            event_recorder.record(ev, sub.key, ok=True, allowed=None, elapsed_ms=elapsed_ms)
+            if elapsed_ms > 3000:
+                logger.warning("[ext-event] %s handler 耗时 %.1fs（key=%s），请移入异步任务",
+                               ev.name, elapsed_ms / 1000, sub.key)
 
     def _track(self, future: Future) -> None:
         with self._lock:
@@ -371,24 +410,41 @@ class EventBus:
             if not runtime.is_enabled(sub.key):
                 continue
             timeout = sub.timeout or settings.EXTENSION_HOOK_TIMEOUT
+            started = time.monotonic()
             try:
                 future = self._executor.submit(sub.handler, ev)
             except RuntimeError:
                 errors.append((sub.key, "线程池已关闭"))
+                event_recorder.record(ev, sub.key, ok=False, allowed=True,
+                                      elapsed_ms=0, error="线程池已关闭")
                 continue
             try:
                 decision = future.result(timeout=timeout)
             except FuturesTimeout:
+                elapsed_ms = int((time.monotonic() - started) * 1000)
                 errors.append((sub.key, f"超时(>{timeout}s)，fail-open 放行"))
+                event_recorder.record(ev, sub.key, ok=False, allowed=True,
+                                      elapsed_ms=elapsed_ms, error=f"超时(>{timeout}s)")
                 logger.error("[ext-event] %s 拦截 handler 超时（key=%s，>%.1fs），fail-open 放行",
                              event_name, sub.key, timeout)
                 continue
             except Exception as e:  # noqa: BLE001 - fail-open：扩展故障不阻断生产
+                elapsed_ms = int((time.monotonic() - started) * 1000)
                 errors.append((sub.key, repr(e)))
+                event_recorder.record(ev, sub.key, ok=False, allowed=True,
+                                      elapsed_ms=elapsed_ms, error=repr(e))
                 logger.exception("[ext-event] %s 拦截 handler 异常（key=%s），fail-open 放行", event_name, sub.key)
                 continue
-            if decision is not None and not decision.allow:
-                rejections.append((sub.key, decision.reason or "未提供原因"))
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            rejected = decision is not None and not decision.allow
+            if rejected:
+                reason = decision.reason or "未提供原因"
+                rejections.append((sub.key, reason))
+                event_recorder.record(ev, sub.key, ok=True, allowed=False,
+                                      elapsed_ms=elapsed_ms, reason=reason)
+            else:
+                event_recorder.record(ev, sub.key, ok=True, allowed=True,
+                                      elapsed_ms=elapsed_ms)
         return InterceptResult(allowed=not rejections, rejections=rejections, errors=errors)
 
     # ---------- 取数 ----------
@@ -415,5 +471,112 @@ class EventBus:
         with self._lock:
             self._subs.clear()
 
+    # ---------- 可视化读接口 ----------
+
+    def snapshot_subscriptions(self) -> list[dict]:
+        """枚举全部订阅：[{event_name, key, phase, timeout, handler}]，供管理端可视化。"""
+        with self._lock:
+            return [
+                {
+                    "event_name": name,
+                    "key": s.key,
+                    "phase": s.phase.value,
+                    "timeout": s.timeout,
+                    "handler": getattr(s.handler, "__qualname__", repr(s.handler)),
+                    "in_catalog": name in EVENT_CATALOG,
+                }
+                for name, subs in self._subs.items()
+                for s in subs
+            ]
+
+    def catalog(self) -> dict[str, dict]:
+        """返回 EVENT_CATALOG 浅拷贝（phase 转字符串）。"""
+        return {
+            name: {"phase": meta["phase"].value, "payload": meta["payload"]}
+            for name, meta in EVENT_CATALOG.items()
+        }
+
+
+@dataclass(frozen=True)
+class DispatchRecord:
+    """单条 handler 执行结果（通知型或拦截型）。"""
+
+    seq: int                # 单调递增序号
+    occurred_at: str        # ISO 时间
+    event_name: str
+    ext_key: str
+    phase: str              # "notify" | "intercept"
+    ok: bool                # handler 是否正常返回（拦截场景：是否未抛异常）
+    allowed: bool | None    # 仅 intercept 有值：True/False/None(notify)
+    elapsed_ms: int
+    error: str = ""         # 异常 repr 或超时说明，正常为空
+    reason: str = ""        # 拦截否决原因（allow=False 时）
+    tenant_id: int | None = None
+    actor_id: int | None = None
+    trace_id: str = ""
+
+
+class EventRecorder:
+    """进程内环形缓冲，记录最近 N 条 handler 执行结果。重启清零，无持久化。"""
+
+    def __init__(self, capacity: int = 200):
+        self._buf: deque[DispatchRecord] = deque(maxlen=capacity)
+        self._lock = threading.Lock()
+        self._seq = 0
+
+    def record(
+        self, ev: Event, ext_key: str, *, ok: bool, allowed: bool | None,
+        elapsed_ms: int, error: str = "", reason: str = "",
+    ) -> None:
+        with self._lock:
+            self._seq += 1
+            self._buf.append(DispatchRecord(
+                seq=self._seq, occurred_at=ev.occurred_at, event_name=ev.name,
+                ext_key=ext_key, phase=ev.phase.value, ok=ok, allowed=allowed,
+                elapsed_ms=elapsed_ms, error=error, reason=reason,
+                tenant_id=ev.tenant_id, actor_id=ev.actor_id, trace_id=ev.trace_id,
+            ))
+
+    def snapshot(
+        self, limit: int = 100, event_name: str | None = None,
+        ext_key: str | None = None, phase: str | None = None,
+    ) -> list[DispatchRecord]:
+        with self._lock:
+            items = list(self._buf)
+        if phase:
+            items = [r for r in items if r.phase == phase]
+        if event_name:
+            items = [r for r in items if r.event_name == event_name]
+        if ext_key:
+            items = [r for r in items if r.ext_key == ext_key]
+        return list(reversed(items[-limit:]))  # 最新在前
+
+    def stats(self) -> dict[str, dict]:
+        """按 (event_name, ext_key) 聚合：total / errors / slow(>3s) / rejections / last_at。"""
+        with self._lock:
+            items = list(self._buf)
+        out: dict[str, dict] = {}
+        for r in items:
+            k = f"{r.event_name}|{r.ext_key}"
+            s = out.setdefault(k, {
+                "event_name": r.event_name, "ext_key": r.ext_key,
+                "phase": r.phase, "total": 0, "errors": 0,
+                "slow": 0, "rejections": 0, "last_at": r.occurred_at,
+            })
+            s["total"] += 1
+            if not r.ok:
+                s["errors"] += 1
+            if r.elapsed_ms > 3000:
+                s["slow"] += 1
+            if r.allowed is False:
+                s["rejections"] += 1
+        return out
+
+    def reset(self) -> None:
+        with self._lock:
+            self._buf.clear()
+            self._seq = 0
+
 
 event_bus = EventBus()
+event_recorder = EventRecorder()

@@ -394,6 +394,7 @@ export default {
     systemAbout: '系统版本',
     cloudStorage: '云存储配置',
     market: '功能市场',
+    extensionEvents: '事件钩子',
     industryPacks: '行业包管理',
     master: '主数据',
     products: '产品',
