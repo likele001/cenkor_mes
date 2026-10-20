@@ -351,6 +351,7 @@ const groups: Group[] = [
           { path: '/system/cloud-storage', i18nKey: 'menu.cloudStorage', permissions: ['cloud_storage.manage'], icon: Cloudy },
           { path: '/system/crm-adapter', i18nKey: 'menu.crmAdapter', permissions: ['setting.manage', 'crm.admin'], icon: Connection },
           { path: '/system/crm-orders', i18nKey: 'menu.crmOrders', permissions: ['setting.manage', 'crm.admin'], icon: List },
+          { path: '/system/extension-events', i18nKey: 'menu.extensionEvents', permissions: ['setting.manage'], icon: Connection },
         ],
       },
       {

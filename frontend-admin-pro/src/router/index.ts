@@ -67,6 +67,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'system/cloud-storage', name: 'system-cloud-storage', component: () => import('@/pages/system/CloudStoragePage.vue'), meta: { title: () => i18n.global.t('menu.cloudStorage'), permissions: ['cloud_storage.manage'] } },
       { path: 'system/message-center', name: 'system-message-center', component: () => import('@/pages/system/MessageCenterPage.vue'), meta: { title: () => i18n.global.t('menu.messageCenter'), permissions: ['setting.manage'] } },
       { path: 'market', name: 'market', component: () => import('@/views/market/MarketPage.vue'), meta: { title: () => i18n.global.t('menu.market'), permissions: ['setting.manage'] } },
+      { path: 'system/extension-events', name: 'extension-events', component: () => import('@/views/extensions/EventHookPage.vue'), meta: { title: () => i18n.global.t('menu.extensionEvents'), permissions: ['setting.manage'] } },
       { path: 'account/profile', name: 'account-profile', component: () => import('@/pages/account/ProfilePage.vue'), meta: { title: () => i18n.global.t('menu.profile') } },
 
       { path: 'master/products', name: 'master-products', component: () => import('@/pages/master/ProductsPage.vue'), meta: { title: () => i18n.global.t('menu.products'), permissions: ['product.manage'] } },

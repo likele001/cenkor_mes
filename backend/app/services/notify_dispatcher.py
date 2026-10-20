@@ -30,10 +30,21 @@ from app.services.notify_channels import (
 logger = logging.getLogger(__name__)
 
 
-# 通道 -> celery 任务名映射（仅飞书）
+# 通道 -> celery 任务名映射（飞书内置，企微/钉钉由扩展注册）
 _CHANNEL_TASK_MAP: dict[str, str] = {
     "feishu": "feishu.send_message",
 }
+
+
+def register_channel_task(channel: str, task_name: str) -> None:
+    """扩展注册新通道的 celery 任务名（扩展加载时调用）。
+
+    示例：
+        register_channel_task("wecom", "wecom.send_message")
+        register_channel_task("dingtalk", "dingtalk.send_message")
+    """
+    _CHANNEL_TASK_MAP[channel] = task_name
+    logger.info("notify_dispatcher: 注册通道 %s -> %s", channel, task_name)
 
 
 def _do_send_task(channel: str, log_id: int) -> None:
@@ -91,8 +102,15 @@ def _rule_disabled(db: Session, event_code: str) -> bool:
 
 def _get_user_personal_targets(db: Session, user: User) -> list[PushTarget]:
     targets: list[PushTarget] = []
+    # 飞书
     if (user.feishu_open_id or "").strip() and is_feishu_enabled(db):
         targets.append(PushTarget.user("feishu", user.feishu_open_id.strip(), user_id=user.id))
+    # 企微（扩展注册后生效）
+    if (user.wecom_userid or "").strip() and "wecom" in _CHANNEL_TASK_MAP:
+        targets.append(PushTarget.user("wecom", user.wecom_userid.strip(), user_id=user.id))
+    # 钉钉（扩展注册后生效）
+    if (user.dingtalk_userid or "").strip() and "dingtalk" in _CHANNEL_TASK_MAP:
+        targets.append(PushTarget.user("dingtalk", user.dingtalk_userid.strip(), user_id=user.id))
     return targets
 
 
@@ -181,7 +199,9 @@ def _create_log(
     scheduled_at: datetime | None,
     user: User | None = None,
 ) -> FeishuPushLog | None:
-    if target["channel"] != "feishu":
+    # 支持飞书/企微/钉钉三通道（统一写 feishu_push_logs 表，channel 信息在 target 里）
+    channel = target["channel"]
+    if channel not in _CHANNEL_TASK_MAP:
         return None
     status = "deferred" if scheduled_at and scheduled_at > datetime.now() else "pending"
     row = FeishuPushLog(

@@ -3,8 +3,8 @@
 """消息中心管理端接口：三通道总览、群组、规则、绑定、日志、预警接收人
 
 配置的唯一存储仍是 tenant_settings 的 `feishu.notify`（v2 结构：groups[].channels 三通道嵌套），
-这里只做跨通道的聚合视图，不另建一份会漂移的副本。企微/钉钉通道目前只有配置结构、
-尚无发送实现，因此总览里固定为「未配置」。
+这里只做跨通道的聚合视图。企微/钉钉通道由 notify_wecom_dingtalk 扩展提供发送实现，
+总览接口动态检测扩展是否安装（_CHANNEL_TASK_MAP 注册）并读取真实配置。
 """
 from __future__ import annotations
 
@@ -101,6 +101,49 @@ def _disabled_channel() -> dict:
     }
 
 
+def _extension_channel_overview(db: Session, channel: str) -> dict:
+    """企微/钉钉通道总览（扩展安装后返回真实配置）。
+
+    检测逻辑：
+    1. 通道是否在 _CHANNEL_TASK_MAP 注册（扩展加载时调用 register_channel_task）
+    2. 若注册，从 tenant_settings 读取 {channel}.notify 配置
+    3. 若未注册，返回 _disabled_channel()
+    """
+    from app.services.notify_dispatcher import _CHANNEL_TASK_MAP
+
+    if channel not in _CHANNEL_TASK_MAP:
+        return _disabled_channel()
+
+    # 扩展已安装，读取配置
+    from app.crud.tenant_setting import get_setting
+
+    cfg = get_setting(db, f"{channel}.notify") or {}
+    enabled = bool(cfg.get("enabled"))
+    # 企微: corp_id + agent_id + secret；钉钉: app_key + app_secret
+    if channel == "wecom":
+        configured = bool(cfg.get("corp_id") and cfg.get("secret"))
+        agent_id = cfg.get("agent_id") or ""
+        agent_name = "企微机器人"
+    elif channel == "dingtalk":
+        configured = bool(cfg.get("app_key") and cfg.get("app_secret"))
+        agent_id = cfg.get("agent_id") or ""
+        agent_name = "钉钉机器人"
+    else:
+        configured = False
+        agent_id = ""
+        agent_name = ""
+
+    return {
+        "enabled": enabled,
+        "configured": configured,
+        "agent_name": agent_name,
+        "agent_id": agent_id,
+        "today_total": 0,  # TODO: 按 channel 过滤 feishu_push_logs 统计
+        "callback_url": "",
+        "oauth_redirect_url": "",
+    }
+
+
 def _user_binding_out(u: User) -> dict:
     bound = any(
         (getattr(u, f) or "").strip()
@@ -158,7 +201,10 @@ def overview(db: Session = Depends(get_db), user: User = Depends(get_current_use
         "callback_url": get_events_callback_url(cfg),
         "oauth_redirect_url": get_oauth_redirect_uri(cfg),
     }
-    return ok({"channels": {"feishu": feishu, "wecom": _disabled_channel(), "dingtalk": _disabled_channel()}})
+    # 企微/钉钉：动态检测扩展是否安装
+    wecom = _extension_channel_overview(db, "wecom")
+    dingtalk = _extension_channel_overview(db, "dingtalk")
+    return ok({"channels": {"feishu": feishu, "wecom": wecom, "dingtalk": dingtalk}})
 
 
 @router.get("/groups")

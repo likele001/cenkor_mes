@@ -347,9 +347,249 @@ def test_open_session_same_thread(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_event_catalog_shape():
-    """契约表自检：拦截型只开报工两条路径；通知型覆盖闭环。"""
+    """契约表自检：拦截型只开报工两条路径；通知型覆盖闭环 + qcode 扩展动态注册。"""
     intercepts = {n for n, v in EVENT_CATALOG.items() if v["phase"] == Phase.INTERCEPT}
     assert intercepts == {"report.submitting", "report_unit.submitting"}
-    assert len(EVENT_CATALOG) == 20
+    assert len(EVENT_CATALOG) == 28
     for v in EVENT_CATALOG.values():
         assert v["payload"], "每个事件必须声明 payload 字段契约"
+
+
+# ── 14-24. 事件钩子可视化：EventRecorder + 4 个管理端点 ──
+
+from app.extension_host.events import event_recorder  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_recorder():
+    """每个用例前后清空环形缓冲，避免相互污染。"""
+    event_recorder.reset()
+    yield
+    event_recorder.reset()
+
+
+def test_recorder_records_notify():
+    """通知型 handler 正常返回 → 记录 ok=True, allowed=None。"""
+    _fake_install("ext_a")
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+    event_bus.emit_now("report.submitted", {"report_id": 1}, actor_id=7)
+    assert event_bus.wait_pending(2)
+
+    records = event_recorder.snapshot()
+    assert len(records) == 1
+    r = records[0]
+    assert r.event_name == "report.submitted"
+    assert r.ext_key == "ext_a"
+    assert r.phase == "notify"
+    assert r.ok is True
+    assert r.allowed is None
+    assert r.error == ""
+    assert r.actor_id == 7
+
+
+def test_recorder_records_intercept_rejection():
+    """拦截 handler 返回 allow=False → 记录 allowed=False + reason。"""
+    _fake_install("guard")
+    event_bus.subscribe_intercept(
+        "guard", "report.submitting",
+        lambda ev: InterceptDecision(allow=False, reason="不良率超阈值"),
+    )
+    result = event_bus.intercept("report.submitting", {"report_id": 1})
+    assert result.allowed is False
+
+    records = event_recorder.snapshot()
+    assert len(records) == 1
+    r = records[0]
+    assert r.phase == "intercept"
+    assert r.ok is True
+    assert r.allowed is False
+    assert r.reason == "不良率超阈值"
+
+
+def test_recorder_records_handler_error():
+    """通知型 handler 抛异常 → 记录 ok=False + error 非空。"""
+    _fake_install("ext_bad")
+
+    def boom(ev):
+        raise RuntimeError("扩展炸了")
+
+    event_bus.subscribe("ext_bad", "report.submitted", boom)
+    event_bus.emit_now("report.submitted", {"report_id": 1})
+    assert event_bus.wait_pending(2)
+
+    records = event_recorder.snapshot()
+    assert len(records) == 1
+    r = records[0]
+    assert r.ok is False
+    assert "扩展炸了" in r.error
+
+
+def test_recorder_capacity():
+    """环形缓冲 200 上限：塞 250 条只保留最新 200 条。"""
+    _fake_install("ext_a")
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+    for i in range(250):
+        event_bus.emit_now("report.submitted", {"report_id": i})
+    assert event_bus.wait_pending(5)
+
+    records = event_recorder.snapshot(limit=300)
+    assert len(records) == 200
+    # 最新在前：第一条应是 report_id=249
+    assert records[0].event_name == "report.submitted"
+    assert records[0].seq >= records[-1].seq
+
+
+def test_recorder_stats_aggregation():
+    """按 (event, ext) 聚合：total / errors / rejections 计数正确。"""
+    _fake_install("ext_a", "ext_b")
+
+    def ok_handler(ev):
+        return None
+
+    def bad_handler(ev):
+        raise ValueError("boom")
+
+    def reject_handler(ev):
+        return InterceptDecision(allow=False, reason="no")
+
+    event_bus.subscribe("ext_a", "report.submitted", ok_handler)
+    event_bus.subscribe("ext_b", "report.submitted", bad_handler)
+    event_bus.subscribe_intercept("ext_a", "report.submitting", reject_handler)
+
+    for _ in range(3):
+        event_bus.emit_now("report.submitted", {"report_id": 1})
+    event_bus.intercept("report.submitting", {"report_id": 1})
+    assert event_bus.wait_pending(3)
+
+    stats = event_recorder.stats()
+    a_key = "report.submitted|ext_a"
+    b_key = "report.submitted|ext_b"
+    rej_key = "report.submitting|ext_a"
+    assert stats[a_key]["total"] == 3
+    assert stats[a_key]["errors"] == 0
+    assert stats[b_key]["total"] == 3
+    assert stats[b_key]["errors"] == 3
+    assert stats[rej_key]["rejections"] == 1
+
+
+def test_snapshot_subscriptions():
+    """snapshot_subscriptions 枚举全部订阅，含 in_catalog 标记。"""
+    _fake_install("ext_a")
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+    event_bus.subscribe_intercept("ext_a", "report.submitting", lambda ev: None, timeout=2.5)
+    event_bus.subscribe("ext_a", "custom.unknown_event", lambda ev: None)
+
+    subs = event_bus.snapshot_subscriptions()
+    assert len(subs) == 3
+    by_event = {s["event_name"]: s for s in subs}
+    assert by_event["report.submitted"]["phase"] == "notify"
+    assert by_event["report.submitted"]["in_catalog"] is True
+    assert by_event["report.submitting"]["phase"] == "intercept"
+    assert by_event["report.submitting"]["timeout"] == 2.5
+    assert by_event["custom.unknown_event"]["in_catalog"] is False
+
+
+def _build_admin_app(perms: list[str] | None = None):
+    """构造一个挂载 extensions router 的最小 FastAPI 应用。
+
+    通过 dependency_overrides 把 get_current_permissions 替换为返回指定权限码的
+    no-op，绕过真实鉴权；默认给 setting.manage 以通过 4 个 /events/* 端点的权限闸。
+    """
+    from app.api.admin.extensions.router import router as ext_router
+    from app.core.deps import get_current_permissions
+
+    app = FastAPI()
+    app.include_router(ext_router, prefix="/admin/extensions")
+    codes = perms if perms is not None else ["setting.manage"]
+    app.dependency_overrides[get_current_permissions] = lambda: codes
+    return app
+
+
+def test_catalog_endpoint():
+    app = _build_admin_app()
+    client = TestClient(app)
+    resp = client.get("/admin/extensions/events/catalog")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["code"] == 200
+    items = body["data"]["items"]
+    assert "report.submitted" in items
+    assert items["report.submitted"]["phase"] == "notify"
+    assert "report.submitting" in items
+    assert items["report.submitting"]["phase"] == "intercept"
+
+
+def test_subscriptions_endpoint():
+    _fake_install("ext_a")
+    # 给 manifest 塞一个有 name 的对象以便断言 extension_name
+    class _M:
+        name = "扩展 A"
+
+    runtime.installed["ext_a"]["manifest"] = _M()
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+
+    app = _build_admin_app()
+    client = TestClient(app)
+    resp = client.get("/admin/extensions/events/subscriptions")
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    s = items[0]
+    assert s["event_name"] == "report.submitted"
+    assert s["key"] == "ext_a"
+    assert s["extension_name"] == "扩展 A"
+    assert s["enabled"] is True
+
+
+def test_recent_endpoint_filters():
+    _fake_install("ext_a")
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+    event_bus.subscribe_intercept("ext_a", "report.submitting", lambda ev: None)
+    event_bus.emit_now("report.submitted", {"report_id": 1})
+    assert event_bus.wait_pending(2)
+    event_bus.intercept("report.submitting", {"report_id": 2})
+
+    app = _build_admin_app()
+    client = TestClient(app)
+
+    all_resp = client.get("/admin/extensions/events/recent")
+    assert all_resp.status_code == 200
+    all_items = all_resp.json()["data"]["items"]
+    assert len(all_items) == 2
+
+    intercept_only = client.get("/admin/extensions/events/recent?phase=intercept")
+    items = intercept_only.json()["data"]["items"]
+    assert len(items) == 1
+    assert items[0]["phase"] == "intercept"
+
+    by_event = client.get("/admin/extensions/events/recent?event_name=report.submitted")
+    items = by_event.json()["data"]["items"]
+    assert len(items) == 1
+    assert items[0]["event_name"] == "report.submitted"
+
+
+def test_stats_endpoint():
+    _fake_install("ext_a")
+    event_bus.subscribe("ext_a", "report.submitted", lambda ev: None)
+    event_bus.emit_now("report.submitted", {"report_id": 1})
+    assert event_bus.wait_pending(2)
+
+    app = _build_admin_app()
+    client = TestClient(app)
+    resp = client.get("/admin/extensions/events/stats")
+    assert resp.status_code == 200
+    items = resp.json()["data"]["items"]
+    assert len(items) == 1
+    assert items[0]["event_name"] == "report.submitted"
+    assert items[0]["ext_key"] == "ext_a"
+    assert items[0]["total"] == 1
+    assert items[0]["errors"] == 0
+
+
+def test_permission_required():
+    """无 setting.manage 权限 → 4 个 /events/* 端点全部 403。"""
+    app = _build_admin_app(perms=["order.query"])  # 不含 setting.manage
+    client = TestClient(app)
+    for path in ("/events/catalog", "/events/subscriptions", "/events/recent", "/events/stats"):
+        resp = client.get(f"/admin/extensions{path}")
+        assert resp.status_code == 403, f"{path} 应 403，实际 {resp.status_code}"
