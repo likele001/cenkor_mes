@@ -18,7 +18,7 @@ import zipfile
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 
 # market/router.py 顶层 import httpx；缺 httpx 的环境（如只装了最小依赖的 venv）
 # 会在这里报收集错误，红掉整个套件——用 importorskip 降级为跳过。
@@ -33,6 +33,7 @@ from app.api.admin.market.router import (  # noqa: E402
     _install_extension,
     install_app,
 )
+from app.extension_host.state import StateStore, runtime  # noqa: E402
 
 
 def _pkg(manifest: dict, *, router_py: str = "router = None\n") -> bytes:
@@ -48,7 +49,13 @@ def ext_dir(tmp_path, monkeypatch):
     """安装目录指向临时目录，绝不碰仓库里的 extensions/。"""
     d = tmp_path / "extensions"
     monkeypatch.setattr(market_mod, "extensions_base_dir", lambda: d)
-    return d
+    # 生命周期状态是进程内单例：每个用例都从干净的 runtime 起步，
+    # 否则前一个用例装过的 key 会让后一个用例被判成「同版本不同包」。
+    runtime.reset()
+    runtime.extensions_dir = d
+    runtime.store = StateStore(d / ".state")
+    yield d
+    runtime.reset()
 
 
 # ---------- 第一道：X-App-Product 响应头 ----------
@@ -68,14 +75,27 @@ def hub(monkeypatch):
         "_download_package",
         lambda db, app_key, lk: (state.calls.append("download") or state.package),
     )
-    monkeypatch.setattr(
-        market_mod, "hot_setup_extension", lambda app, key: state.calls.append("hot")
-    )
+    def _fake_install(app, package_bytes, app_key, **kwargs):
+        """走真实落盘（staging/product 闸），把挂载/迁移留给隔离环境。"""
+        saved = _install_extension(package_bytes, app_key)
+        state.calls.append("hot")
+        return {
+            "ok": True,
+            "action": "install",
+            "key": app_key,
+            "from_version": "",
+            "to_version": saved["version"],
+            "sha256": saved["sha256"],
+            "health": {"ok": True},
+            **saved,
+        }
+
+    monkeypatch.setattr(market_mod, "install_or_update", _fake_install)
     return state
 
 
 def _install(state):
-    return install_app(InstallIn(app_key="demo"), SimpleNamespace(app=None), db=None)
+    return install_app(InstallIn(app_key="demo"), SimpleNamespace(app=FastAPI()), db=None)
 
 
 def test_header_from_foreign_product_blocks_even_without_manifest_field(hub, ext_dir):

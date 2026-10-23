@@ -104,6 +104,28 @@
           <el-tag v-if="app.license_expires_at" type="info" size="small">
             到期 {{ formatDate(app.license_expires_at) }}
           </el-tag>
+
+          <el-tag v-if="app.installed && app.health === 'ok'" type="success" size="small" effect="plain">
+            健康
+          </el-tag>
+          <el-tag v-else-if="app.installed && app.health" type="danger" size="small" effect="plain">
+            异常
+          </el-tag>
+          <el-tag v-if="app.installed && app.status === 'installed_disabled'" type="info" size="small">
+            已禁用
+          </el-tag>
+          <el-tag v-if="app.installed && app.status === 'rollback_blocked'" type="warning" size="small">
+            回滚受阻
+          </el-tag>
+          <el-tag v-if="app.worker_restart_required" type="warning" size="small" effect="plain">
+            任务需重启 worker
+          </el-tag>
+          <el-tag v-if="app.multi_worker" type="warning" size="small" effect="plain">
+            多 worker：需全部重启
+          </el-tag>
+          <el-tag v-if="app.installed && app.data_policy === 'keep'" size="small" effect="plain">
+            卸载保留数据
+          </el-tag>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -141,13 +163,54 @@
             >
               卸载
             </el-button>
+            <el-button
+              v-if="app.enabled"
+              size="small"
+              plain
+              :loading="lifecycleKey === app.key"
+              @click="handleDisable(app)"
+            >
+              禁用
+            </el-button>
+            <el-button
+              v-else
+              type="primary"
+              size="small"
+              plain
+              :loading="lifecycleKey === app.key"
+              @click="handleEnable(app)"
+            >
+              启用
+            </el-button>
+            <el-button
+              v-if="app.has_backup"
+              size="small"
+              plain
+              :loading="lifecycleKey === app.key"
+              @click="handleRollback(app)"
+            >
+              回滚
+            </el-button>
+            <el-button
+              size="small"
+              plain
+              :loading="lifecycleKey === app.key"
+              @click="handleRepair(app)"
+            >
+              修复
+            </el-button>
           </template>
           <el-button v-if="!app.licensed" size="small" plain @click="openPortal(app.key)">
             前往门户
           </el-button>
         </div>
 
-        <div v-if="app.latest_version" class="mt-3 text-xs text-gray-400">最新版本: {{ app.latest_version }}</div>
+        <div v-if="app.latest_version" class="mt-3 text-xs text-gray-400">
+          最新版本: {{ app.latest_version }}
+          <span v-if="app.previous_version">· 上一版 {{ app.previous_version }}</span>
+          <span v-if="app.last_operation">· 上次操作 {{ app.last_operation }}</span>
+        </div>
+        <div v-if="app.last_error" class="mt-1 line-clamp-2 text-xs text-red-500">{{ app.last_error }}</div>
       </div>
     </div>
 
@@ -239,6 +302,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Link, Refresh, Loading } from '@element-plus/icons-vue'
 import {
@@ -251,10 +315,15 @@ import {
   getMarketApps,
   installMarketApp,
   uninstallMarketApp,
+  enableMarketApp,
+  disableMarketApp,
+  rollbackMarketApp,
+  repairMarketApp,
   type MarketApp,
   type MarketStatus,
 } from '@/api/market'
-import { reloadExtensions } from '@/utils/extensionLoader'
+import { reloadExtensions, isExtensionRouteActive } from '@/utils/extensionLoader'
+import { useAuthStore } from '@/stores/auth'
 
 const loading = ref(false)
 const apps = ref<MarketApp[]>([])
@@ -295,6 +364,46 @@ const snapshotText = computed(() => {
 
 const installingKey = ref('')
 const uninstallingKey = ref('')
+const lifecycleKey = ref('')
+const router = useRouter()
+const auth = useAuthStore()
+
+/**
+ * 生命周期动作统一收尾：权限缓存 → 前端插件 → 市场列表。
+ *
+ * 顺序不能反：先 fetchMe 才能让新装扩展的权限进入当前用户缓存（否则菜单被
+ * hasAnyPermission 过滤掉），再 reloadExtensions 注入动态路由/菜单，最后刷新列表。
+ */
+async function refreshAfterLifecycle(key?: string) {
+  try {
+    await auth.fetchMe()
+  } catch (e) {
+    console.warn('[market] 刷新当前用户权限失败', e)
+  }
+  const result = await reloadExtensions()
+  await fetchApps()
+  if (result.failed.length) {
+    ElMessage.warning(`以下扩展前端加载失败，可尝试刷新页面：${result.failed.join('、')}`)
+  }
+  if (key && !runtimeStillActive(key) && isExtensionRouteActive(key)) {
+    await router.replace('/market')
+  }
+}
+
+/** 卸载/禁用后，该扩展是否仍处于可访问状态（有前端注册即视为仍可停留） */
+function runtimeStillActive(key: string): boolean {
+  const app = apps.value.find((x) => x.key === key)
+  return Boolean(app?.installed && app?.enabled)
+}
+
+/** 操作后统一提示：worker 重启/多 worker 不假装热生效 */
+function notifyWorker(app: MarketApp, message: string) {
+  if (app.worker_restart_required) {
+    ElMessage.warning(`${message}；后台 Celery 任务需重启 worker 后生效`)
+  } else {
+    ElMessage.success(message)
+  }
+}
 
 // 连接向导
 const showConnect = ref(false)
@@ -330,6 +439,12 @@ function formatDate(s: string | null): string {
   if (!s) return ''
   const d = new Date(s)
   return isNaN(d.getTime()) ? s : d.toLocaleDateString()
+}
+
+/** 弹窗里的 changelog 来自 hub/开发者，落 HTML 前必须转义，避免被当成标签执行 */
+function escapeHtml(s: string): string {
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+  return String(s || '').replace(/[&<>"']/g, (c) => map[c] || c)
 }
 
 function verCmp(a: string, b: string): number {
@@ -441,8 +556,7 @@ async function pollOnce() {
       stopBindWaiting()
       bind.active = false
       await fetchStatus()
-      await fetchApps()
-      await reloadExtensions()
+      await refreshAfterLifecycle()
       ElMessage.success('已连接门户账号：' + (status.account || ''))
     } else if (['expired', 'denied', 'consumed'].includes(res.status)) {
       stopBindWaiting()
@@ -508,21 +622,40 @@ function onDialogClosed() {
 }
 
 async function handleInstall(app: MarketApp) {
-  try {
-    await ElMessageBox.confirm(
-      `确定要安装「${app.name}」吗？安装后即时生效，无需重启。`,
-      '确认安装',
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' },
+  // 已装 → 更新：展示 changelog / min_core_version / 数据策略 / 备份提示；
+  // 未装 → 安装：只做一次确认。两条分支都走 POST /admin/market/install。
+  const updating = hasUpdate(app)
+  const html: string[] = []
+  if (updating) {
+    html.push(
+      `<p><b>${escapeHtml(app.name)}</b>：${escapeHtml(app.installed_version)} → ${escapeHtml(app.latest_version)}</p>`,
+      `<p style="margin-top:8px"><span style="color:#6b7280">更新内容：</span>${
+        app.changelog ? escapeHtml(app.changelog) : '（本版未填写 changelog）'
+      }</p>`,
+      `<p><span style="color:#6b7280">最低宿主版本：</span>${escapeHtml(app.min_core_version || '未声明')}</p>`,
+      `<p><span style="color:#6b7280">数据策略：</span>${
+        app.data_policy === 'keep' || !app.data_policy ? '保留（默认，表与文件不动）' : escapeHtml(app.data_policy)
+      }</p>`,
+      `<p style="margin-top:8px;color:#92400e">旧版会先备份到 extensions/.backup；迁移或健康检查失败会自动回滚上一版。</p>`,
     )
+  } else {
+    html.push(`<p>确定要安装「${escapeHtml(app.name)}」吗？安装后即时生效，无需重启。</p>`)
+  }
+  try {
+    await ElMessageBox.confirm(html.join(''), updating ? '确认更新' : '确认安装', {
+      confirmButtonText: updating ? '确定更新' : '确定',
+      cancelButtonText: '取消',
+      type: 'info',
+      dangerouslyUseHTMLString: true,
+    })
   } catch {
     return
   }
   installingKey.value = app.key
   try {
     const res = await installMarketApp(app.key)
-    await fetchApps()
-    await reloadExtensions()
-    ElMessage.success(res.message || '安装成功，已即时生效')
+    await refreshAfterLifecycle(app.key)
+    notifyWorker(app, res.message || '安装成功，已即时生效')
   } catch (e) {
     console.error('install error:', e)
   } finally {
@@ -531,25 +664,112 @@ async function handleInstall(app: MarketApp) {
 }
 
 async function handleUninstall(app: MarketApp) {
+  // 二选一：保留数据（默认，可重装恢复）/ 彻底清除（不可逆，要求输入 key）
+  let action = 'keep'
+  let confirmKey = ''
   try {
     await ElMessageBox.confirm(
-      `确定要卸载「${app.name}」吗？卸载将删除该扩展文件并即时生效。`,
+      `卸载「${app.name}」后默认保留数据表与文件，重装即可恢复。\n如需彻底清除（删除应用自有数据表与文件，不可恢复），请选择「彻底清除」。`,
       '确认卸载',
-      { confirmButtonText: '确定卸载', cancelButtonText: '取消', type: 'warning' },
+      {
+        confirmButtonText: '保留数据并卸载',
+        cancelButtonText: '彻底清除…',
+        distinguishCancelAndClose: true,
+        type: 'warning',
+      },
     )
-  } catch {
-    return
+  } catch (actionName) {
+    if (actionName !== 'cancel') return
+    try {
+      const input = await ElMessageBox.prompt(
+        `彻底清除会删除「${app.key}」自有的数据表与文件（先自动导出 JSONL 备份），不可恢复。\n请输入扩展 key 以确认：`,
+        '彻底清除（不可逆）',
+        {
+          confirmButtonText: '确认彻底清除',
+          cancelButtonText: '取消',
+          inputValidator: (v: string) => (v === app.key ? true : `请输入 ${app.key}`),
+        },
+      )
+      action = 'purge'
+      confirmKey = input.value
+    } catch {
+      return
+    }
   }
   uninstallingKey.value = app.key
   try {
-    const res = await uninstallMarketApp(app.key)
-    await fetchApps()
-    await reloadExtensions()
-    ElMessage.success(res.message || '卸载成功，已即时生效')
+    const res = await uninstallMarketApp(app.key, { purge: action === 'purge', confirmKey })
+    await refreshAfterLifecycle(app.key)
+    ElMessage.success(res.message || (action === 'purge' ? '已彻底清除' : '卸载成功，已即时生效'))
   } catch (e) {
     console.error('uninstall error:', e)
   } finally {
     uninstallingKey.value = ''
+  }
+}
+
+/** 禁用（软拔）：保留文件与数据，只摘路由/事件/任务 */
+async function handleDisable(app: MarketApp) {
+  lifecycleKey.value = app.key
+  try {
+    await disableMarketApp(app.key)
+    await refreshAfterLifecycle(app.key)
+    ElMessage.success('已禁用（文件与数据保留）')
+  } catch (e) {
+    console.error('disable error:', e)
+  } finally {
+    lifecycleKey.value = ''
+  }
+}
+
+/** 启用（软插）：清 override 并重新挂载 */
+async function handleEnable(app: MarketApp) {
+  lifecycleKey.value = app.key
+  try {
+    await enableMarketApp(app.key)
+    await refreshAfterLifecycle(app.key)
+    notifyWorker(app, '已启用')
+  } catch (e) {
+    console.error('enable error:', e)
+  } finally {
+    lifecycleKey.value = ''
+  }
+}
+
+/** 回滚到最近备份版本 */
+async function handleRollback(app: MarketApp) {
+  try {
+    await ElMessageBox.confirm(
+      `将「${app.name}」回滚到上一版本（最近备份）？若旧版与当前数据结构不兼容，会保持在新版本并标记 rollback_blocked。`,
+      '确认回滚',
+      { confirmButtonText: '确定回滚', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  lifecycleKey.value = app.key
+  try {
+    const res = await rollbackMarketApp(app.key)
+    await refreshAfterLifecycle(app.key)
+    ElMessage.success(`已回滚到 ${res.to_version}`)
+  } catch (e) {
+    console.error('rollback error:', e)
+  } finally {
+    lifecycleKey.value = ''
+  }
+}
+
+/** 修复：目录丢失/迁移中断/权限丢失 */
+async function handleRepair(app: MarketApp) {
+  lifecycleKey.value = app.key
+  try {
+    await repairMarketApp(app.key)
+    await refreshAfterLifecycle(app.key)
+    ElMessage.success('修复完成')
+  } catch (e) {
+    console.error('repair error:', e)
+  } finally {
+    lifecycleKey.value = ''
   }
 }
 

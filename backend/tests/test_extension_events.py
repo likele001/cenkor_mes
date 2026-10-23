@@ -350,7 +350,9 @@ def test_event_catalog_shape():
     """契约表自检：拦截型只开报工两条路径；通知型覆盖闭环 + qcode 扩展动态注册。"""
     intercepts = {n for n, v in EVENT_CATALOG.items() if v["phase"] == Phase.INTERCEPT}
     assert intercepts == {"report.submitting", "report_unit.submitting"}
-    assert len(EVENT_CATALOG) == 28
+    # 30 = 原 28 条 + stock.changed（库存变动）+ purchase.received（采购收货）
+    assert len(EVENT_CATALOG) == 30
+    assert {"stock.changed", "purchase.received"} <= set(EVENT_CATALOG)
     for v in EVENT_CATALOG.values():
         assert v["payload"], "每个事件必须声明 payload 字段契约"
 

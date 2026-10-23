@@ -192,6 +192,7 @@ def receive_api(
     any_received = False
     all_received = True
     old_status = po.status
+    received_items: list[dict] = []
     for it in po.items:
         remain = it.qty - it.received_qty
         if remain <= 0:
@@ -212,6 +213,14 @@ def receive_api(
             biz_id=po.id,
             remark=po.code,
         )
+        received_items.append({
+            "item_id": it.id,
+            "material_id": it.material_id,
+            "sku_id": m.sku_id,
+            "qty": rq,
+            "unit_price": it.unit_price,
+            "batch_no": None,
+        })
         it.received_qty += rq
         any_received = True
         if it.received_qty < it.qty:
@@ -231,6 +240,19 @@ def receive_api(
         object_id=po.id,
         detail=f"code={po.code},status={old_status}->{po.status},warehouse_id={payload.warehouse_id}",
     )
+    # 扩展接入点（只增不改）：来料批次/对账类扩展据此建批次与核销，commit 后异步分发
+    try:
+        from app.extension_host.events import event_bus
+
+        event_bus.emit_after_commit(db, "purchase.received", {
+            "po_id": po.id,
+            "po_code": po.code,
+            "warehouse_id": payload.warehouse_id,
+            "items": received_items,
+            "operator_id": user.id,
+        })
+    except Exception:  # pragma: no cover - 广播失败绝不能影响入库
+        pass
     db.commit()
     po2 = get_purchase_order_by_id(db, order_id=order_id, with_items=True)
     if not po2:

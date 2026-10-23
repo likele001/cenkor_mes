@@ -58,6 +58,9 @@ class ExtensionRuntime:
         self.entitlements: dict[str, dict] = {}   # app_key -> 授权快照条目
         self.entitlement_enforced: bool = False    # 是否已根据 hub 已购快照启用运行期门控
         self.overrides: dict[str, str] = {}       # key -> "disabled"
+        self.retiring: set[str] = set()           # 正在卸载/更新的 key（新请求 503）
+        self.interfaces: dict[str, dict] = {}     # key -> 挂载接口信息（router/public/route_count）
+        self.app_version: str = ""              # 核心版本号（激活上报用）
         self.synced_at: str = ""
         self.sync_thread: threading.Thread | None = None
 
@@ -89,10 +92,13 @@ class ExtensionRuntime:
     def status_list(self) -> list[dict]:
         """全部已安装扩展的状态（供宿主 API / CLI）。"""
         items: list[dict] = []
+        from .registry import registry_info
+
         for key, info in sorted(self.installed.items()):
             manifest = info["manifest"]
             ent = self.entitlements.get(key) or {}
             latest = str(ent.get("latest_version") or "")
+            record = registry_info(key) or {}
             items.append({
                 **manifest.to_dict(),
                 "enabled": self.is_enabled(key),
@@ -100,6 +106,16 @@ class ExtensionRuntime:
                 "latest_version": latest,
                 "upgrade_available": bool(latest and latest != manifest.version),
                 "has_frontend": (Path(info["path"]) / "frontend" / "plugin.js").is_file(),
+                "health": record.get("health") or "",
+                "last_error": record.get("last_error") or "",
+                "status": record.get("status") or "",
+                "installed_at": record.get("installed_at") or "",
+                "previous_version": record.get("previous_version") or "",
+                "package_sha256": record.get("package_sha256") or "",
+                "data_policy": record.get("data_policy") or "keep",
+                "worker_restart_required": bool(record.get("worker_restart_required")),
+                "last_operation": record.get("last_operation") or "",
+                "routes": (self.interfaces.get(key) or {}).get("route_count", 0),
             })
         return items
 
@@ -171,6 +187,9 @@ class ExtensionRuntime:
         self.entitlements = {}
         self.entitlement_enforced = False
         self.overrides = {}
+        self.retiring = set()
+        self.interfaces = {}
+        self.app_version = ""
         self.synced_at = ""
         self.sync_thread = None
         # 事件总线订阅一并清空（延迟导入避免环：events 依赖 state.runtime）

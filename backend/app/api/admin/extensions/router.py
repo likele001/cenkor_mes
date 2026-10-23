@@ -12,7 +12,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from app.core.deps import require_permissions
+from app.core.deps import get_optional_permissions, require_permissions
 from app.core.response import ok
 from app.extension_host.events import event_bus, event_recorder
 from app.extension_host.state import runtime
@@ -70,13 +70,19 @@ def get_event_stats():
 # ---------- 扩展前端插件脚本 ----------
 
 @router.get("/{key}/plugin.js")
-def get_plugin_js(key: str):
-    """返回扩展前端插件脚本（仅启用状态可获取）。"""
+def get_plugin_js(key: str, codes: list[str] | None = Depends(get_optional_permissions)):
+    """返回扩展前端插件脚本（启用状态 + 该扩展查看权限；setting.manage 直通）。"""
     info = runtime.installed.get(key)
     if not info:
         raise HTTPException(status_code=404, detail="扩展不存在")
     if not runtime.is_enabled(key):
         raise HTTPException(status_code=403, detail="扩展未启用")
+    if codes is not None and "setting.manage" not in codes:
+        manifest = info.get("manifest")
+        allowed = {f"ext.{key}.view"}
+        allowed |= {str(p.get("code")) for p in getattr(manifest, "permissions", []) or [] if p.get("code")}
+        if not (allowed & set(codes)):
+            raise HTTPException(status_code=403, detail="没有该扩展的查看权限")
     file = info["path"] / "frontend" / "plugin.js"
     if not file.is_file():
         raise HTTPException(status_code=404, detail="该扩展没有前端插件")

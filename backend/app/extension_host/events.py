@@ -221,6 +221,18 @@ EVENT_CATALOG: dict[str, dict] = {
         "phase": Phase.NOTIFY,
         "payload": {"tenant_id": "租户ID", "task_id": "巡检任务ID", "item_id": "码ID"},
     },
+    # ── 库存变动（安全库存等纯扩展应用的唯一接入点，单点只增不改）──
+    "stock.changed": {
+        "phase": Phase.NOTIFY,
+        "payload": {"warehouse_id": "仓库ID", "sku_id": "SKU ID", "change_qty": "变动数量(正入负出)",
+                    "balance_qty": "变动后账面数", "biz_type": "业务类型", "biz_id": "业务单据ID"},
+    },
+    # ── 采购收货（来料批次/对账类扩展的接入点）──
+    "purchase.received": {
+        "phase": Phase.NOTIFY,
+        "payload": {"po_id": "采购订单ID", "warehouse_id": "入库仓库ID",
+                    "items": "[{sku_id, qty, price, batch_no}]", "operator_id": "操作人ID"},
+    },
 }
 
 

@@ -8,6 +8,10 @@ export interface MarketApp {
   icon: string
   category: string
   latest_version: string
+  /** 更新弹窗展示用：本版更新日志 / 最低宿主版本 / 包内 schema_version */
+  changelog?: string
+  min_core_version?: string
+  schema_version?: number | null
   price: number | null
   licensed: boolean
   license_state: string
@@ -17,6 +21,16 @@ export interface MarketApp {
   installed: boolean
   installed_version: string
   enabled: boolean
+  /** 生命周期登记（registry.json）字段 */
+  status?: string
+  health?: string
+  previous_version?: string
+  last_operation?: string
+  last_error?: string
+  data_policy?: string
+  worker_restart_required?: boolean
+  multi_worker?: boolean
+  has_backup?: boolean
 }
 
 /** 连接状态（hub 地址 / 绑定账号 / 已购概况） */
@@ -102,7 +116,53 @@ export function installMarketApp(appKey: string) {
   )
 }
 
-/** 卸载应用（热生效） */
-export function uninstallMarketApp(appKey: string) {
-  return http.post<{ message: string; key: string }>('/admin/market/uninstall', { app_key: appKey })
+/** 卸载应用（热生效）。purge=true 时要求 confirmKey 与 key 一致（彻底清除不可逆） */
+export function uninstallMarketApp(
+  appKey: string,
+  opts: { purge?: boolean; confirmKey?: string } = {},
+) {
+  return http.post<{ message: string; key: string; policy: string; trash?: string }>(
+    '/admin/market/uninstall',
+    { app_key: appKey, purge: Boolean(opts.purge), confirm_key: opts.confirmKey || '' },
+  )
+}
+
+/** 软插：清 override，跑迁移/补权限，重新挂载 */
+export function enableMarketApp(appKey: string) {
+  return http.post<{ message: string; key: string }>(`/admin/market/apps/${appKey}/enable`)
+}
+
+/** 软拔：停门禁、摘路由/事件/任务，保留文件与数据 */
+export function disableMarketApp(appKey: string) {
+  return http.post<{ message: string; key: string }>(`/admin/market/apps/${appKey}/disable`)
+}
+
+/** 回滚到最近备份版本 */
+export function rollbackMarketApp(appKey: string) {
+  return http.post<{ message: string; from_version: string; to_version: string }>(
+    `/admin/market/apps/${appKey}/rollback`,
+  )
+}
+
+/** 修复：目录丢失/迁移中断/权限丢失 */
+export function repairMarketApp(appKey: string) {
+  return http.post<{ message: string; key: string }>(`/admin/market/apps/${appKey}/repair`)
+}
+
+/** 生命周期审计（谁、何时、版本变化、结果、耗时、包 SHA） */
+export interface LifecycleLog {
+  at: string
+  operation: string
+  key: string
+  from_version?: string
+  to_version?: string
+  result?: string
+  error?: string
+  actor?: string
+  elapsed_ms?: number
+  sha256?: string
+}
+
+export function getLifecycleLogs(params: { limit?: number; key?: string } = {}) {
+  return http.get<{ items: LifecycleLog[] }>('/admin/market/lifecycle/logs', { params })
 }
