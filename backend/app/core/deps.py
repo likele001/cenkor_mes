@@ -58,6 +58,28 @@ def get_current_permissions(
     return codes
 
 
+def get_optional_permissions(
+    request: Request,
+    db: Session = Depends(get_db),
+    cred: HTTPAuthorizationCredentials | None = Depends(security_scheme),
+) -> list[str] | None:
+    """可选登录态：无凭据返回 None（由路由级依赖决定 401），有凭据返回权限码。
+
+    用于「路由组已整体要求登录、个别端点还要再按扩展权限收口」的场景，
+    避免在测试/内网直连时因为多一层强依赖而 401。
+    """
+    if not cred or not cred.credentials:
+        return None
+    try:
+        payload = decode_token(cred.credentials)
+        user = db.get(User, int(payload.get("sub") or 0))
+    except (JWTError, TypeError, ValueError):
+        return None
+    if not user or not user.is_active:
+        return None
+    return get_user_permission_codes(db, user.id)
+
+
 def require_permissions(required: list[str]):
     def _dep(codes: list[str] = Depends(get_current_permissions)) -> None:
         if not set(required).issubset(set(codes)):

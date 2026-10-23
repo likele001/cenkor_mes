@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends
 
+from app.core.authorization import abac_guard
 from app.core.deps import get_current_user
 
 from app.api.admin.master.router import router as admin_master_router
@@ -36,7 +37,8 @@ from app.api.admin.subcontract.router import router as admin_subcontract_router
 
 
 api_router = APIRouter()
-_admin_deps = [Depends(get_current_user)]
+# abac_guard 在无扩展提供者时零成本放行（纯 RBAC 行为不变）
+_admin_deps = [Depends(get_current_user), Depends(abac_guard)]
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(captcha_router, prefix="/auth/captcha", tags=["auth-captcha"])
 api_router.include_router(files_router, prefix="/files", tags=["files"])

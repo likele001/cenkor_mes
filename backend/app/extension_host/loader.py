@@ -3,21 +3,23 @@
 """扩展扫描、迁移执行与路由挂载。
 
 - 扫描 ``extensions/`` 下的一级子目录（跳过 ``.state`` 等点目录）
-- 执行扩展自带 ``migrations.sql``（要求幂等，如 CREATE TABLE IF NOT EXISTS）
-- 将扩展 ``router.py`` 中的 ``router``（fastapi.APIRouter）挂载到 ``/api/extensions/{key}``
+- 执行扩展自带 ``migrations.sql`` 与 ``migrations/*.py``（见 ``migrations.py``）
+- 将扩展 ``router.py`` 中的 ``router`` / ``public_router`` 挂载到 ``/api/extensions/{key}``
+
+包式扩展（目录内有 ``crud.py`` / ``models.py`` 等子模块，使用 ``from . import crud``
+相对导入）必须把扩展目录登记为模块的 ``submodule_search_locations``，否则
+``ModuleNotFoundError: No module named 'cenkormes_ext_xxx.crud'``。
 """
 from __future__ import annotations
 
 import importlib.util
 import logging
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
-
-from app.core.db import SessionLocal
 
 from .manifest import ManifestError, load_manifest
 from .state import StateStore, runtime
@@ -43,9 +45,15 @@ def scan_extensions(base_dir: Path) -> dict[str, dict]:
 
 
 def require_extension(key: str):
-    """FastAPI 依赖工厂：扩展必须处于启用状态（本地禁用/授权无效 → 403）。"""
+    """FastAPI 依赖工厂：扩展必须处于启用状态（本地禁用/授权无效 → 403）。
+
+    卸载流程会先把 key 放进 ``runtime.retiring``：排空窗口内新请求返回 503，
+    避免请求打到已经摘掉一半路由/模块的扩展上。
+    """
 
     def _dep() -> None:
+        if key in runtime.retiring:
+            raise HTTPException(status_code=503, detail=f"扩展 {key} 正在卸载，请稍后刷新")
         if not runtime.is_enabled(key):
             state = runtime.entitlement_state(key)
             raise HTTPException(status_code=403, detail=f"扩展 {key} 未启用（授权状态: {state}）")
@@ -53,7 +61,71 @@ def require_extension(key: str):
     return _dep
 
 
-def _load_module(file: Path, module_name: str):
+def extension_module_name(key: str) -> str:
+    return f"cenkormes_ext_{key}"
+
+
+def _detach_extension_tables(module) -> int:
+    """把扩展声明的表从共享 ``Base.metadata`` 摘掉。
+
+    扩展与核心共用 ``app.models.base.Base``。只清 ``sys.modules`` 不够：第二次 import
+    同一个 models 模块会在声明类时报 ``Table 'x' is already defined``，热更新/重装
+    必踩。这里按「类/Table 对象的 __module__ 属于本扩展模块子树」精确识别，只摘
+    自己的表，不碰核心与其他扩展。
+    """
+    from sqlalchemy import Table
+
+    from app.models.base import Base
+
+    meta = Base.metadata
+    dropped = 0
+    for obj in list(vars(module).values()):
+        if isinstance(obj, type):
+            table = getattr(obj, "__table__", None)
+            owner = getattr(obj, "__module__", "") or ""
+        elif isinstance(obj, Table):
+            table = obj
+            owner = module.__name__
+        else:
+            continue
+        if table is None or getattr(table, "metadata", None) is not meta:
+            continue
+        if owner != module.__name__ and not owner.startswith(module.__name__ + "."):
+            continue
+        if meta.tables.get(table.name) is table:
+            meta.remove(table)
+            dropped += 1
+        # 类名注册表（declarative registry）里的引用一并摘掉，否则重新 import 时
+        # 会刷「same class name and module name … will be replaced」警告。
+        # _dispose_cls 是 SQLAlchemy 的官方清理入口：短名与 module.Class 两条
+        # 引用（含 _MultipleClassMarker）都会按对象身份移除，不误删其他扩展的同名类。
+        try:
+            dispose = getattr(getattr(Base, "registry", None), "_dispose_cls", None)
+            if callable(dispose):
+                dispose(obj)
+        except Exception:  # noqa: BLE001 - SQLAlchemy 内部结构变了也不影响功能
+            pass
+    return dropped
+
+
+def purge_extension_modules(key: str) -> int:
+    """清理 ``sys.modules`` 中该扩展的模块子树（更新/卸载时调用）。
+
+    不清理的话，更新后 ``from . import crud`` 会命中旧子模块，热更新等于没更新。
+    同时把该扩展声明的表从共享 metadata 摘掉，否则重新 import models 会报
+    ``Table ... is already defined``。
+    """
+    prefix = extension_module_name(key)
+    removed = [n for n in list(sys.modules) if n == prefix or n.startswith(prefix + ".")]
+    for name in removed:
+        module = sys.modules.get(name)
+        if module is not None:
+            _detach_extension_tables(module)
+        sys.modules.pop(name, None)
+    return len(removed)
+
+
+def _load_module(file: Path, module_name: str, search_paths: list[Path] | None = None):
     """按文件路径加载 Python 模块（不依赖 sys.path）。
 
     必须先注册进 ``sys.modules`` 再 ``exec_module``：pydantic 2.11+ 不再从定义处
@@ -61,8 +133,15 @@ def _load_module(file: Path, module_name: str):
     ``from __future__ import annotations``（注解是字符串），未注册时模型会被标记为
     「待补全」，直到生成 /openapi.json 或首次校验时才炸 ``class not fully defined``——
     表现为路由能调通、但 ``/docs`` 整页 500。
+
+    search_paths: 传入时把该模块按**包**加载（``__path__`` 指向扩展目录），
+    扩展内的 ``from . import crud`` / ``from .models import X`` 才可用。
     """
-    spec = importlib.util.spec_from_file_location(module_name, file)
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        file,
+        submodule_search_locations=[str(p) for p in search_paths] if search_paths else None,
+    )
     if spec is None or spec.loader is None:
         raise ImportError(f"无法加载模块: {file}")
     module = importlib.util.module_from_spec(spec)
@@ -73,6 +152,27 @@ def _load_module(file: Path, module_name: str):
         sys.modules.pop(module_name, None)  # 半个模块留在 sys.modules 更糟
         raise
     return module
+
+
+@dataclass
+class LoadedExtension:
+    """一次扩展加载的结果（路由 + 模块 + 实际挂载数量）。"""
+
+    key: str
+    module: object | None = None
+    router: APIRouter | None = None
+    public_router: APIRouter | None = None
+    route_count: int = 0
+    extra: dict = field(default_factory=dict)
+
+
+def _route_keys(router: APIRouter) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for r in router.routes:
+        path = getattr(r, "path", "") or ""
+        for method in getattr(r, "methods", None) or {"GET"}:
+            keys.add((str(method).upper(), path))
+    return keys
 
 
 def _extension_route_target(route, key: str) -> bool:
@@ -94,6 +194,20 @@ def _extension_route_target(route, key: str) -> bool:
     return bool(path) and (path == prefix or path.startswith(prefix + "/"))
 
 
+def _app_route_keys(app: FastAPI, exclude_key: str | None = None) -> set[tuple[str, str]]:
+    """活 app 上已有的 (method, path)，用于挂载前冲突检查。"""
+    keys: set[tuple[str, str]] = set()
+    for route in app.router.routes:
+        if exclude_key and _extension_route_target(route, exclude_key):
+            continue
+        path = getattr(route, "path", "") or ""
+        if not path:
+            continue
+        for method in getattr(route, "methods", None) or {"GET"}:
+            keys.add((str(method).upper(), path))
+    return keys
+
+
 def unmount_extension_router(app: FastAPI, key: str) -> int:
     """从活的 app 中移除某扩展已挂载的路由（更新/卸载时调用）。
 
@@ -105,30 +219,37 @@ def unmount_extension_router(app: FastAPI, key: str) -> int:
     removed = len(routes) - len(keep)
     if removed:
         routes[:] = keep
+    # 扩展在 app.state 上挂的缓存一并清掉，避免卸载后残留对象
+    state = getattr(app, "state", None)
+    if state is not None:
+        for attr in list(vars(state)) if hasattr(state, "__dict__") else []:
+            if attr == f"ext_{key}" or attr.startswith(f"ext_{key}_"):
+                try:
+                    delattr(state, attr)
+                except AttributeError:
+                    pass
     return removed
 
 
-def mount_extension_router(app: FastAPI, key: str, ext_path: Path, auth_dependencies=None) -> bool:
-    """运行期热挂载单个扩展路由（先清除旧路由，支持更新/重装）。
+def load_extension(ext_path: Path, key: str) -> LoadedExtension | None:
+    """加载扩展模块并返回 router/public_router（无 router.py 返回 None）。
 
-    返回是否实际挂载（扩展无 router.py 时返回 False）。
+    不注册事件钩子——事件必须在路由挂载成功之后注册（见
+    :func:`mount_extension_router`），否则挂载失败会留下悬空订阅。
     """
-    if auth_dependencies is None:
-        from app.core.deps import get_current_user
-
-        auth_dependencies = [Depends(get_current_user)]
-    ext_router = load_extension_router(ext_path, key)
-    if ext_router is None:
-        return False
-    unmount_extension_router(app, key)
-    app.include_router(
-        ext_router,
-        prefix=f"/api/extensions/{key}",
-        tags=[f"ext-{key}"],
-        dependencies=[*auth_dependencies, Depends(require_extension(key))],
-    )
-    logger.info("[extension] 运行期热挂载扩展路由: /api/extensions/%s", key)
-    return True
+    router_file = ext_path / "router.py"
+    if not router_file.is_file():
+        return None
+    purge_extension_modules(key)
+    module = _load_module(router_file, extension_module_name(key), search_paths=[ext_path])
+    router = getattr(module, "router", None)
+    public_router = getattr(module, "public_router", None)
+    if router is None and public_router is None:
+        raise ImportError(f"扩展 {key} 的 router.py 未定义 router 或 public_router 对象")
+    for name, value in (("router", router), ("public_router", public_router)):
+        if value is not None and not isinstance(value, APIRouter):
+            raise ImportError(f"扩展 {key} 的 {name} 必须是 fastapi.APIRouter")
+    return LoadedExtension(key=key, module=module, router=router, public_router=public_router)
 
 
 def _register_events(module, key: str) -> None:
@@ -152,18 +273,78 @@ def _register_events(module, key: str) -> None:
 
 
 def load_extension_router(ext_path: Path, key: str) -> APIRouter | None:
-    """加载扩展的 router.py；无该文件返回 None。"""
-    router_file = ext_path / "router.py"
-    if not router_file.is_file():
+    """兼容入口：加载 router.py 并注册事件钩子，返回主 router。
+
+    新代码请用 :func:`load_extension` / :func:`mount_extension_router`。
+    """
+    loaded = load_extension(ext_path, key)
+    if loaded is None:
         return None
-    module = _load_module(router_file, f"cenkormes_ext_{key}")
-    router = getattr(module, "router", None)
-    if router is None:
-        raise ImportError(f"扩展 {key} 的 router.py 未定义 router 对象")
-    if not isinstance(router, APIRouter):
-        raise ImportError(f"扩展 {key} 的 router 必须是 fastapi.APIRouter")
-    _register_events(module, key)
-    return router
+    if loaded.module is not None:
+        _register_events(loaded.module, key)
+    return loaded.router
+
+
+def mount_extension_router(app: FastAPI, key: str, ext_path: Path, auth_dependencies=None) -> int:
+    """运行期热挂载单个扩展路由（先清除旧路由，支持更新/重装）。
+
+    返回实际挂载的路由数量（无 router.py 返回 0）。
+    挂载前做 (method, path) 冲突检查；挂载失败会反注册事件钩子。
+    """
+    if auth_dependencies is None:
+        from app.core.deps import get_current_user
+
+        auth_dependencies = [Depends(get_current_user)]
+
+    loaded = load_extension(ext_path, key)
+    if loaded is None:
+        return 0
+
+    existing = _app_route_keys(app, exclude_key=key)
+    planned: set[tuple[str, str]] = set()
+    if loaded.router is not None:
+        planned |= _route_keys(loaded.router)
+    if loaded.public_router is not None:
+        planned |= _route_keys(loaded.public_router)
+    conflicts = sorted(f"{m} {p}" for m, p in planned if (m, p) in existing)
+    if conflicts:
+        raise RuntimeError(f"扩展 {key} 路由与已挂载路由冲突: {', '.join(conflicts[:5])}")
+
+    unmount_extension_router(app, key)
+    prefix = f"/api/extensions/{key}"
+    mounted = 0
+    try:
+        if loaded.router is not None:
+            app.include_router(
+                loaded.router,
+                prefix=prefix,
+                tags=[f"ext-{key}"],
+                dependencies=[*auth_dependencies, Depends(require_extension(key))],
+            )
+            mounted += len(loaded.router.routes)
+        if loaded.public_router is not None:
+            # 公开路由只保留启用门禁，不强制登录（H5 填报/回调等场景）
+            app.include_router(
+                loaded.public_router,
+                prefix=prefix,
+                tags=[f"ext-{key}-public"],
+                dependencies=[Depends(require_extension(key))],
+            )
+            mounted += len(loaded.public_router.routes)
+    except Exception:
+        from .events import event_bus
+
+        event_bus.unsubscribe_extension(key)
+        raise
+    if loaded.module is not None:
+        _register_events(loaded.module, key)
+    runtime.interfaces[key] = {
+        "has_router": loaded.router is not None,
+        "has_public_router": loaded.public_router is not None,
+        "route_count": mounted,
+    }
+    logger.info("[extension] 运行期热挂载扩展路由 %d 条: %s", mounted, key)
+    return mounted
 
 
 def mount_extensions(app: FastAPI, base_dir: Path, auth_dependencies=None) -> None:
@@ -171,6 +352,7 @@ def mount_extensions(app: FastAPI, base_dir: Path, auth_dependencies=None) -> No
 
     auth_dependencies: 挂到每个扩展路由上的附加依赖；
     默认 ``[Depends(get_current_user)]``，测试场景可传入空列表或替代实现。
+    单个扩展加载/挂载失败只记日志，不阻塞其他扩展。
     """
     if auth_dependencies is None:
         from app.core.deps import get_current_user
@@ -184,77 +366,58 @@ def mount_extensions(app: FastAPI, base_dir: Path, auth_dependencies=None) -> No
 
     for key, info in runtime.installed.items():
         try:
-            ext_router = load_extension_router(info["path"], key)
-        except Exception as e:  # noqa: BLE001 - 单个扩展加载失败不影响其他扩展
+            mounted = mount_extension_router(
+                app, key, Path(info["path"]), auth_dependencies=auth_dependencies
+            )
+        except Exception as e:  # noqa: BLE001 - 单个扩展失败不影响其他扩展
             logger.error("[extension] 加载 %s 路由失败: %s", key, e)
+            _record_health(key, ok=False, error=str(e))
             continue
-        if ext_router is None:
-            continue
-        app.include_router(
-            ext_router,
-            prefix=f"/api/extensions/{key}",
-            tags=[f"ext-{key}"],
-            dependencies=[*auth_dependencies, Depends(require_extension(key))],
-        )
-        logger.info("[extension] 已挂载扩展路由: /api/extensions/%s", key)
+        if mounted:
+            logger.info("[extension] 已挂载扩展路由: /api/extensions/%s", key)
+            _record_health(key, ok=True)
 
 
-def _split_sql(sql_text: str) -> list[str]:
-    """按行尾分号拆分 SQL 语句（忽略空行与 ``--`` 注释）。
-
-    注意：仅支持简单语句，扩展迁移请避免使用含分号字符串/存储过程。
-    """
-    statements: list[str] = []
-    buffer: list[str] = []
-    for line in sql_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("--"):
-            continue
-        buffer.append(line)
-        if stripped.endswith(";"):
-            stmt = "\n".join(buffer).strip().rstrip(";").strip()
-            if stmt:
-                statements.append(stmt)
-            buffer = []
-    tail = "\n".join(buffer).strip().rstrip(";").strip()
-    if tail:
-        statements.append(tail)
-    return statements
-
-
-def run_extension_migrations(base_dir: Path, db: Session | None = None) -> None:
-    """执行已启用扩展的 ``migrations.sql``（幂等；按文件指纹记录）。
-
-    db: 传入则复用（测试用），否则自建 SessionLocal。
-    """
-    if runtime.store is None:
-        runtime.store = StateStore(base_dir / ".state")
-    applied: dict = runtime.store.load("migrations", {}) or {}
-
-    own_session = db is None
-    if own_session:
-        db = SessionLocal()
+def _record_health(key: str, *, ok: bool, error: str = "") -> None:
+    """把加载结果写进 ``.state/health.json``（失败不抛出）。"""
     try:
-        for key, info in runtime.installed.items():
-            if not runtime.is_enabled(key):
-                continue
-            file = Path(info["path"]) / "migrations.sql"
-            if not file.is_file():
-                continue
-            stat = file.stat()
-            fingerprint = f"{int(stat.st_mtime)}:{stat.st_size}"
-            if applied.get(key) == fingerprint:
-                continue
-            statements = _split_sql(file.read_text(encoding="utf-8"))
-            for stmt in statements:
-                db.execute(text(stmt))
-            db.commit()
-            applied[key] = fingerprint
-            logger.info("[extension] %s 迁移已执行（%d 条语句）", key, len(statements))
-        runtime.store.save("migrations", applied)
-    except Exception as e:  # noqa: BLE001 - 迁移失败记录日志，不阻塞启动
-        db.rollback()
-        logger.error("[extension] 执行扩展迁移失败: %s", e)
-    finally:
-        if own_session:
-            db.close()
+        if runtime.store is None:
+            return
+        from datetime import datetime, timezone
+
+        health = runtime.store.load("health", {}) or {}
+        health[key] = {
+            "ok": ok,
+            "error": error,
+            "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        runtime.store.save("health", health)
+    except Exception:  # noqa: BLE001 - 健康记录失败不影响加载
+        pass
+
+
+# ── 迁移（实现在 migrations.py，保留本模块历史入口）──────────────────────────
+
+def run_extension_migrations(
+    base_dir: Path,
+    db: Session | None = None,
+    *,
+    only_key: str | None = None,
+    force: bool = False,
+) -> dict[str, dict]:
+    """执行扩展迁移（按 key 独立事务；单扩展失败不阻塞其他扩展）。
+
+    only_key: 只跑该扩展（安装/更新/修复时用）。
+    force: 跳过 ``is_enabled`` 门禁（安装瞬间授权快照可能尚未刷新）。
+    """
+    from .migrations import run_migrations
+
+    return run_migrations(base_dir, db=db, only_key=only_key, force=force)
+
+
+def run_extension_migrations_for(key: str, db: Session | None = None, *, force: bool = True) -> dict:
+    """只跑单个扩展迁移（安装/更新/修复）。"""
+    base = runtime.extensions_dir
+    if base is None:
+        raise RuntimeError("扩展宿主尚未初始化（runtime.extensions_dir 为空）")
+    return run_extension_migrations(base, db=db, only_key=key, force=force).get(key, {})

@@ -34,12 +34,26 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.core.deps import get_db
+from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.extension_host.host import (
     extensions_base_dir,
     hot_setup_extension,
     hot_teardown_extension,
+)
+from app.extension_host.lifecycle import (
+    LifecycleError,
+    backup_target,
+    install_or_update,
+    preflight,
+    stage,
+    swap,
+    lifecycle_logs,
+    repair,
+    rollback,
+    set_enabled,
+    uninstall,
+    use_base,
 )
 from app.extension_host.loader import scan_extensions
 from app.extension_host.state import runtime
@@ -71,11 +85,18 @@ class HubIn(BaseModel):
 
 
 class InstallIn(BaseModel):
-    app_key: str = Field(min_length=1, max_length=64)
+    app_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    allow_downgrade: bool = False
 
 
 class UninstallIn(BaseModel):
-    app_key: str = Field(min_length=1, max_length=64)
+    app_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    purge: bool = False
+    confirm_key: str = ""
+
+
+# 生命周期动作统一要求 setting.manage（安装/卸载/启停/回滚/修复/清除都是高危操作）
+_LIFECYCLE_MGMT = [Depends(require_permissions(["setting.manage"]))]
 
 
 # ── 配置读写 helpers ─────────────────────────────────────────────────────────
@@ -547,6 +568,11 @@ def list_market_apps(db: Session = Depends(get_db)):
             # hub 若已下发 latest_version（同轴上架行里版本号最大的一条）就以它为准；
             # 老 hub 只有 version 时等价退回。绝不拿字符串不等当「有更新」。
             "latest_version": app.get("latest_version") or app.get("version", ""),
+            # 更新弹窗展示用：hub 目录已带 changelog / min_core_version / schema_version，
+            # 老 hub 缺字段时留空，前端按「未声明」降级展示。
+            "changelog": app.get("changelog") or "",
+            "min_core_version": app.get("min_core_version") or "",
+            "schema_version": app.get("schema_version"),
             "price": app.get("price"),
             "licensed": lic is not None,
             "license_state": (lic or {}).get("status", ""),
@@ -573,6 +599,9 @@ def list_market_apps(db: Session = Depends(get_db)):
             "category": "",
             # 不在目录里也要能提示更新：hub 的已购接口自带最新可分发版本，缺值就安静
             "latest_version": lic.get("latest_version") or "",
+            "changelog": lic.get("changelog") or "",
+            "min_core_version": lic.get("min_core_version") or "",
+            "schema_version": lic.get("schema_version"),
             "price": lic.get("price"),
             "licensed": True,
             "license_state": lic.get("status", ""),
@@ -600,6 +629,9 @@ def list_market_apps(db: Session = Depends(get_db)):
             "icon": getattr(manifest, "icon", "") or "",
             "category": getattr(manifest, "category", "") or "",
             "latest_version": installed_version,
+            "changelog": "",
+            "min_core_version": getattr(manifest, "min_core_version", "") or "",
+            "schema_version": getattr(manifest, "schema_version", None),
             "price": (lic or {}).get("price"),
             "licensed": lic is not None,
             "license_state": (lic or {}).get("status", ""),
@@ -610,6 +642,22 @@ def list_market_apps(db: Session = Depends(get_db)):
             "installed_version": installed_version,
             "enabled": runtime.is_enabled(key),
         })
+
+    # 生命周期登记字段（health/status/worker_restart_required…）合并进目录项，
+    # 前端卡片据此展示「已装版本 / 最新版本 / 健康 / 上次操作 / 需重启 worker」。
+    from app.extension_host.registry import registry_info
+
+    for item in items:
+        record = registry_info(item["key"]) or {}
+        item.setdefault("health", record.get("health") or "")
+        item["status"] = record.get("status") or ""
+        item["previous_version"] = record.get("previous_version") or ""
+        item["last_operation"] = record.get("last_operation") or ""
+        item["last_error"] = record.get("last_error") or ""
+        item["data_policy"] = record.get("data_policy") or "keep"
+        item["worker_restart_required"] = bool(record.get("worker_restart_required"))
+        item["multi_worker"] = bool(record.get("multi_worker"))
+        item["has_backup"] = bool(record.get("backup"))
 
     return ok({
         "items": items,
@@ -673,53 +721,59 @@ def _download_package(db: Session, app_key: str, license_key: str) -> tuple[byte
 
 
 def _install_extension(package_bytes: bytes, app_key: str) -> dict:
-    """解压并安装扩展包到 extensions/ 目录。"""
-    extensions_dir = extensions_base_dir()
-    extensions_dir.mkdir(parents=True, exist_ok=True)
+    """校验并落盘扩展包（staging → 备份 → 换入），不负责迁移与挂载。
 
-    with zipfile.ZipFile(BytesIO(package_bytes)) as zf:
-        manifest_data = None
-        for name in zf.namelist():
-            if name.endswith("/manifest.json") or name == "manifest.json":
-                manifest_data = json.loads(zf.read(name))
-                break
-        if not manifest_data:
-            raise HTTPException(status_code=400, detail="扩展包缺少 manifest.json")
-
-        pkg_key = manifest_data.get("key", "")
-        pkg_version = manifest_data.get("version", "")
-        if pkg_key != app_key:
-            raise HTTPException(status_code=400, detail=f"扩展 key 不匹配：{pkg_key} != {app_key}")
-
-        # 产品轴护栏：解压到 extensions/ 之前再认一次产品。错产品的包一旦落盘，
-        # 报错会推迟到 hot_setup 里 import 核心模型时，现场比 400 难查得多。
-        # 只在包自己声明了 product 才校验——mes-extensions 下 23 个包与现存扩展
-        # 都没写这个字段，写死 != 会让它们装不上。可信版见 install_app 里的 license.product。
-        pkg_product = manifest_data.get("product")
-        if pkg_product and pkg_product != PRODUCT:
-            raise HTTPException(
-                status_code=400, detail=f"扩展包产品不匹配：{pkg_product} != {PRODUCT}"
-            )
-
-        target_dir = extensions_dir / pkg_key
-        if target_dir.exists():
-            shutil.rmtree(target_dir)
-        for member in zf.namelist():
-            if "__MACOSX" in member or member.startswith("."):
-                continue
-            zf.extract(member, str(target_dir))
-        for f in target_dir.rglob("*"):
-            if f.is_file():
-                f.chmod(0o644)
-            elif f.is_dir():
-                f.chmod(0o755)
-
-        return {"key": pkg_key, "version": pkg_version, "path": str(target_dir)}
+    product 护栏、key 正则、zip 成员白名单、semver、核心版本、依赖与表冲突都在
+    ``preflight`` 里完成；任何一步失败都不会碰已装目录（不存在先删后解压）。
+    """
+    base = extensions_base_dir()
+    with use_base(base):
+        try:
+            pre = preflight(package_bytes, app_key, product=PRODUCT)
+            stage_dir = stage(package_bytes, pre)
+            live = base / pre.key
+            backup = backup_target(pre.key, "(previous)") if live.exists() else None
+            moved = swap(pre.key, stage_dir, backup)
+        except LifecycleError as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001 - 解压/落盘异常统一 400
+            raise HTTPException(status_code=400, detail=f"扩展包安装失败：{e}") from e
+    return {
+        "key": pre.key,
+        "version": pre.version,
+        "path": str(base / pre.key),
+        "sha256": pre.sha256,
+        "backup": moved.get("backup", ""),
+    }
 
 
-@router.post("/install")
-def install_app(payload: InstallIn, request: Request, db: Session = Depends(get_db)):
-    """从 hub 下载并安装扩展（需已购授权；热生效，无需重启）。"""
+def _actor(user) -> str:
+    name = getattr(user, "username", "") or getattr(user, "full_name", "") or ""
+    return str(name)
+
+
+def _lifecycle_error(e: LifecycleError) -> HTTPException:
+    return HTTPException(status_code=e.status_code, detail={"message": str(e), **e.extra})
+
+
+def _refresh_purchases(db: Session) -> None:
+    """安装完成后异步刷新已购快照（授权字段/最新版本号）。"""
+    try:
+        purchases = _fetch_purchases(db)
+        if purchases:
+            logger.info("market.purchases_refreshed count=%s", len(purchases))
+    except Exception as e:  # noqa: BLE001 - 刷新失败不影响安装结果
+        logger.warning("market.purchases_refresh_failed: %s", e)
+
+
+@router.post("/install", dependencies=_LIFECYCLE_MGMT)
+def install_app(
+    payload: InstallIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """从 hub 下载并安装/更新扩展（staging → 迁移 → 换入 → 挂载 → 健康检查）。"""
     purchases = _fetch_purchases(db)
     lic = _license_for(purchases, payload.app_key)
     if not lic or not lic.get("license_key"):
@@ -728,7 +782,6 @@ def install_app(payload: InstallIn, request: Request, db: Session = Depends(get_
     license_key = lic["license_key"]
     # 可信版产品轴：license.product 来自 hub 库里的签发记录（老 hub 不返回该字段则跳过），
     # 比包内自述的 manifest.product 更可信——前者是平台写的，后者是开发者写的。
-    # 放在激活/下载之前：不属于本产品的授权根本不该被 activate 绑到本实例上。
     lic_product = lic.get("product")
     if lic_product and lic_product != PRODUCT:
         raise HTTPException(
@@ -738,52 +791,121 @@ def install_app(payload: InstallIn, request: Request, db: Session = Depends(get_
     _activate_license(db, license_key, request)
     package_bytes, hub_product = _download_package(db, payload.app_key, license_key)
     # hub 随包下发的权威产品轴：对不写 manifest.product 的包同样生效
-    # （mes-extensions 那 23 个包都没写，只靠包内字段等于没拦）。
     if hub_product and hub_product != PRODUCT:
         raise HTTPException(
             status_code=400,
             detail=f"该应用包属于产品「{hub_product}」，与本实例「{PRODUCT}」不符",
         )
-    result = _install_extension(package_bytes, payload.app_key)
 
-    # 刷新运行时状态 + 运行期热挂载（迁移/权限/路由，无需重启）
-    scan_dir = runtime.extensions_dir or extensions_base_dir()
-    runtime.installed = scan_extensions(scan_dir)
-    hot_setup_extension(request.app, result["key"])
-
+    try:
+        result = install_or_update(
+            request.app,
+            package_bytes,
+            payload.app_key,
+            actor=_actor(user),
+            allow_downgrade=payload.allow_downgrade,
+            product=PRODUCT,
+        )
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    _refresh_purchases(db)
     return ok({
-        "message": "安装成功，已即时生效",
-        "key": result["key"],
-        "version": result["version"],
-        "path": result["path"],
+        "message": "安装成功，已即时生效" if result["action"] == "install" else "更新成功，已即时生效",
+        **result,
         "hot_loaded": runtime.is_enabled(result["key"]),
     })
 
 
-@router.post("/uninstall")
-def uninstall_app(payload: UninstallIn, request: Request):
-    """卸载已安装的扩展（删除 extensions/{key}/ 目录，热生效）。"""
-    app_key = payload.app_key
-    info = runtime.installed.get(app_key)
-    if not info:
-        raise HTTPException(status_code=404, detail="该扩展未安装")
+@router.post("/apps/{key}/install", dependencies=_LIFECYCLE_MGMT)
+def install_app_by_key(
+    key: str,
+    request: Request,
+    payload: InstallIn | None = None,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """RESTful 别名：安装/更新指定 key（body 可省略，默认不允许降级）。"""
+    return install_app(
+        payload or InstallIn(app_key=key), request, db=db, user=user
+    )
 
-    ext_path = Path(info["path"])
-    base = extensions_base_dir().resolve()
-    target = ext_path.resolve()
-    if base not in target.parents and target != base / app_key:
-        raise HTTPException(status_code=400, detail="非法的扩展路径，拒绝删除")
 
+@router.post("/uninstall", dependencies=_LIFECYCLE_MGMT)
+def uninstall_app(
+    payload: UninstallIn,
+    request: Request,
+    user=Depends(get_current_user),
+):
+    """卸载扩展：默认保留数据（keep），``purge=true`` 走彻底清除（需 confirm_key）。"""
     try:
-        shutil.rmtree(target)
-    except FileNotFoundError:
-        pass
-    except Exception as e:  # noqa: BLE001
-        logger.error("market.uninstall_remove_error: %s", e)
-        raise HTTPException(status_code=500, detail=f"删除失败：{e}")
+        result = uninstall(
+            request.app,
+            payload.app_key,
+            purge=payload.purge,
+            confirm_key=payload.confirm_key or None,
+            actor=_actor(user),
+        )
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    return ok(result)
 
-    scan_dir = runtime.extensions_dir or extensions_base_dir()
-    runtime.installed = scan_extensions(scan_dir)
-    hot_teardown_extension(request.app, app_key)
 
-    return ok({"message": "卸载成功，已即时生效", "key": app_key})
+@router.post("/apps/{key}/uninstall", dependencies=_LIFECYCLE_MGMT)
+def uninstall_app_by_key(
+    key: str,
+    request: Request,
+    payload: UninstallIn | None = None,
+    user=Depends(get_current_user),
+):
+    body = payload or UninstallIn(app_key=key)
+    return uninstall_app(body, request, user=user)
+
+
+@router.post("/apps/{key}/enable", dependencies=_LIFECYCLE_MGMT)
+def enable_app(key: str, request: Request, user=Depends(get_current_user)):
+    """软插：清 override，跑迁移/补权限，重新挂载路由与事件。"""
+    try:
+        result = set_enabled(request.app, key, True, actor=_actor(user))
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    return ok({"message": "已启用", **result})
+
+
+@router.post("/apps/{key}/disable", dependencies=_LIFECYCLE_MGMT)
+def disable_app(key: str, request: Request, user=Depends(get_current_user)):
+    """软拔：停门禁、摘路由/事件/任务，保留文件与数据。"""
+    try:
+        result = set_enabled(request.app, key, False, actor=_actor(user))
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    return ok({"message": "已禁用（文件与数据保留）", **result})
+
+
+@router.post("/apps/{key}/rollback", dependencies=_LIFECYCLE_MGMT)
+def rollback_app(key: str, request: Request, user=Depends(get_current_user)):
+    """回滚到最近备份版本；旧版不兼容新 schema 时保持新版并标记 rollback_blocked。"""
+    try:
+        result = rollback(request.app, key, actor=_actor(user))
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    return ok({"message": "已回滚", **result})
+
+
+@router.post("/apps/{key}/repair", dependencies=_LIFECYCLE_MGMT)
+def repair_app(key: str, request: Request, user=Depends(get_current_user)):
+    """修复：目录丢失从备份还原，补迁移/补权限，重新挂载并健康检查。"""
+    try:
+        result = repair(request.app, key, actor=_actor(user))
+    except LifecycleError as e:
+        raise _lifecycle_error(e) from e
+    return ok({"message": "修复完成", **result})
+
+
+@router.get("/lifecycle/logs", dependencies=_LIFECYCLE_MGMT)
+def get_lifecycle_logs(
+    limit: int = 100,
+    key: str | None = None,
+):
+    """生命周期审计（谁、何时、从哪个版本到哪个版本、结果、耗时、包 SHA）。"""
+    limit = max(1, min(int(limit or 100), 500))
+    return ok({"items": lifecycle_logs(limit=limit, key=key)})

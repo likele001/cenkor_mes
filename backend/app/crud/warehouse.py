@@ -141,6 +141,21 @@ def adjust_stock(
     )
     db.add(log)
     db.flush()
+    # 扩展接入点（只增不改）：commit 后异步广播库存变动，安全库存等扩展据此即时算预警；
+    # 没有订阅者时零成本，handler 异常不影响入账。
+    try:
+        from app.extension_host.events import event_bus
+
+        event_bus.emit_after_commit(db, "stock.changed", {
+            "warehouse_id": warehouse_id,
+            "sku_id": sku_id,
+            "change_qty": change_qty,
+            "balance_qty": int(s.qty or 0),
+            "biz_type": biz_type,
+            "biz_id": biz_id,
+        })
+    except Exception:  # pragma: no cover - 广播失败绝不能影响库存入账
+        pass
     return s
 
 

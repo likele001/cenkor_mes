@@ -179,6 +179,10 @@ python scripts/extension.py sync              # 手动触发一次心跳同步
 
 ### 九·2 安装 / 更新 / 卸载（2026-10-17 实测）
 
+> **已被「十一、全生命周期（插拔闭环 v2）」取代（2026-10-22）。** 下面记录的是 v1
+> 半开环实现（安装前 `rmtree` 旧目录、卸载只删目录 + 卸路由），仅作历史留档；
+> 现行安装/更新/卸载/回滚/修复语义见 `docs/EXTENSION_LIFECYCLE.md`。
+
 入口都在 admin「应用市场」页，对应 `POST /admin/market/install`、`POST /admin/market/uninstall`。
 **单进程 uvicorn 下全程热生效，不需要重启后端**；只有整进程重启才归运维手动执行。
 
@@ -425,3 +429,85 @@ def handler(event):
 - **样例包**：`backend/extensions_samples/hook_demo/`——`register_events` 订阅 `report.submitted`（写自有表 `ext_hook_demo_report_log`）+ `report.submitting`（演示「有不良品必须填备注」否决）。照抄即可起步。
 - **测试**：`backend/tests/test_extension_events.py`（总线语义 15 例）+ `test_extension_event_hooks.py`（端点级拦截/通知/样例 6 例）。均走 SQLite 夹具，不碰生产库。
 - **生效**：改完由运维**自行重启 cenkormes API**；扩展侧无需任何动作。
+
+## 十一、全生命周期（插拔闭环 v2，2026-10-22）
+
+> **本节取代「九·2 安装 / 更新 / 卸载」的旧描述。** 九·2 记录的是 v1 半开环实现（安装前
+> `rmtree` 旧目录、卸载只删目录 + 卸路由），仅作历史留档。现行行为以
+> `docs/EXTENSION_LIFECYCLE.md` 与 `backend/app/extension_host/lifecycle.py` 为准。
+
+### 十一·1 一次操作的五步
+
+| 步骤 | 做什么 | 失败时 |
+|---|---|---|
+| preflight | key 正则、manifest v2、product、semver、`min_core_version`、依赖、包 SHA256、zip 成员白名单、路由/菜单/权限/表名冲突 | 400/409，`extensions/` 目录零改动 |
+| stage | 解压到 `extensions/.staging/<key>-<version>-<uuid>/` | 删 stage，live 不动 |
+| backup | 旧目录复制到 `extensions/.backup/<key>/<version>-<ts>/`（保留最近 3 份） | 中止，live 不动 |
+| migrate + swap | 只跑该扩展的新迁移；`os.replace` 换入，第二步失败立即换回 | 自动回滚上一版并重新挂载 |
+| activate + health | 同步权限 → 挂路由 → 注册事件/任务 → 健康检查 → 写 registry/审计 | 回滚 + 写 `last_error` |
+
+不变量：live 目录永远是完整可运行版本；`.staging` 不扫描、不挂载、不进 registry；迁移成功前不换入。
+
+### 十一·2 卸载与彻底清除（默认保留数据）
+
+1. `runtime.retiring.add(key)`，`require_extension` 对新请求返回 503，等 2 秒排空。
+2. 从 `app.router.routes` 移除路由；`event_bus.unsubscribe_extension(key)`。
+3. 按 manifest `tasks.celery` 从 Celery 注册表移除，删 `beat_schedule` 里该 key 的条目；失败只记 `worker_restart_required`。
+4. 删 `role_permissions` 中 `ext.<key>.*` 的绑定，再删 `permissions` 同名权限点（不碰其他前缀）。
+5. 清 `sys.modules` 子树、`app.state` 缓存、`runtime.overrides[key]`。
+6. 目录移入 `extensions/.trash/<key>-<ts>/`；registry 标记 `uninstalled_keep`。
+7. `purge=true` + `confirm_key=<key>` 才彻底清除：先 JSONL 导出到 `data/.purge_backups/<key>-<ts>/`，再按依赖逆序 DROP **own 表**（manifest `mode=own` ∪ `migrations.sql` 的 `CREATE TABLE`，减核心表与其他扩展表 denylist），最后删 `data/<key>/` 与 state 记录；导出失败默认终止。
+
+重装：`keep` 状态下同 key 再装，表/文件/权限点原样复用，迁移按 `migrations` 已执行记录跳过，不重复建表、不清数据。
+
+### 十一·3 禁用 / 启用 / 回滚 / 修复
+
+- **禁用**（软拔）：停门禁、卸路由/事件/任务，保留文件、数据、权限点；`runtime.overrides[key]=false`。
+- **启用**（软插）：清 override、重新挂载、重注册事件/任务。
+- **回滚**：恢复 `.backup` 最近版本并重新挂载；若旧版不兼容新 schema（健康检查失败），保留新 schema 并标记 `rollback_blocked`，不强行降级。
+- **修复**：重新扫描 → 跑缺失迁移 → 补权限 → 重新挂载 → 健康检查。用于手工删目录、迁移中断、权限丢失。
+
+### 十一·4 迁移 v2
+
+```text
+migrations.sql               # 新装：只允许 CREATE TABLE IF NOT EXISTS / 安全索引 / 种子
+migrations/0002_add_xxx.py   # 存量升级：apply(db, ctx)，ctx 提供 add_column_if_missing 等
+migrations/0003_backfill.py
+```
+
+- 每个文件执行前校验 SHA256，已执行文件被篡改 → 阻止启动并标记 `broken`。
+- 每个扩展独立 try/except，一个失败不阻塞后续扩展；失败写 registry/health，不挂载新版本。
+- 只允许扩展式变更：新列可空、不删列、不改类型；破坏性清理放到下一个小版本。
+- 记录落 `.state/schema.json`（不新增核心表）；旧 `migrations.sql` 的 `mtime:size` 指纹继续保留兼容。
+
+### 十一·5 API 面
+
+| 方法 | 路径 | 作用 |
+|---|---|---|
+| GET | `/admin/market/apps` | 目录 + 已购 + 已装 + 健康 + 可更新 |
+| POST | `/admin/market/apps/{key}/install` | 安装/更新，返回 action/from/to/health/rollback |
+| POST | `/admin/market/apps/{key}/uninstall` | keep/purge，purge 需 `confirm_key` |
+| POST | `/admin/market/apps/{key}/enable` | 软插 |
+| POST | `/admin/market/apps/{key}/disable` | 软拔 |
+| POST | `/admin/market/apps/{key}/rollback` | 回滚最近备份 |
+| POST | `/admin/market/apps/{key}/repair` | 修复迁移/权限/挂载 |
+| GET | `/admin/market/lifecycle/logs` | 审计日志（`.state/lifecycle.jsonl`） |
+| GET | `/admin/extensions` | 合并 registry 的 version/health/data_policy/worker_restart_required |
+
+以上全部要求 `setting.manage` 权限，并注入操作人写审计。
+
+### 十一·6 前端与 worker
+
+- 安装/更新/卸载/清除/启停/回滚/修复后统一 `await auth.fetchMe(); await reloadExtensions(); await fetchApps()`，解决权限缓存导致菜单不出现。
+- 卸载后若当前路由属于该 key → `router.replace('/market')`。
+- Web 进程热生效；Celery worker/beat 是独立进程，操作后返回 `worker_restart_required=true`，UI 明示「后台任务需重启 worker 后生效」；多 worker 同上，不假装热生效。
+
+### 十一·7 自检命令
+
+```bash
+cd /www/wwwroot/mes-extensions && python3 pack.py --check                        # 打包闸门
+cd /www/wwwroot/mes-extensions && python3 _selftest/lifecycle_check.py --host    # 宿主契约自检
+cd /www/wwwroot/cenkormes/backend && .venv/bin/python -m pytest tests/test_extension_lifecycle.py -q
+```
+
+`pack.py v2` 额外校验：manifest v2 必填/命名空间/`data.tables` 命名/依赖格式、`migrations/` 版本连续且静态拒绝 `DROP/TRUNCATE/RENAME/ALTER DROP/MODIFY`、`frontend/plugin.js` 通过 `node --check`、README 恰好 10 节、zip 内无 `.bak/.pyc/__pycache__/.git`。

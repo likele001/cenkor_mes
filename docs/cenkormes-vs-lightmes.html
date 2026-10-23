@@ -169,7 +169,28 @@
   </div>
 </div>
 
-<h2>四、落地上建议</h2>
+<h2>四、扩展插拔闭环（2026-10-22 全量交付）</h2>
+<div class="card">
+  <p class="sub" style="margin-top:0"><b>判据</b>：安装失败是否影响存量、更新是否可回滚、卸载是否留残渣。三项全绿才算「闭环」，只做到「装上能用」是半开环。</p>
+  <table>
+    <thead><tr><th>能力</th><th>v1（2026-10-17 前）</th><th>v2（现行）</th></tr></thead>
+    <tbody>
+      <tr><td>安装/更新</td><td><span class="pill no">先删旧目录再解压</span></td><td><span class="pill ok">staging → 备份 → 迁移 → 换入 → 健康检查</span></td></tr>
+      <tr><td>失败处理</td><td><span class="pill no">旧版消失</span></td><td><span class="pill ok">自动回滚上一版并重新挂载</span></td></tr>
+      <tr><td>迁移</td><td><span class="pill half">单文件 migrations.sql + mtime:size</span></td><td><span class="pill ok">migrations/NNNN_*.py + ctx 幂等 DDL + SHA256 + 按 key 记录</span></td></tr>
+      <tr><td>卸载</td><td><span class="pill no">删目录 + 卸路由，权限点/模块/任务残留</span></td><td><span class="pill ok">停门禁排空 → 卸路由/事件/任务/权限/模块 → .trash</span></td></tr>
+      <tr><td>数据策略</td><td><span class="pill half">一律保留，无清除入口</span></td><td><span class="pill ok">默认 keep；purge 需 confirm_key + 输入 key + JSONL 备份 + own 表白名单</span></td></tr>
+      <tr><td>启停/回滚/修复</td><td><span class="pill no">无</span></td><td><span class="pill ok">enable / disable / rollback / repair 四个独立端点</span></td></tr>
+      <tr><td>权限与鉴权</td><td><span class="pill no">任意登录用户可装卸</span></td><td><span class="pill ok">全部要求 setting.manage + 操作人审计</span></td></tr>
+      <tr><td>前端</td><td><span class="pill no">只 reload 扩展，权限缓存不刷新</span></td><td><span class="pill ok">fetchMe + reloadExtensions + 路由回退</span></td></tr>
+      <tr><td>多 worker / Celery</td><td><span class="pill no">假装热生效</span></td><td><span class="pill ok">返回 worker_restart_required，UI 明示需人工重启</span></td></tr>
+    </tbody>
+  </table>
+  <p class="sub"><b>应用侧规模</b>：13 个新扩展（A 批 6 / B 批 4 / C 批 3）+ 2 个 AI SKU（pricing_ai、digital_twin）+ 2 项存量升级（qcode 2.1.0、notify_wecom_dingtalk 2.0.0），全部走 manifest v2；存量 29 个 v1 包继续兼容，不强制重发。</p>
+  <p class="sub"><b>文档</b>：<code>docs/EXTENSION_LIFECYCLE.md</code>（唯一权威）· <code>docs/EXTENSIONS.md</code> 十一节 · <code>mes-extensions/pack.py</code> v2 闸门。</p>
+</div>
+
+<h2>五、落地上建议</h2>
 <div class="card">
   <ul>
     <li><b>核心制造闭环</b>（计划/工单/报工/质量/库存/采购/财务/CRM/考勤/追溯）在独立版已完整，开源主干无需砍除。</li>
@@ -181,7 +202,7 @@
 </div>
 
 <footer>
-  数据来源：lightmes / cenkormes 服务端实际 Model、API 路由与 <code>services/ai</code> 模块比对 · 初次核查 2026-08-21 · <b>复核更新 2026-10-08</b>（更正 quotation/mold/spc 状态，新增 AI·排查诊断缺口与 10 个已交付扩展清单）· @router 计数为近似规模，非精确 endpoint。
+  数据来源：lightmes / cenkormes 服务端实际 Model、API 路由与 <code>services/ai</code> 模块比对 · 初次核查 2026-08-21 · <b>复核更新 2026-10-08</b>（更正 quotation/mold/spc 状态，新增 AI·排查诊断缺口与 10 个已交付扩展清单）· <b>复核更新 2026-10-22</b>（补充扩展插拔闭环 v2）· @router 计数为近似规模，非精确 endpoint。
 </footer>
 
 </div>
