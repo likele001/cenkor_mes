@@ -11,13 +11,14 @@ from datetime import date
 from decimal import Decimal
 from io import BytesIO
 
+import pytest
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.api.admin.finance.router import export_statements_api
 from app.api.admin.warehouse.router import export_stocks_api
+from app.core.config import settings
 from app.crud.warehouse import adjust_stock, create_warehouse
-from app.main import app
 from app.models.customer import Customer
 from app.models.finance import Statement
 from app.models.sku import Sku
@@ -41,7 +42,14 @@ def _sheet(resp) -> list[list]:
     return [list(row) for row in wb.active.iter_rows(values_only=True)]
 
 
-def _mounted_paths() -> set:
+@pytest.fixture
+def mounted_paths(monkeypatch) -> set:
+    # app.main 在 import 期执行 mount_all，会扫描并挂载本机真实扩展目录，把扩展表
+    # 注册进共享 Base.metadata，污染收集期已 import 的其它用例（迁移链断言会误报）。
+    # 因此惰性导入，并关掉扩展宿主——导出路由不依赖任何扩展。
+    monkeypatch.setattr(settings, "EXTENSIONS_ENABLED", False)
+    from app.main import app
+
     out: set = set()
 
     def walk(routes):
@@ -58,12 +66,12 @@ def _mounted_paths() -> set:
 
 # ── 库存导出 ──
 
-def test_stocks_export_route_mounted():
-    assert "/api/admin/warehouse/stocks/export" in _mounted_paths()
+def test_stocks_export_route_mounted(mounted_paths):
+    assert "/api/admin/warehouse/stocks/export" in mounted_paths
 
 
-def test_statements_export_route_mounted():
-    assert "/api/admin/finance/statements/export" in _mounted_paths()
+def test_statements_export_route_mounted(mounted_paths):
+    assert "/api/admin/finance/statements/export" in mounted_paths
 
 
 def test_stocks_export_streams_rows(session: Session, test_user, sku: Sku):

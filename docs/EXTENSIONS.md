@@ -501,6 +501,7 @@ migrations/0003_backfill.py
 - 安装/更新/卸载/清除/启停/回滚/修复后统一 `await auth.fetchMe(); await reloadExtensions(); await fetchApps()`，解决权限缓存导致菜单不出现。
 - 卸载后若当前路由属于该 key → `router.replace('/market')`。
 - Web 进程热生效；Celery worker/beat 是独立进程，操作后返回 `worker_restart_required=true`，UI 明示「后台任务需重启 worker 后生效」；多 worker 同上，不假装热生效。
+- worker/beat 进程启动时由宿主 import 全部已装扩展模块（`app.celery_app` 的 `worker_process_init` 与 DatabaseScheduler 的 `setup_schedule`/热重载），扩展的 `@shared_task` 与 `conf.beat_schedule` 自注册项（如 `stock_safety.scan`、qcode 任务）由此进入对应进程；beat 的调度表 = `cron_jobs` 表（DB 同名优先）+ 扩展自注册的 conf 条目，扩展更新后 10 秒内由热重载自动拾取，worker 侧用「系统 → 定时任务」页的 Worker 重启按钮生效。
 
 ### 十一·7 自检命令
 

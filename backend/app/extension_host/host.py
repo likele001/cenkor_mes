@@ -47,6 +47,35 @@ def mount_all(app) -> None:
         logger.info("[extension] 已发现 %d 个扩展: %s", len(runtime.installed), ", ".join(sorted(runtime.installed)))
 
 
+def import_extension_modules() -> dict:
+    """Worker / Beat 进程启动时 import 全部已装扩展模块（只注册任务，不挂路由）。
+
+    web 进程由 mount_all 加载扩展；worker/beat 只通过 ``celery -A app.celery_app``
+    启动、不会 import app.main，扩展的 ``@shared_task`` 与 conf.beat_schedule 自注册
+    必须由本函数补齐。幂等：进程启动与 beat 重载时均可重复调用。
+    """
+    if not settings.EXTENSIONS_ENABLED:
+        return {"ok": True, "loaded": [], "failed": {}, "reason": "disabled"}
+    base = extensions_base_dir()
+    if not base.is_dir():
+        return {"ok": True, "loaded": [], "failed": {}}
+    from .loader import load_extension, scan_extensions
+
+    loaded: list[str] = []
+    failed: dict[str, str] = {}
+    for key, info in scan_extensions(base).items():
+        try:
+            if load_extension(Path(info["path"]), key) is None:
+                continue  # 无 router.py 的纯数据扩展
+            loaded.append(key)
+        except Exception as e:  # noqa: BLE001 - 单个扩展失败不影响其它扩展与 worker 启动
+            failed[key] = str(e)
+            logger.error("[extension] worker/beat 导入 %s 失败: %s", key, e)
+    if loaded:
+        logger.info("[extension] worker/beat 已导入扩展模块 %d 个: %s", len(loaded), ", ".join(loaded))
+    return {"ok": True, "loaded": loaded, "failed": failed}
+
+
 def startup_host() -> None:
     """on_startup 调用：版本号 + 迁移 + 权限注入 + 启动授权到期门控线程（失败开放）。"""
     if not settings.EXTENSIONS_ENABLED:

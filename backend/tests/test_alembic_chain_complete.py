@@ -35,15 +35,35 @@ _LEGACY_ONLY = {
 }
 
 
+# 在子进程里加载全部核心模型：测试进程的 Base.metadata 会被收集期 import app.main
+# 的用例污染（本机装有真实扩展时 mount_all 会把扩展表注册进共享 metadata，
+# 迁移链断言随之误报），子进程只 import app.models，结果不受本进程污染影响。
+_IMPORT_MODELS = (
+    "import importlib, pkgutil\n"
+    "from app.models.base import Base\n"
+    "import app.models as _pkg\n"
+    "for mod in pkgutil.iter_modules(_pkg.__path__):\n"
+    "    importlib.import_module(f'app.models.{mod.name}')\n"
+    "from app.integration.crm_adapter import models  # noqa: F401\n"
+)
+
+
+def _run_models_subprocess(code: str, *argv: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-c", code, *argv],
+        cwd=BACKEND,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _all_model_tables() -> set[str]:
-    from app.models.base import Base
-
-    import app.models as _pkg
-    for mod in pkgutil.iter_modules(_pkg.__path__):
-        importlib.import_module(f"app.models.{mod.name}")
-    from app.integration.crm_adapter import models as _crm  # noqa: F401
-
-    return set(Base.metadata.tables)
+    """在独立子进程里收集核心模型表（见 _IMPORT_MODELS 注释）。"""
+    proc = _run_models_subprocess(
+        _IMPORT_MODELS + "print('\\n'.join(sorted(Base.metadata.tables)))\n"
+    )
+    assert proc.returncode == 0, f"子进程收集模型表失败：\n{proc.stderr[-4000:]}"
+    return set(proc.stdout.split())
 
 
 @pytest.fixture(scope="module")
@@ -73,13 +93,24 @@ def test_chain_builds_every_model_table(migrated_db):
 
 def test_chain_leaves_nothing_for_create_all_to_add(migrated_db):
     """链建完之后再跑 create_all，不该有任何新表——
-    这正是关掉 DB_AUTO_CREATE 的前提。"""
-    from app.models.base import Base
+    这正是关掉 DB_AUTO_CREATE 的前提。
 
+    同样在子进程里跑：本进程 metadata 若被扩展表污染，in-process create_all
+    会把扩展表也算进「额外建表」，误判迁移链缺内容。
+    """
     eng, built = migrated_db
-    before = set(built)
-    Base.metadata.create_all(bind=eng, checkfirst=True)
-    extra = set(inspect(eng).get_table_names()) - before
+    code = (
+        _IMPORT_MODELS
+        + "import sys\n"
+        "from sqlalchemy import create_engine, inspect\n"
+        "eng = create_engine(sys.argv[1])\n"
+        "before = set(inspect(eng).get_table_names())\n"
+        "Base.metadata.create_all(bind=eng, checkfirst=True)\n"
+        "print('\\n'.join(sorted(set(inspect(eng).get_table_names()) - before)))\n"
+    )
+    proc = _run_models_subprocess(code, str(eng.url))
+    assert proc.returncode == 0, f"子进程 create_all 检查失败：\n{proc.stderr[-4000:]}"
+    extra = set(proc.stdout.split())
     assert not extra, f"启动期 create_all 还会补建这些表，说明迁移链缺内容：{sorted(extra)}"
 
 

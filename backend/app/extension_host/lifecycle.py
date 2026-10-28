@@ -158,14 +158,6 @@ def core_table_names() -> set[str]:
         return set()
 
 
-def declared_tables(manifest: ExtensionManifest) -> set[str]:
-    return {
-        str(t.get("name")).strip()
-        for t in ((manifest.data or {}).get("tables") or [])
-        if isinstance(t, dict) and t.get("name")
-    }
-
-
 def own_tables(manifest: ExtensionManifest, ext_path: Path | None = None) -> set[str]:
     """own 表 = manifest 声明 mode=own ∪ migrations.sql 里的 CREATE TABLE。"""
     tables = {
@@ -189,15 +181,30 @@ def other_extension_tables(key: str) -> set[str]:
         if other_key == key:
             continue
         try:
-            tables |= declared_tables(info["manifest"])
             tables |= own_tables(info["manifest"], Path(info["path"]))
         except Exception:  # noqa: BLE001 - 单个扩展 manifest 异常不影响其他判断
             continue
     return tables
 
 
-def _check_table_conflicts(key: str, manifest: ExtensionManifest) -> None:
-    mine = declared_tables(manifest)
+def own_tables_from_zip(manifest: ExtensionManifest, zf: zipfile.ZipFile) -> set[str]:
+    """preflight 阶段没能解压落盘：own 表 = manifest mode=own ∪ 包内 migrations.sql。"""
+    tables = own_tables(manifest)
+    try:
+        sql = zf.read("migrations.sql").decode("utf-8")
+    except (KeyError, UnicodeDecodeError):
+        sql = ""
+    if sql:
+        tables |= set(_CREATE_TABLE_RE.findall(sql))
+    return tables
+
+
+def _check_table_conflicts(
+    key: str, manifest: ExtensionManifest, zf: zipfile.ZipFile | None = None
+) -> None:
+    # 只校验扩展真正拥有的表；manifest 里 mode=read/write 的是对核心表的引用，
+    # 属于预期内的读写依赖，不应参与冲突判断。
+    mine = own_tables_from_zip(manifest, zf) if zf is not None else own_tables(manifest)
     if not mine:
         return
     core = core_table_names()
@@ -300,7 +307,7 @@ def preflight(package_bytes: bytes, app_key: str, *, product: str = PRODUCT) -> 
             raise LifecycleError(f"扩展版本号不是 semver：{manifest.version!r}")
         _check_core_version(manifest)
         _check_dependencies(manifest)
-        _check_table_conflicts(manifest.key, manifest)
+        _check_table_conflicts(manifest.key, manifest, zf)
     return Preflight(
         key=manifest.key,
         version=manifest.version,
