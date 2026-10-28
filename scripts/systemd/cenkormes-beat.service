@@ -1,0 +1,23 @@
+# CenkorMES Celery Beat（DatabaseScheduler：从 cron_jobs 表读取调度）
+# 按实际部署路径调整 WorkingDirectory / ExecStart / User 后安装：
+#   cp scripts/systemd/cenkormes-beat.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now cenkormes-beat
+#
+# 单元名必须与 backend/.env 的 BEAT_SERVICE_NAME（默认 cenkormes-beat）一致，
+# 后台「定时任务」页的 Beat 重启通过 systemctl restart 该单元完成。
+[Unit]
+Description=CenkorMES Celery Beat Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=www
+WorkingDirectory=/www/wwwroot/cenkormes/backend
+Environment=PYTHONPATH=/www/wwwroot/cenkormes/backend
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/www/server/pyporject_evn/cenkormes/bin/celery -A app.celery_app beat -l info -S app.schedulers.database:DatabaseScheduler
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

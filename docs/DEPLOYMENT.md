@@ -175,6 +175,44 @@ npm run dev -- --port 5173          # 开发
 > 避免本机 8000 被其它项目占用时 `/api` 串到错误服务。
 > 生产构建不受影响：产物由 Nginx / 宝塔反代到真实后端端口。
 
+### 2.4 Celery Worker / Beat（异步任务与定时任务）
+
+薪资计算、自动化流水线、扩展包定时任务等依赖 Celery。Worker 消费队列，Beat 用
+`DatabaseScheduler` 从 `cron_jobs` 表读取调度；两者都不是 uvicorn 进程的一部分，需单独常驻。
+
+裸机 / 宝塔可直接使用仓库模板（先按实际路径修改 `WorkingDirectory`、`ExecStart`、`User`）：
+
+```bash
+cp scripts/systemd/cenkormes-celery.service /etc/systemd/system/
+cp scripts/systemd/cenkormes-beat.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now cenkormes-celery cenkormes-beat
+```
+
+> Worker 重启走 Celery 控制通道，Beat 重启走 Redis 退出信号（beat 自行退出、
+> systemd `Restart=always` 拉起），**全程不需要 root / sudo / polkit**——
+> 后端以 `www` 用户运行即可。
+>
+> Worker 的 `-n` 主机名必须以 `CELERY_WORKER_PREFIX`（默认 `cenkormes_worker@`）开头，
+> Beat 单元名必须与 `BEAT_SERVICE_NAME`（默认 `cenkormes-beat`）一致，否则管理后台
+> 「系统 → 定时任务」页无法定向查看/重启。一个 broker 上跑多个项目时，务必保留前缀，
+> 避免重启广播误伤其它项目的 Worker。
+
+管理后台的「定时任务」页提供 Worker / Beat 状态卡：
+
+- Worker 重启 = 广播 `shutdown`，处理完在飞任务后退出，由 systemd（`Restart=always`）拉起新代码；
+- Beat 重启 = 向 Redis（`REDIS_URL`）写 `celery:beat:shutdown` 退出信号，beat 的
+  `DatabaseScheduler` 每 10 秒检查一次，收到后退出并由 systemd 拉起新进程；
+  Beat 未运行时拒绝重启（需在服务器上手动启动）；
+- 后端轮询上限 45 秒（低于 nginx `proxy_read_timeout` 60s），失败会返回明确错误
+  而不是被 nginx 掐成 504；等待超时时会清掉残留退出信号，防止之后拉起的新 Beat
+  立刻再退一次；
+- **一次性引导**：升级到带退出信号检查的调度器后，正在运行的旧 Beat 不认识
+  `celery:beat:shutdown`，页面上点「重启 Beat」会报「未检测到新进程」。此时先手动
+  重启一次（`systemctl restart cenkormes-beat`），之后按钮长期可用；
+- 页面需要 `setting.manage` 权限；SaaS 模式下重启属平台运维，租户端只读；
+- Docker 部署若没有 systemd 单元，Beat 卡会显示「未安装」，请把两个进程作为独立服务/容器常驻。
+
 ---
 
 ## 3. 一条开发命令（本地）
@@ -303,6 +341,9 @@ H5 同理（`server_name h5.example.com`，`proxy_pass http://127.0.0.1:8081`）
 | `PUBLIC_BASE_URL` | — | 对外访问地址（打印/分享/回调） |
 | `STORAGE_DRIVER` | `local` | 存储驱动：local / aliyun_oss / tencent_cos / qiniu |
 | `REDIS_URL` / `CELERY_*` | — | Redis 与 Celery 任务队列 |
+| `CELERY_WORKER_PREFIX` | `cenkormes_worker@` | 管理后台托管的 Worker 主机名前缀；留空关闭 Worker 管理（防误伤其它项目） |
+| `CELERY_WORKER_SERVICE` | `cenkormes-celery` | Worker 的 systemd 单元名，仅用于页面离线提示 |
+| `BEAT_SERVICE_NAME` | `cenkormes-beat` | Beat 的 systemd 单元名；留空关闭 Beat 管理 |
 
 ---
 

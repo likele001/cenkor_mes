@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://127.0.0.1:6379/1"
     CELERY_TIMEZONE: str = "Asia/Shanghai"
     CELERY_ENABLE_UTC: bool = True
+    # 管理后台「定时任务」页的 Worker/Beat 运维：Worker 按主机名前缀定向，
+    # 前缀留空则关闭托管（避免误伤同 broker 的其它项目）；Beat 用 systemd 单元名。
+    CELERY_WORKER_PREFIX: str = "cenkormes_worker@"
+    CELERY_WORKER_SERVICE: str = "cenkormes-celery"
+    BEAT_SERVICE_NAME: str = "cenkormes-beat"
 
     # AI 配置层兜底（.env 提供默认值；平台「AI 网关/模型」页的 DB 配置优先）
     AI_ENABLED: bool = False                 # AI 总开关兜底（DB platform_ai_profiles.enabled 优先）

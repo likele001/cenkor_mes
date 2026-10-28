@@ -1,0 +1,23 @@
+# CenkorMES Celery Worker
+# 按实际部署路径调整 WorkingDirectory / ExecStart / User 后安装：
+#   cp scripts/systemd/cenkormes-celery.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now cenkormes-celery
+#
+# hostname 必须以 CELERY_WORKER_PREFIX（默认 cenkormes_worker@）开头，
+# 后台「定时任务」页的 Worker 重启只向该前缀的 worker 广播 shutdown。
+[Unit]
+Description=CenkorMES Celery Worker
+After=network.target
+
+[Service]
+Type=simple
+User=www
+WorkingDirectory=/www/wwwroot/cenkormes/backend
+Environment=PYTHONPATH=/www/wwwroot/cenkormes/backend
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/www/server/pyporject_evn/cenkormes/bin/celery -A app.celery_app worker -l info -Q celery -n cenkormes_worker@%%h
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
