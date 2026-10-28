@@ -19,9 +19,46 @@ export type CronJobOut = {
   updated_at: string | null
 }
 
+export type CronJobListOut = {
+  items: CronJobOut[]
+  /** SaaS 模式下 Worker/Beat 重启收敛平台运维 */
+  saas_mode?: boolean
+}
+
+export type WorkerStatusOut = {
+  ok: boolean
+  workers: Array<{
+    hostname: string
+    active_count: number
+    active_tasks: Array<{ name: string | null; time_start: number | null }>
+  }>
+  /** 托管的主机名前缀（CELERY_WORKER_PREFIX）；空 = 未启用管理 */
+  prefix?: string
+  configured?: boolean
+  /** systemd 单元名，用于离线提示 */
+  service?: string
+  server_time?: string
+  error?: string
+}
+
+export type BeatStatusOut = {
+  /** ActiveState === 'active' */
+  active: boolean
+  /** systemd ActiveState：active / inactive / failed / unknown / disabled */
+  state: string
+  started_at: string | null
+  uptime_seconds: number | null
+  /** systemd 单元名（BEAT_SERVICE_NAME） */
+  unit: string
+  configured?: boolean
+  /** 单元是否已安装（LoadState != not-found）；systemctl 异常时为 null */
+  installed?: boolean | null
+  load_state?: string
+}
+
 export const cronJobsApi = {
   list() {
-    return http.request<{ data: { items: CronJobOut[] } }>({
+    return http.request<CronJobListOut>({
       url: '/admin/cron-jobs',
       method: 'GET',
     })
@@ -37,6 +74,32 @@ export const cronJobsApi = {
     return http.request<{ msg: string }>({
       url: '/admin/cron-jobs/reload',
       method: 'POST',
+    })
+  },
+  workerStatus() {
+    return http.request<WorkerStatusOut>({
+      url: '/admin/cron-jobs/worker/status',
+      method: 'GET',
+    })
+  },
+  workerRestart() {
+    return http.request<{ ok: boolean; hosts: string[] }>({
+      url: '/admin/cron-jobs/worker/restart',
+      method: 'POST',
+    })
+  },
+  beatStatus() {
+    return http.request<BeatStatusOut>({
+      url: '/admin/cron-jobs/beat/status',
+      method: 'POST',
+    })
+  },
+  beatRestart() {
+    return http.request<{ ok: boolean; unit: string; started_at?: string }>({
+      url: '/admin/cron-jobs/beat/restart',
+      method: 'POST',
+      // 后端写信号后轮询等待新进程上线（最多约 60s），放长客户端超时避免误报
+      timeout: 90000,
     })
   },
 }

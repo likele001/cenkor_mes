@@ -123,6 +123,12 @@ def on_startup():
                     admin.roles = [admin_role]
                 logger.info("已创建默认管理员账号: admin / admin123")
 
+            # 定时任务默认配置（幂等：已存在的按 name 跳过）
+            from app.services.cron_job_seeder import seed_default_cron_jobs
+            added_cron = seed_default_cron_jobs(db)
+            if added_cron:
+                logger.info("已初始化 %d 个系统定时任务", added_cron)
+
             db.commit()
         finally:
             db.close()
