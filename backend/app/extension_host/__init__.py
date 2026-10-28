@@ -18,6 +18,7 @@ from .host import (  # noqa: F401
     extensions_base_dir,
     hot_setup_extension,
     hot_teardown_extension,
+    import_extension_modules,
     mount_all,
     set_extension_enabled,
     startup_host,

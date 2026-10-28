@@ -119,10 +119,14 @@ class MigrationContext:
         self.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
         return True
 
-    def create_index_if_missing(self, table: str, index: str, ddl: str) -> bool:
-        """``ddl`` 可为完整 ``CREATE INDEX ...`` 或列清单（自动拼 ``(ddl)``）。"""
+    def create_index_if_missing(
+        self, table: str, index: str, ddl: str | list[str] | tuple[str, ...]
+    ) -> bool:
+        """``ddl`` 可为完整 ``CREATE INDEX ...``、列清单字符串或列名列表。"""
         if self.index_exists(table, index):
             return False
+        if isinstance(ddl, (list, tuple)):
+            ddl = ", ".join(str(col) for col in ddl)
         stmt = ddl.strip()
         if stmt.upper().startswith("CREATE "):
             self.execute(stmt)

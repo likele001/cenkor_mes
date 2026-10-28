@@ -80,13 +80,18 @@ def _detach_extension_tables(module) -> int:
     meta = Base.metadata
     dropped = 0
     for obj in list(vars(module).values()):
-        if isinstance(obj, type):
-            table = getattr(obj, "__table__", None)
-            owner = getattr(obj, "__module__", "") or ""
-        elif isinstance(obj, Table):
-            table = obj
-            owner = module.__name__
-        else:
+        # celery.local.Proxy（@shared_task 装饰产物）在任务已被反注册后，
+        # isinstance 会触发惰性解析并抛 NotRegistered；跳过即可，本函数只摘表。
+        try:
+            if isinstance(obj, type):
+                table = getattr(obj, "__table__", None)
+                owner = getattr(obj, "__module__", "") or ""
+            elif isinstance(obj, Table):
+                table = obj
+                owner = module.__name__
+            else:
+                continue
+        except Exception:  # noqa: BLE001 - 惰性代理解析失败不影响表清理
             continue
         if table is None or getattr(table, "metadata", None) is not meta:
             continue
