@@ -7,8 +7,11 @@
 - 每一步都写文件日志（backend/data/upgrade_logs/{job_id}.log）并回写 DB 的 stage，
   前端靠轮询任务表 + 读日志展示进度；
 - 数据库备份失败立即中止，绝不带病继续；
-- 未配置 CENKORMES_RESTART_CMD 时停在 awaiting_restart，由运维手动重启，
-  避免「重启进程 = 杀掉本线程」导致任务永远停在 running。
+- 重启分两种模式：配置了 CENKORMES_RESTART_CMD 则执行该命令；未配置则「杀掉
+  8500 监听进程，由宝塔面板的项目守护进程在约 60s 内拉起」；
+- 重启会杀掉本进程，因此重启 + 健康校验交给一份独立会话的守护脚本执行，结果落盘
+  到 /tmp/cenkormes-upgrade-restart-{job}.json，下次访问任务接口或服务启动时由
+  reconcile_restarts() 回写最终状态，任务不会永远停在 running。
 """
 from __future__ import annotations
 
@@ -39,7 +42,10 @@ RESTART_CMD = os.environ.get("CENKORMES_RESTART_CMD", "")
 BACKEND_DIR = ROOT / "backend"
 ENV_FILE = BACKEND_DIR / ".env"
 HEALTH_URL = os.environ.get("CENKORMES_HEALTH_URL", "http://127.0.0.1:8500/api/health")
-VERIFY_TIMEOUT = 90
+BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
+# 杀进程后要等面板守护进程（约 60s 一轮）拉起，再留出应用启动时间
+VERIFY_TIMEOUT = 180
+RESTART_RESULT_DIR = Path("/tmp")
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 ACTIVE_STATUSES = ("pending", "running")
@@ -114,7 +120,9 @@ def check_update() -> dict:
         "current": current,
         "latest": latest,
         "has_update": has_update,
-        "restart_configured": bool(RESTART_CMD.strip()),
+        # 两种模式都能自动重启：自定义命令 / 杀进程后由面板守护进程拉起
+        "restart_configured": True,
+        "restart_mode": "cmd" if RESTART_CMD.strip() else "guard",
         "disk_free_gb": _disk_free_gb(),
     }
 
@@ -389,27 +397,14 @@ def _do_upgrade(db, job: UpgradeJob) -> None:
         raise RuntimeError(f"数据库迁移失败：{(res.stderr or res.stdout).strip()[:500]}")
     _log(jid, "迁移完成")
 
-    # 6) 重启
+    # 6) 重启：交给重启守护脚本（它会杀掉本进程），后续状态由 reconcile_restarts() 收尾
     _set(db, job, stage="restart")
     _log(jid, "步骤 6/7 重启后端")
-    if not _restart_backend(jid):
-        _log(jid, "未配置 CENKORMES_RESTART_CMD，停在 awaiting_restart，请手动重启后端后点「健康校验」")
+    if not _spawn_restart_guard(jid, job.to_version):
+        _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-
-    # 7) 健康校验
-    _set(db, job, stage="verify")
-    _log(jid, f"步骤 7/7 健康校验 {HEALTH_URL}（最多 {VERIFY_TIMEOUT}s）")
-    ok_, actual = _wait_healthy(job.to_version, VERIFY_TIMEOUT)
-    if ok_:
-        _log(jid, f"健康校验通过，版本 {actual}")
-        _set(db, job, status="success", stage="done")
-    else:
-        msg = f"健康校验失败：期望 {job.to_version}，实际 {actual or '无响应'}；建议执行回滚"
-        _log(jid, msg)
-        job.error = msg
-        _set(db, job, status="failed", stage="done")
-    job.finished_at = datetime.now()
+    _log(jid, "步骤 7/7 由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
     db.commit()
 
 
@@ -435,25 +430,12 @@ def _do_rollback(db, job: UpgradeJob, restore_db: bool) -> None:
         _log(jid, "数据库恢复完成")
 
     _set(db, job, stage="restart")
-    if not _restart_backend(jid):
-        _log(jid, "未配置 CENKORMES_RESTART_CMD，请手动重启后端后点「健康校验」")
+    if not _spawn_restart_guard(jid, job.to_version):
+        _log(jid, "重启脚本启动失败，请手动重启后端后点「健康校验」")
         job.status = "rolled_back"
         db.commit()
         return
-
-    _set(db, job, stage="verify")
-    ok_, actual = _wait_healthy(job.to_version, VERIFY_TIMEOUT)
-    if ok_:
-        _log(jid, f"回滚后健康校验通过，版本 {actual}")
-        job.status = "rolled_back"
-        job.stage = "done"
-    else:
-        msg = f"回滚后健康校验失败：期望 {job.to_version}，实际 {actual or '无响应'}"
-        _log(jid, msg)
-        job.status = "failed"
-        job.error = msg
-        job.stage = "done"
-    job.finished_at = datetime.now()
+    _log(jid, "代码与数据已回滚，由守护脚本重启并校验；最终状态约 60~180s 后回写")
     db.commit()
 
 
@@ -501,16 +483,218 @@ def _restore_database(job: UpgradeJob) -> None:
         raise RuntimeError(f"数据库恢复失败：{(res.stderr or '').strip()[:500]}")
 
 
-def _restart_backend(job_id: int) -> bool:
-    """执行重启命令；未配置返回 False（调用方置 awaiting_restart）。"""
-    cmd = RESTART_CMD.strip()
-    if not cmd:
+def _restart_result_path(job_id: int) -> Path:
+    return RESTART_RESULT_DIR / f"cenkormes-upgrade-restart-{job_id}.json"
+
+
+def _listener_pid(port: int = BACKEND_PORT) -> int | None:
+    """监听指定端口的进程 pid。本服务以 www 用户运行，能看自己的进程即可。"""
+    try:
+        out = subprocess.run(["ss", "-lntpH"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        if f":{port} " not in line:
+            continue
+        m = re.search(r"pid=(\d+)", line)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _build_restart_script(job_id: int, target_version: str, pid: int | None, py: Path, custom: str) -> str:
+    """生成重启守护脚本正文（独立会话执行，负责杀进程/重启/校验/落盘）。"""
+    log = _log_path(job_id)
+    result = _restart_result_path(job_id)
+    custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
+    return f"""#!/bin/bash
+JOB={job_id}
+TARGET='{target_version}'
+LOG='{log}'
+RESULT='{result}'
+PORT='{BACKEND_PORT}'
+PID='{pid or ""}'
+PY='{py}'
+CUSTOM='{custom_path if custom else ""}'
+export H='{HEALTH_URL}'
+ts() {{ date '+%Y-%m-%d %H:%M:%S'; }}
+say() {{ echo "[$(ts)] $*" >> "$LOG"; }}
+
+say "重启守护脚本启动：旧 pid=${{PID:-无}}，目标版本 $TARGET"
+rm -f '{LOCK_FILE}'
+sleep 2
+
+for u in cenkormes-celery cenkormes-beat; do
+  if sudo -n systemctl restart "$u" >/dev/null 2>&1; then
+    say "已重启 $u"
+  else
+    say "[警告] $u 未能自动重启（需给 www 用户 sudo 白名单），请手动执行 systemctl restart $u"
+  fi
+done
+
+if [ -n "$CUSTOM" ]; then
+  say "执行自定义重启命令：$CUSTOM"
+  bash "$CUSTOM" >> "$LOG" 2>&1 || say "[警告] 自定义重启命令返回非 0"
+  sleep 3
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+    say "旧进程仍在，兜底 kill -TERM $PID"
+    kill -TERM "$PID" >/dev/null 2>&1 || true
+  fi
+elif [ -n "$PID" ]; then
+  say "kill -TERM $PID（等面板项目守护进程拉起新进程）"
+  kill -TERM "$PID" >/dev/null 2>&1 || true
+  for i in $(seq 1 20); do
+    ss -lnt 2>/dev/null | grep -q ":$PORT " || break
+    sleep 1
+  done
+  if ss -lnt 2>/dev/null | grep -q ":$PORT "; then
+    say "[警告] 20s 内端口未释放，kill -9 $PID"
+    kill -9 "$PID" >/dev/null 2>&1 || true
+    sleep 3
+  fi
+else
+  say "端口 $PORT 未监听，交由面板守护进程拉起"
+fi
+
+OK=0
+ACTUAL=''
+for i in $(seq 1 60); do
+  ACTUAL=$("$PY" -c 'import json,os,urllib.request;d=json.load(urllib.request.urlopen(os.environ["H"],timeout=5));print((d.get("data") or dict()).get("version") or "")' 2>/dev/null)
+  if [ "$ACTUAL" = "$TARGET" ]; then OK=1; break; fi
+  sleep 3
+done
+
+if [ "$OK" = "1" ]; then
+  say "健康校验通过，当前版本 $ACTUAL"
+else
+  say "健康校验未通过：期望 $TARGET，实际 ${{ACTUAL:-无响应}}"
+fi
+{{
+  echo "ok=$OK"
+  echo "version=$ACTUAL"
+  echo "finished_at=$(ts)"
+}} > "$RESULT"
+"""
+
+
+def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
+    """写并启动重启守护脚本（独立会话，不会被本进程退出牵连）。
+
+    脚本负责：清理升级锁 → 重启 celery → 执行自定义重启命令或杀掉旧后端（交给
+    宝塔面板「项目守护进程」拉起）→ 轮询 /api/health 直到版本匹配 → 结果落盘。
+    因为重启必然杀掉本进程，任务最终状态由 reconcile_restarts() 依据结果文件回写。
+    """
+    pid = _listener_pid()
+    py = _venv_python()
+    log = _log_path(job_id)
+    result = _restart_result_path(job_id)
+    script = LOG_DIR / f"restart_{job_id}.sh"
+    custom = RESTART_CMD.strip()
+    custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
+
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        result.unlink(missing_ok=True)
+        if custom:
+            custom_path.write_text(custom + "\n", encoding="utf-8")
+    except OSError as exc:
+        _log(job_id, f"准备重启脚本失败：{exc}")
         return False
-    _log(job_id, f"执行重启命令：{cmd}")
-    # 独立会话启动：即便重启命令杀掉当前进程，子进程也不会被一起收走
-    with open(_log_path(job_id), "a", encoding="utf-8") as out:
-        subprocess.Popen(["bash", "-c", cmd], cwd=str(ROOT), stdout=out, stderr=out, start_new_session=True)
+
+    body = _build_restart_script(job_id, target_version, pid, py, custom)
+
+    try:
+        script.write_text(body, encoding="utf-8")
+        script.chmod(0o755)
+    except OSError as exc:
+        _log(job_id, f"写入重启脚本失败：{exc}")
+        return False
+
+    _log(
+        job_id,
+        f"启动重启守护脚本 {script}（{'自定义命令' if custom else '杀进程 + 面板守护拉起'}模式）",
+    )
+    try:
+        with open(log, "a", encoding="utf-8") as out:
+            # 独立会话：本进程被 kill 后，子进程仍继续执行重启与校验
+            subprocess.Popen(
+                ["bash", str(script)],
+                cwd=str(ROOT),
+                stdout=out,
+                stderr=out,
+                start_new_session=True,
+                close_fds=True,
+            )
+    except (OSError, subprocess.SubprocessError) as exc:
+        _log(job_id, f"启动重启脚本失败：{exc}")
+        return False
     return True
+
+
+def _read_restart_result(path: Path) -> dict[str, str] | None:
+    """读取守护脚本结果；finished_at 未出现说明脚本还没跑完。"""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if "finished_at=" not in text:
+        return None
+    data: dict[str, str] = {}
+    for line in text.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
+def reconcile_restarts(db) -> None:
+    """把重启守护脚本落盘的结果回写到任务表。
+
+    重启会杀掉本进程，执行线程随之消失，任务会停在 running/restart；
+    服务恢复后由任务接口（或启动钩子）调用本函数收尾。幂等，可反复调用。
+    """
+    rows = db.execute(
+        select(UpgradeJob).where(UpgradeJob.status == "running", UpgradeJob.stage == "restart")
+    ).scalars().all()
+    for job in rows:
+        data = _read_restart_result(_restart_result_path(job.id))
+        if data is None:
+            # 重启阶段最多几分钟；超过 15 分钟仍无结果，视为守护脚本异常，置失败解锁
+            started = job.started_at
+            if started and (datetime.now() - started).total_seconds() > 900:
+                job.status = "failed"
+                job.stage = "done"
+                job.error = "重启阶段超时（未收到守护脚本结果），请检查后端是否已启动，必要时执行回滚"
+                job.finished_at = datetime.now()
+                _log(job.id, job.error)
+                db.add(job)
+                db.commit()
+                try:
+                    LOCK_FILE.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            continue
+        actual = data.get("version") or None
+        if data.get("ok") == "1":
+            job.status = "rolled_back" if job.action == "rollback" else "success"
+            job.stage = "done"
+            job.error = None
+            _log(job.id, f"守护脚本回报：健康校验通过，当前版本 {actual}")
+        else:
+            job.status = "failed"
+            job.stage = "done"
+            job.error = (
+                f"重启后健康校验失败：期望 {job.to_version}，实际 {actual or '无响应'}；"
+                f"请查看升级日志，必要时执行回滚"
+            )
+            _log(job.id, job.error)
+        job.finished_at = datetime.now()
+        db.add(job)
+        db.commit()
+        try:
+            LOCK_FILE.unlink(missing_ok=True)  # 旧进程已被替换，残留锁一并清掉
+        except OSError:
+            pass
 
 
 def _probe_health(timeout: float = 5.0) -> dict | None:
