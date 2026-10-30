@@ -26,3 +26,8 @@ oss2>=2.18.0
 cos-python-sdk-v5>=1.9.30
 qiniu>=7.12.0
 pytest>=8.0.0
+# 迁移链/健康检查测试需要：alembic 跑 `python -m alembic upgrade head` 并 import alembic.config；
+# openai 是 app.services.ai.client 的硬依赖（from openai import OpenAI），
+# test_all_intra_app_imports_resolve 静态体检会真实 import 它。pin 到本地 venv 实测版本。
+alembic==1.13.0
+openai==1.40.0
