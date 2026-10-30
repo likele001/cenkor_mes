@@ -171,12 +171,15 @@ class LoadedExtension:
     extra: dict = field(default_factory=dict)
 
 
-def _route_keys(router: APIRouter) -> set[tuple[str, str]]:
+def _route_keys(router: APIRouter, prefix: str = "") -> set[tuple[str, str]]:
+    """路由声明期返回相对路径；冲突检查必须传 mount prefix，否则扩展内部的 ``/docs``
+    会被误判成和核心 Swagger ``/docs`` 冲突（实际挂在 ``/api/extensions/{key}/docs``）。"""
     keys: set[tuple[str, str]] = set()
     for r in router.routes:
         path = getattr(r, "path", "") or ""
+        full = f"{prefix}{path}" if path.startswith("/") else f"{prefix}/{path}" if path else prefix
         for method in getattr(r, "methods", None) or {"GET"}:
-            keys.add((str(method).upper(), path))
+            keys.add((str(method).upper(), full))
     return keys
 
 
@@ -250,7 +253,10 @@ def load_extension(ext_path: Path, key: str) -> LoadedExtension | None:
     router = getattr(module, "router", None)
     public_router = getattr(module, "public_router", None)
     if router is None and public_router is None:
-        raise ImportError(f"扩展 {key} 的 router.py 未定义 router 或 public_router 对象")
+        # 与「没有 router.py 的纯数据扩展」同等对待：router.py 只注册事件钩子/任务，
+        # 或显式写 ``router = None`` 时按无路由扩展加载，不让整包变 broken。
+        logger.warning("[extension] %s 的 router.py 未定义路由，按无路由扩展加载", key)
+        return LoadedExtension(key=key, module=module)
     for name, value in (("router", router), ("public_router", public_router)):
         if value is not None and not isinstance(value, APIRouter):
             raise ImportError(f"扩展 {key} 的 {name} 必须是 fastapi.APIRouter")
@@ -306,17 +312,17 @@ def mount_extension_router(app: FastAPI, key: str, ext_path: Path, auth_dependen
         return 0
 
     existing = _app_route_keys(app, exclude_key=key)
+    prefix = f"/api/extensions/{key}"
     planned: set[tuple[str, str]] = set()
     if loaded.router is not None:
-        planned |= _route_keys(loaded.router)
+        planned |= _route_keys(loaded.router, prefix)
     if loaded.public_router is not None:
-        planned |= _route_keys(loaded.public_router)
+        planned |= _route_keys(loaded.public_router, prefix)
     conflicts = sorted(f"{m} {p}" for m, p in planned if (m, p) in existing)
     if conflicts:
         raise RuntimeError(f"扩展 {key} 路由与已挂载路由冲突: {', '.join(conflicts[:5])}")
 
     unmount_extension_router(app, key)
-    prefix = f"/api/extensions/{key}"
     mounted = 0
     try:
         if loaded.router is not None:

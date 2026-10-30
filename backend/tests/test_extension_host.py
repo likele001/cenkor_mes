@@ -281,6 +281,36 @@ def test_unmount_handles_both_fastapi_route_shapes(tmp_path: Path):
     assert client.get("/api/extensions/demo_ext/ping").status_code == 404
 
 
+def test_extension_route_named_docs_does_not_conflict_with_swagger(tmp_path: Path):
+    """扩展内部的 /docs 挂在 /api/extensions/{key}/docs，不能和核心 Swagger /docs 误判冲突。"""
+    ext = _write_ext(tmp_path)
+    (ext / "router.py").write_text(
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n\n"
+        "@router.get('/docs')\n"
+        "def ext_docs():\n"
+        "    return {'ok': True}\n",
+        encoding="utf-8",
+    )
+    app = FastAPI()
+    mount_extensions(app, tmp_path, auth_dependencies=[])
+    client = TestClient(app)
+
+    assert client.get("/api/extensions/demo_ext/docs").json() == {"ok": True}
+    assert client.get("/docs").status_code == 200  # 核心 Swagger 不受影响
+
+
+def test_router_without_routes_loads_as_data_extension(tmp_path: Path):
+    """router.py 显式 router = None（只挂事件/任务）按无路由扩展加载，不再报 broken。"""
+    ext = _write_ext(tmp_path)
+    (ext / "router.py").write_text("router = None\n", encoding="utf-8")
+    app = FastAPI()
+    mount_extensions(app, tmp_path, auth_dependencies=[])
+
+    assert "demo_ext" in runtime.installed
+    assert runtime.interfaces["demo_ext"]["route_count"] == 0
+
+
 def test_sample_extension_package(tmp_path: Path):
     """仓库样例（extensions_samples/quotation_demo）可扫描/挂载/门控。"""
     shutil.copytree(SAMPLE_DIR, tmp_path / "quotation_demo")
