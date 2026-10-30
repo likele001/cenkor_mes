@@ -149,6 +149,7 @@ export type UpgradeInfoOut = {
   latest: string
   has_update: boolean
   restart_configured: boolean
+  restart_mode?: 'cmd' | 'guard' | string
   disk_free_gb: number | null
 }
 

@@ -70,14 +70,10 @@
           </div>
         </div>
         <div class="rounded-lg bg-gray-50 p-3">
-          <div class="text-xs text-gray-400">重启命令</div>
+          <div class="text-xs text-gray-400">重启方式</div>
           <div class="text-sm mt-0.5 flex items-center gap-2 flex-wrap">
-            <el-tag
-              size="small"
-              :type="upgradeInfo?.restart_configured ? 'success' : 'warning'"
-              effect="plain"
-            >
-              {{ upgradeInfo?.restart_configured ? '已配置' : '未配置（需手动重启）' }}
+            <el-tag size="small" type="success" effect="plain">
+              {{ upgradeInfo?.restart_mode === 'cmd' ? '自动（自定义命令）' : '自动（面板守护进程）' }}
             </el-tag>
             <span v-if="upgradeInfo?.disk_free_gb != null" class="text-xs text-gray-400">
               磁盘余量 {{ upgradeInfo.disk_free_gb }} GB
@@ -293,9 +289,10 @@ async function handleStartUpgrade() {
     ElMessage.warning('请先点击「检查更新」确认目标版本')
     return
   }
-  const restartTip = upgradeInfo.value?.restart_configured
-    ? '服务将自动重启并通过健康校验。'
-    : '未配置自动重启命令，升级完成后需手动重启后端。'
+  const restartTip =
+    upgradeInfo.value?.restart_mode === 'cmd'
+      ? '服务将执行自定义重启命令并通过健康校验，约 1~3 分钟。'
+      : '服务会自动重启（旧进程退出后由面板守护进程拉起）并通过健康校验，约 1~3 分钟。'
   try {
     await ElMessageBox.confirm(
       `确认升级到 ${target}？升级前会自动备份数据库，过程中服务可能短暂不可用。${restartTip}`,

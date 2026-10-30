@@ -161,6 +161,17 @@ def on_startup():
     except Exception as e:
         logger.warning("seed system versions failed: %s", e)
 
+    # 在线升级：若上次升级在重启阶段被中断，按守护脚本结果回填任务最终状态
+    try:
+        from app.services import upgrade_service
+        db = SessionLocal()
+        try:
+            upgrade_service.reconcile_restarts(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("reconcile upgrade jobs failed: %s", e)
+
     # 扩展宿主启动：执行扩展迁移 + 注入权限点 + 启动授权同步线程（异常不阻塞主流程）
     try:
         startup_host()

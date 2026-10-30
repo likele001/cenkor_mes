@@ -95,6 +95,7 @@ def list_jobs(
     _user: User = Depends(get_superuser),
 ):
     """最近 20 条任务。"""
+    upgrade_service.reconcile_restarts(db)  # 重启后旧进程线程已消失，这里补回任务状态
     rows = db.execute(select(UpgradeJob).order_by(UpgradeJob.id.desc()).limit(20)).scalars().all()
     return ok({"items": [_job_out(x) for x in rows]})
 
@@ -105,6 +106,7 @@ def get_job(
     db: Session = Depends(get_db),
     _user: User = Depends(get_superuser),
 ):
+    upgrade_service.reconcile_restarts(db)
     job = db.get(UpgradeJob, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="任务不存在")
