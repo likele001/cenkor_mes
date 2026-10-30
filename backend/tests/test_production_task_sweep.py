@@ -89,6 +89,7 @@ def test_task_dispatches_sweep_when_no_plan_id(monkeypatch):
 
 def test_task_still_accepts_explicit_plan(monkeypatch):
     import app.tasks.production as tp
+    import app.services.production_automation_settings as pas
 
     calls = []
 
@@ -97,6 +98,11 @@ def test_task_still_accepts_explicit_plan(monkeypatch):
         return {}
 
     monkeypatch.setattr(tp, "_run_scheduled_sweep", fake_sweep)
+    # 该函数内部自建 SessionLocal 连独立空库，get_automation_settings 会查不存在的表抛
+    # 异常，导致 run_schedule_pipeline 不被调用。本测试聚焦调度逻辑，隔离 settings 的 DB 依赖。
+    monkeypatch.setattr(
+        pas, "get_automation_settings", lambda db, tenant_id=1: {"on_plan_saved": {}}
+    )
     monkeypatch.setattr(
         pa,
         "run_schedule_pipeline",

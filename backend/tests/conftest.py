@@ -49,6 +49,14 @@ for _m in pkgutil.iter_modules(_models_full.__path__):
     except Exception as _e:  # noqa: BLE001 - 跳过缺依赖的历史模型模块
         print(f"[conftest] skip model {_m.name}: {_e}")
 
+# 扩展模型（如 extensions/abac/models.py）不在 app.models 包内，create_all 不会自动建表。
+# 若不显式注册，测试环境 SQLite 内存库缺失 ext_abac_* 表，ABAC provider 查表抛
+# OperationalError，被 abac_guard 的 fail-closed 折成 403，误杀所有管理端接口测试。
+try:
+    import extensions.abac.models  # noqa: F401
+except Exception as _e:  # noqa: BLE001
+    print(f"[conftest] skip extension model abac: {_e}")
+
 
 @pytest.fixture(scope="session")
 def engine():
