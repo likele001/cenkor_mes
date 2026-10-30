@@ -14,14 +14,6 @@ from app.schemas.system_version import SystemVersionOut
 router = APIRouter(tags=["admin-system-version"])
 
 
-def _get_edition() -> str:
-    try:
-        from app.core.edition import EDITION
-        return EDITION
-    except ImportError:
-        return "community"
-
-
 @router.get("/version")
 def get_version_info(
     db: Session = Depends(get_db),
@@ -32,10 +24,7 @@ def get_version_info(
     info = None
     if latest:
         info = SystemVersionOut.model_validate(latest).model_dump()
-    return ok({
-        "version": info,
-        "edition": _get_edition(),
-    })
+    return ok({"version": info})
 
 
 @router.get("/version/history")

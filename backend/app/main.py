@@ -1,5 +1,7 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,9 +63,20 @@ app.include_router(api_router, prefix="/api")
 mount_all(app)
 
 
+_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+
+
+def _read_version() -> str:
+    try:
+        return _VERSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "unknown"
+
+
 @app.get("/api/health")
 def health():
-    return ok({"status": "ok", "build": "20260727-cenkormes"})
+    version = _read_version()
+    return ok({"status": "ok", "build": version, "version": version})
 
 
 @app.exception_handler(HTTPException)
