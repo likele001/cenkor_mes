@@ -95,20 +95,11 @@ def require_any_permissions(required: list[str]):
 
 
 def require_pro(feature: str = "专业版功能"):
-    """open-core 授权门控：社区版（IS_PRO=False）访问专业版功能时返回 403。
+    """单版本（纯私有化）交付：不再区分社区版 / 专业版，所有功能默认开放。
 
-    专业版构建通过将 app/core/edition.py 的 IS_PRO 置为 True 解锁；
-    运行时读取该模块，便于 edition 覆盖后即时生效（需重启后端）。
+    保留该依赖签名以兼容既有路由声明（reports / exec_dashboard），实际不做拦截。
     """
     def _dep() -> None:
-        try:
-            from app.core.edition import IS_PRO
-        except ImportError:
-            IS_PRO = False
-        if not IS_PRO:
-            raise HTTPException(
-                status_code=403,
-                detail=f"「{feature}」为专业版(Pro)功能，当前社区版不可用。如需使用请升级专业版或购买对应扩展。",
-            )
+        return None
     return _dep
 

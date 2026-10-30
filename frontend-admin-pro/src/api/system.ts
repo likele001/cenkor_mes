@@ -144,6 +144,41 @@ export type CloudMigrationJob = {
   created_at?: string | null
 }
 
+export type UpgradeInfoOut = {
+  current: string
+  latest: string
+  has_update: boolean
+  restart_configured: boolean
+  disk_free_gb: number | null
+}
+
+export type UpgradeJobOut = {
+  id: number
+  action: 'upgrade' | 'rollback' | string
+  from_version: string
+  to_version: string
+  status: 'pending' | 'running' | 'awaiting_restart' | 'success' | 'failed' | 'rolled_back' | string
+  stage: string
+  from_ref: string | null
+  alembic_rev: string | null
+  backup_path: string | null
+  log_path: string | null
+  operator_id: number | null
+  error: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export type UpgradeLogOut = { content: string; offset: number; length: number }
+
+export type UpgradeVerifyOut = {
+  job_id: number
+  expected: string
+  actual: string | null
+  healthy: boolean
+  status: string
+}
+
 export const systemApi = {
   listUsers(params: any) {
     return http.request<ListResp<UserOut>>({ url: '/admin/system/users', method: 'GET', params })
@@ -457,5 +492,35 @@ export const systemApi = {
       url: '/admin/system/cloud-storage/migration/latest',
       method: 'GET',
     })
+  },
+  // ── 在线升级 / 回滚 ──
+  checkUpgrade() {
+    return http.request<UpgradeInfoOut>({ url: '/admin/system/upgrade/check', method: 'GET', timeout: 60000 })
+  },
+  startUpgrade(data: { target_version: string; skip_frontend?: boolean }) {
+    return http.request<UpgradeJobOut>({ url: '/admin/system/upgrade/start', method: 'POST', data })
+  },
+  listUpgradeJobs() {
+    return http.request<ListResp<UpgradeJobOut>>({ url: '/admin/system/upgrade/jobs', method: 'GET' })
+  },
+  getUpgradeJob(jobId: number) {
+    return http.request<UpgradeJobOut>({ url: `/admin/system/upgrade/jobs/${jobId}`, method: 'GET' })
+  },
+  getUpgradeJobLog(jobId: number, params?: { offset?: number; limit?: number }) {
+    return http.request<UpgradeLogOut>({
+      url: `/admin/system/upgrade/jobs/${jobId}/log`,
+      method: 'GET',
+      params,
+    })
+  },
+  verifyUpgradeJob(jobId: number) {
+    return http.request<UpgradeVerifyOut>({
+      url: `/admin/system/upgrade/jobs/${jobId}/verify`,
+      method: 'POST',
+      timeout: 60000,
+    })
+  },
+  rollbackUpgrade(data: { job_id: number; restore_db?: boolean }) {
+    return http.request<UpgradeJobOut>({ url: '/admin/system/upgrade/rollback', method: 'POST', data })
   },
 }

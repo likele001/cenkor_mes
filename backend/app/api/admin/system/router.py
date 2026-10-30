@@ -23,6 +23,7 @@ from app.api.admin.system.invites import router as invites_router
 from app.api.admin.system.codes import router as codes_router
 from app.api.admin.system.company_info import router as company_info_router
 from app.api.admin.system.version import router as version_router
+from app.api.admin.system.upgrade import router as upgrade_router
 
 
 router = APIRouter()
@@ -47,3 +48,4 @@ router.include_router(attachments_router, prefix="/attachments", tags=["admin-sy
 router.include_router(cloud_storage_router, prefix="/cloud-storage", tags=["admin-system-cloud-storage"])
 router.include_router(operation_logs_router, prefix="/operation-logs", tags=["admin-system-operation-logs"])
 router.include_router(version_router, tags=["admin-system-version"])
+router.include_router(upgrade_router, prefix="/upgrade", tags=["admin-system-upgrade"])
