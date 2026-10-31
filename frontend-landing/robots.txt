@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /assets/app.js
+
+Sitemap: https://standalone.mes.cenkor.cn/sitemap.xml
