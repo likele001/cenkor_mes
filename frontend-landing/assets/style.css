@@ -1050,10 +1050,10 @@ p code, li code, .flow-note code, .bd-card code, .card code {
   /* 窄屏下终端卡片改为折行，不横向撑破布局 */
   .term-body {
     white-space: pre-wrap;
-    word-break: break-all;
-    font-size: 11.5px;
+    overflow-wrap: break-word;
+    font-size: 11.6px;
     line-height: 1.85;
   }
-  .code pre { font-size: 11.8px; }
+  .code pre { font-size: 11.8px; white-space: pre-wrap; overflow-wrap: break-word; }
   .hero-facts { font-size: 12.5px; gap: 6px 14px; }
 }
