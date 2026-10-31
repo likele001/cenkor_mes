@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>CenkorMES 独立版 — 单租户私有部署 MES，AGPL-3.0 开源</title>
+<meta name="description" content="CenkorMES 独立版：单租户私有部署的工厂 MES，AGPL-3.0 开源。薄核心 + 扩展宿主架构，44 个可插拔扩展，587 个 API，Docker 一条命令部署：排产、工单、派工、扫码报工、质检、自动算薪、全程追溯。" />
+<meta name="keywords" content="CenkorMES,独立版,MES,制造执行系统,私有部署,开源,AGPL-3.0,扫码报工,计件工资,Docker,FastAPI,Vue3,工厂管理系统" />
+<meta name="author" content="Cenkor 辰科" />
+<link rel="canonical" href="https://standalone.mes.cenkor.cn/" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CenkorMES 独立版 — 装在自己服务器里的工厂 MES" />
+<meta property="og:description" content="单租户、薄核心、扩展可插拔，AGPL-3.0 开源。从产品工价到扫码报工到自动算薪，一条生产闭环跑完。" />
+<meta property="og:url" content="https://standalone.mes.cenkor.cn/" />
+<meta property="og:site_name" content="CenkorMES 独立版" />
+<meta name="theme-color" content="#070a0f" />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/assets/style.css?v=20261031a" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/">
+      <span class="brand-mark">CM</span>
+      <span>CenkorMES <em>独立版</em></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#core">核心能力</a>
+      <a href="#arch">架构</a>
+      <a href="/extensions.html">扩展生态</a>
+      <a href="/deploy.html">部署</a>
+      <a href="#boundary">边界</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/likele001/cenkor_mes" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn btn-primary btn-sm" href="https://ck.mes.cenkor.cn/" target="_blank" rel="noopener">进入后台</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>AGPL-3.0 · 单租户 · 私有部署</div>
+        <h1>工厂的活，<br /><span class="grad">装进自己的服务器</span></h1>
+        <p class="hero-sub">
+          CenkorMES 独立版是一套<strong>单租户私有部署</strong>的工厂 MES。薄核心只做生产闭环，
+          缺什么能力装什么扩展 —— 从产品工价到扫码报工到自动算薪，一条链路跑完，
+          数据一步不出厂。
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="/deploy.html">
+            部署到我的服务器
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="/extensions.html">看 44 个扩展</a>
+        </div>
+        <ul class="hero-facts">
+          <li>一条命令拉起全栈</li>
+          <li>核心代码可改</li>
+          <li>MySQL 8 + Redis</li>
+          <li>PC / H5 / 小程序三端</li>
+        </ul>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <i></i><i></i><i></i>
+          <span>deploy.sh — standalone</span>
+        </div>
+        <div class="term-body">
+<span class="c"># 1. 取代码</span>
+<span class="k">git</span> clone https://github.com/likele001/cenkor_mes.git
+<span class="k">cd</span> cenkor_mes
+
+<span class="c"># 2. 起全栈（后端 + MySQL + Redis + 后台 + H5）</span>
+<span class="k">docker</span> compose up -d <span class="s">--build</span>
+
+<span class="ok">✔</span> mysql        <span class="dim">8.0        ready</span>
+<span class="ok">✔</span> redis        <span class="dim">7-alpine   ready</span>
+<span class="ok">✔</span> backend      <span class="dim">:8000      healthy</span>
+<span class="ok">✔</span> web-admin    <span class="dim">:8080      ready</span>
+<span class="ok">✔</span> web-h5       <span class="dim">:8081      ready</span>
+
+<span class="c"># 3. 首启自动建表，登录改密码</span>
+<span class="v">admin</span> / <span class="v">admin123</span>  <span class="c">→ 请立即修改</span>
+        </div>
+        <div class="term-status">
+          <span class="pulse"></span>
+          <span>v2.2.0 · 44 个扩展可挂载 · 587 个 API</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat"><b>90<i> 页</i></b><span>PC 管理后台</span></div>
+      <div class="stat"><b>587<i> 个</i></b><span>后端 API 路由</span></div>
+      <div class="stat"><b>44<i> 个</i></b><span>可插拔扩展</span></div>
+      <div class="stat"><b>73<i> 个</i></b><span>数据模型模块</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="core">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-tag">核心闭环</span>
+      <h2>一条链路，从接单跑到算薪</h2>
+      <p>核心不追求大而全，只把中小加工厂每天都在跑的这一段做实：数据一次录入，后面每一步都沿着同一条链往下走，不靠表格搬。</p>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step"><span class="n">01</span><span class="t">产品型号</span></div>
+      <div class="flow-step"><span class="n">02</span><span class="t">工序工价</span></div>
+      <div class="flow-step"><span class="n">03</span><span class="t">客户订单</span></div>
+      <div class="flow-step"><span class="n">04</span><span class="t">生产工单</span></div>
+      <div class="flow-step"><span class="n">05</span><span class="t">任务派工</span></div>
+      <div class="flow-step"><span class="n">06</span><span class="t">扫码报工</span></div>
+      <div class="flow-step"><span class="n">07</span><span class="t">报工审核</span></div>
+      <div class="flow-step edge"><span class="n">08</span><span class="t">自动算薪</span></div>
+    </div>
+
+    <div class="flow-note">
+      <b>追溯</b>
+      <span><code>trace</code> 树贯穿任意节点：从一件成品往上查是哪批料、哪台设备、谁报的工、哪次检验；往下查这批料进了哪些订单。质检与防错挂在报工环节，不良直接进缺陷码统计。</span>
+    </div>
+
+    <div class="grid-3" style="margin-top: 40px">
+      <div class="card">
+        <div class="ic">📋</div>
+        <h3>计划与排产</h3>
+        <p>AP 计划 + 单计划确定性排产，按产能与交期给出可执行的日计划；工单拆分、任务派驻、跨工序流转都在同一张单上。</p>
+        <div class="meta"><span class="badge">核心内置</span><span class="badge">单层 MRP</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📱</div>
+        <h3>扫码报工</h3>
+        <p>员工端 H5 扫码即报，工位、数量、良品/不良、工时一并落库；班组长可代开临时报工单，一次性链接发给工人，报完自动转正式。</p>
+        <div class="meta"><span class="badge">H5 免登录填报</span><span class="badge">临时报工</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">🧾</div>
+        <h3>质检与不良</h3>
+        <p>检验模板、缺陷码、判定标准在核心，首末件与巡检记录挂在工单上；不良量、不良率、缺陷分布可一键导出。</p>
+        <div class="meta"><span class="badge">核心内置</span><span class="badge">SPC 可选</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">💰</div>
+        <h3>计件工资</h3>
+        <p>工序工价 × 审核通过量自动算薪，工资明细逐条可回溯到报工记录；计时工资走扩展，读考勤与时薪按人汇总。</p>
+        <div class="meta"><span class="badge">自动核算</span><span class="badge">可导出</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📦</div>
+        <h3>库存与采购</h3>
+        <p>出入库、领退料、发货单据齐全，采购单与供应商对账在核心；来料批次、安全库存预警、盘点、周转分析都是扩展。</p>
+        <div class="meta"><span class="badge">核心内置</span><span class="badge">批次走扩展</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">⚙️</div>
+        <h3>设备与班次</h3>
+        <p>设备台账、班次、生产日历内置；点检、保养、健康评分、能耗看板由扩展补齐，设备数据只读核心台账，不复制。</p>
+        <div class="meta"><span class="badge">核心内置</span><span class="badge">点检走扩展</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt" id="arch">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-tag">架构</span>
+      <h2>薄核心，扩展宿主</h2>
+      <p>核心只管闭环与地基，不认识任何扩展；扩展通过 manifest 声明自己需要什么，装的时候自动注册权限、菜单、迁移和前端插件，卸载自动清理。不需要的能力一行代码都不用装进来。</p>
+    </div>
+
+    <div class="arch">
+      <div class="arch-layer">
+        <div class="arch-head">
+          <span class="arch-tag">CLIENTS</span>
+          <h3>三端客户端</h3>
+          <p>同一套 API，三种使用场景。管理在电脑，报工在手机，审批在微信。</p>
+        </div>
+        <div class="chips">
+          <span class="chip">PC 管理后台 · Vue3 + Element Plus · 90 页</span>
+          <span class="chip">员工 / 客户端 H5 · Vue3 + Vant 4 · 22 页</span>
+          <span class="chip">微信小程序 · uni-app</span>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↓ &nbsp; HTTPS &nbsp; /api &nbsp; ↓</div>
+
+      <div class="arch-layer">
+        <div class="arch-head">
+          <span class="arch-tag">HOST</span>
+          <h3>扩展宿主</h3>
+          <p>manifest v2 声明 key / 版本 / 最低核心版本 / 权限 / 菜单 / 迁移 / 前端插件。装即注册，卸即清理；扩展之间只通过事件总线和只读核心 API 通信，互不依赖。</p>
+        </div>
+        <div class="chips">
+          <span class="chip">包式路由挂载</span>
+          <span class="chip">迁移随扩展走</span>
+          <span class="chip">前端插件注入</span>
+          <span class="chip">事件总线 / 订阅宿主事件</span>
+          <span class="chip">钩子监控</span>
+          <span class="chip">按扩展授权</span>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↓ &nbsp; 只读核心 API + 独立表 &nbsp; ↓</div>
+
+      <div class="arch-layer core">
+        <div class="arch-head">
+          <span class="arch-tag">CORE · AGPL-3.0</span>
+          <h3>薄核心 · 587 个 API · 73 个模型模块</h3>
+          <p>基础数据、订单、计划、工单、任务、报工、质检、追溯、工资、库存、采购、设备、审批流、CRM、消息中心、权限。这层代码开源，可改、可裁、可自建扩展。</p>
+        </div>
+        <div class="chips">
+          <span class="chip">FastAPI · SQLAlchemy · Celery</span>
+          <span class="chip">MySQL 8</span>
+          <span class="chip">Redis</span>
+          <span class="chip">Alembic 迁移</span>
+          <span class="chip">JWT + RBAC</span>
+          <span class="chip">审计日志</span>
+          <span class="chip">对象存储 OSS / COS / 七牛</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info" style="margin-top: 26px">
+      <span>ℹ️</span>
+      <span><b>自家扩展怎么写：</b>复制 <code>mes-extensions/TEMPLATE</code> 改一个 key 就能开工 —— manifest v2、包式 router、独立迁移、前端插件、10 节 README 都在模板里。不需要改核心一行代码。</span>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="ext">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-tag">扩展生态</span>
+      <h2>44 个扩展，按需挂载</h2>
+      <p>核心没有的，这里基本都有。AI 分析、行业包、质量工具、财务、仓储、通道通知 —— 装哪个就长哪个，不装就不占资源和菜单。</p>
+    </div>
+
+    <div class="grid-4" style="margin-bottom: 34px">
+      <div class="card" style="padding: 18px 20px"><h3 style="font-size: 14px; margin-bottom: 4px">AI 智能</h3><p style="font-size: 13px">10 个 · 助手 / 知识库 / 排产 / 预警</p></div>
+      <div class="card" style="padding: 18px 20px"><h3 style="font-size: 14px; margin-bottom: 4px">生产制造</h3><p style="font-size: 13px">11 个 · 行业包 / 安灯 / 孪生 / 模具</p></div>
+      <div class="card" style="padding: 18px 20px"><h3 style="font-size: 14px; margin-bottom: 4px">质量与设备</h3><p style="font-size: 13px">6 个 · SPC / 一物一码 / 点检 / 能耗</p></div>
+      <div class="card" style="padding: 18px 20px"><h3 style="font-size: 14px; margin-bottom: 4px">财务仓储</h3><p style="font-size: 13px">6 个 · 总账 / 对账 / 盘点 / 周转</p></div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="ic">🤖</div>
+        <h3>AI 助手（Agent 版）</h3>
+        <p>原生 function calling 多轮编排，内置只读业务查询工具：订单、工单、报工良率、设备、库存、质量缺陷帕累托。问一句就能查。</p>
+        <div class="meta"><span class="badge ai">AI</span><span class="badge">v1.3.1</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📚</div>
+        <h3>AI 知识库</h3>
+        <p>工艺规程、作业指导书、质量判定标准、设备手册沉成厂内知识库。向量优先、关键词兜底双通道检索，可见范围可限定。</p>
+        <div class="meta"><span class="badge ai">AI</span><span class="badge">v1.0.4</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📅</div>
+        <h3>AI 智能排产建议</h3>
+        <p>跨订单组合级排产诊断：按交期紧迫、产能吃紧、齐套缺口排序，叠加车间负荷与设备瓶颈，给出优先级与调整建议。</p>
+        <div class="meta"><span class="badge ai">AI</span><span class="badge">v1.0.1</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">🔗</div>
+        <h3>一物一码溯源</h3>
+        <p>活码页面、表单设计器、周期巡检、多级审批、状态流转看板、Webhook 投递日志、水印安全、标签打印，含 H5 免登录公开填报。</p>
+        <div class="meta"><span class="badge">质量</span><span class="badge">v2.1.1</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📈</div>
+        <h3>SPC 过程控制</h3>
+        <p>X̄-R / X̄-s 计量控制图与 p / np / c 计数控制图，自动算控制限、Cp / Cpk 过程能力，超限判异实时预警。</p>
+        <div class="meta"><span class="badge">质量</span><span class="badge">v1.0.1</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">🚨</div>
+        <h3>安灯呼叫看板</h3>
+        <p>缺料、设备、品质、技术支援一键呼叫，记录响应与处理时长，超时自动预警，按工位与类型出趋势。</p>
+        <div class="meta"><span class="badge">生产</span><span class="badge">v1.0.1</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">🏭</div>
+        <h3>数字孪生产线</h3>
+        <p>用布局、节点、连线把车间设备摆上画布，实时状态取自核心设备、点检与在制工单，支持在制数量、保养逾期、点检异常节点告警。</p>
+        <div class="meta"><span class="badge">生产</span><span class="badge">v1.0.0</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">💵</div>
+        <h3>ERP 总账与成本</h3>
+        <p>科目、凭证、试算平衡、科目余额表，固定资产与折旧，进销项发票与匹配，成本归集与利润表。全自建表，核心只读。</p>
+        <div class="meta"><span class="badge">财务</span><span class="badge">v1.0.0</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">🎯</div>
+        <h3>行业模板包</h3>
+        <p>家具、五金、电子、注塑、汽配、服装六套基础数据模板：工序、缺陷码、检验模板、打印报表，一键铺开再按需改。</p>
+        <div class="meta"><span class="badge">效率</span><span class="badge">v1.0.1</span></div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 36px">
+      <a class="btn btn-ghost" href="/extensions.html">
+        查看全部 44 个扩展
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt" id="multi">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-tag">多端协同</span>
+      <h2>同一个厂，三种屏幕</h2>
+      <p>管理在电脑上看全貌，工人在手机上扫码报数，老板在微信里审批。三端读同一份数据，不导出、不同步、不重复录。</p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <div class="ic">🖥️</div>
+        <h3>PC 管理后台</h3>
+        <p>Vue3 + Element Plus + Pinia + ECharts + bpmn-js，90 个功能页。排产、工单、审核、算薪、看板、流程都在这一端。</p>
+        <div class="meta"><span class="badge">90 页</span><span class="badge">ECharts 报表</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">📲</div>
+        <h3>员工 / 客户端 H5</h3>
+        <p>Vue3 + Vant 4，22 个页面。扫码报工、查任务、看工资条；客户端可查自己的订单进度与交期。</p>
+        <div class="meta"><span class="badge">22 页</span><span class="badge">扫码即用</span></div>
+      </div>
+      <div class="card">
+        <div class="ic">💬</div>
+        <h3>微信小程序</h3>
+        <p>uni-app 一套代码，工人在微信里直接报工与查看待办，不需要装 App。</p>
+        <div class="meta"><span class="badge">uni-app</span><span class="badge">免安装</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="boundary">
+  <div class="container">
+    <div class="sec-head">
+      <span class="sec-tag">适用范围</span>
+      <h2>我们做什么，不做什么</h2>
+      <p>写清楚边界，比多列十个功能有用。如果你的场景主要落在右边那几条，这套系统大概率不是最优解。</p>
+    </div>
+
+    <div class="boundary">
+      <div class="bd-card yes">
+        <h3><span class="mark">✓</span>适合这些情况</h3>
+        <ul>
+          <li>20–300 人的离散加工厂：五金、注塑、电子装配、汽配、服装、家具</li>
+          <li>生产数据不能出厂，必须落在自有机房或内网</li>
+          <li>厂里有服务器和能管运维的人，希望系统归自己管</li>
+          <li>需要改字段、改流程、对接自研 ERP 或设备系统</li>
+          <li>计件工资靠手工算，每月对账耗时且容易错</li>
+          <li>想做一物一码追溯，但不想被 SaaS 按码数收费</li>
+        </ul>
+      </div>
+      <div class="bd-card no">
+        <h3><span class="mark">—</span>不适合这些情况</h3>
+        <ul>
+          <li>需要多法人、多工厂合并报表（这是单租户，不做集团合并）</li>
+          <li>要做生产设备底层的实时数据采集网关（PLC 协议层不在范围内）</li>
+          <li>跨境电商、多币种结算、海外税务</li>
+          <li>没有任何运维能力，也不想碰服务器</li>
+          <li>要一套能覆盖全流程的完整 ERP（我们只把接单到算薪这一段做透）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <h2>先跑起来，再决定要不要扩展</h2>
+    <p>核心是 AGPL-3.0 开源的，克隆下来一条命令就能起。跑起来看合不合手，比看一百页介绍靠谱。</p>
+    <div class="cta-actions">
+      <a class="btn btn-primary btn-lg" href="/deploy.html">部署指南</a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/likele001/cenkor_mes" target="_blank" rel="noopener">GitHub 源码</a>
+      <a class="btn btn-ghost btn-lg" href="https://ck.mes.cenkor.cn/" target="_blank" rel="noopener">看在线后台</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <span class="brand-mark">CM</span>
+          <span>CenkorMES <em>独立版</em></span>
+        </a>
+        <p>单租户私有部署的工厂 MES。薄核心 + 扩展宿主，核心开源，数据自持。</p>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h4>产品</h4>
+          <ul>
+            <li><a href="/#core">核心闭环</a></li>
+            <li><a href="/#arch">架构说明</a></li>
+            <li><a href="/extensions.html">扩展清单</a></li>
+            <li><a href="/#boundary">适用范围</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>上手</h4>
+          <ul>
+            <li><a href="/deploy.html">部署指南</a></li>
+            <li><a href="/deploy.html#config">配置项</a></li>
+            <li><a href="/deploy.html#faq">常见问题</a></li>
+            <li><a href="https://ck.mes.cenkor.cn/" target="_blank" rel="noopener">在线后台</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>开源</h4>
+          <ul>
+            <li><a href="https://github.com/likele001/cenkor_mes" target="_blank" rel="noopener">GitHub 仓库</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/blob/master/LICENSE" target="_blank" rel="noopener">AGPL-3.0 许可</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/releases" target="_blank" rel="noopener">版本发布</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/issues" target="_blank" rel="noopener">问题反馈</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Cenkor 辰科 · CenkorMES 独立版 v2.2.0</span>
+      <span>核心代码以 AGPL-3.0 发布</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

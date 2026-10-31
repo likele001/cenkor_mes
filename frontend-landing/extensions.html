@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>扩展清单 — CenkorMES 独立版 44 个可插拔扩展</title>
+<meta name="description" content="CenkorMES 独立版扩展全清单：AI 智能 10 个、生产制造 11 个、质量 3 个、设备 3 个、仓储 3 个、采购 2 个、销售 2 个、财务 3 个、业务协同 2 个、系统通道 4 个、效率工具 1 个。manifest v2 挂载，装即注册、卸即清理。" />
+<meta name="keywords" content="CenkorMES 扩展,MES 扩展,AI 助手,SPC,安灯,数字孪生,一物一码,行业包,ERP 总账" />
+<link rel="canonical" href="https://standalone.mes.cenkor.cn/extensions.html" />
+<meta property="og:title" content="扩展清单 — CenkorMES 独立版 44 个可插拔扩展" />
+<meta property="og:description" content="AI 智能、生产制造、质量、设备、仓储、采购、销售、财务、系统通道，全部按需挂载。" />
+<meta name="theme-color" content="#070a0f" />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/assets/style.css?v=20261031a" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/">
+      <span class="brand-mark">CM</span>
+      <span>CenkorMES <em>独立版</em></span>
+    </a>
+    <nav class="nav-links">
+      <a href="/#core">核心能力</a>
+      <a href="/#arch">架构</a>
+      <a href="/extensions.html" class="active">扩展生态</a>
+      <a href="/deploy.html">部署</a>
+      <a href="/#boundary">边界</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/likele001/cenkor_mes" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"/></svg>
+        GitHub
+      </a>
+      <a class="btn btn-primary btn-sm" href="https://ck.mes.cenkor.cn/" target="_blank" rel="noopener">进入后台</a>
+    </div>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="container">
+    <div class="crumb"><a href="/">首页</a><span>/</span>扩展清单</div>
+    <h1>44 个扩展，装哪个长哪个</h1>
+    <p>每个扩展都是独立包：自带 manifest、迁移、权限、菜单和前端插件。装上自动注册，卸掉自动清理，核心代码一行不动。AI 类扩展在未配置模型时会自动降级到规则层，不会因为没接模型就用不了。</p>
+  </div>
+</section>
+
+<section class="section" style="padding-top: 44px">
+  <div class="container">
+
+    <div class="ext-toolbar">
+      <input class="ext-search" id="extSearch" type="search" placeholder="搜索扩展名称、key 或用途，例如：排产 / SPC / 报工" autocomplete="off" />
+      <div class="ext-filters" id="extFilters">
+        <button class="filter-btn on" data-cat="all">全部 44</button>
+        <button class="filter-btn" data-cat="ai">AI 智能 10</button>
+        <button class="filter-btn" data-cat="production">生产制造 11</button>
+        <button class="filter-btn" data-cat="quality">质量 3</button>
+        <button class="filter-btn" data-cat="equipment">设备 3</button>
+        <button class="filter-btn" data-cat="warehouse">仓储 3</button>
+        <button class="filter-btn" data-cat="purchase">采购 2</button>
+        <button class="filter-btn" data-cat="sales">销售 2</button>
+        <button class="filter-btn" data-cat="finance">财务 3</button>
+        <button class="filter-btn" data-cat="business">业务协同 2</button>
+        <button class="filter-btn" data-cat="system">系统通道 4</button>
+        <button class="filter-btn" data-cat="productivity">效率 1</button>
+      </div>
+    </div>
+
+    <!-- AI -->
+    <div class="ext-group" data-cat="ai">
+      <div class="ext-group-title"><h3>AI 智能</h3><span>10 个 · 全部支持无模型降级</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>AI 助手（对话 + 知识库）<code>ai_assistant</code></h4>
+          <p>Agent 版助手，原生 function calling 多轮编排。内置只读业务查询工具：订单、工单、报工良率、设备、库存、质量缺陷帕累托，支持跨扩展分析。</p>
+          <span class="ver">v1.3.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 知识库<code>ai_knowledge</code></h4>
+          <p>把工艺规程、作业指导书、质量判定标准、设备手册沉成可检索可问答的厂内知识库。向量优先、关键词兜底双通道检索，可见范围可限定。</p>
+          <span class="ver">v1.0.4</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 智能排产建议<code>ai_scheduling</code></h4>
+          <p>跨订单组合级排产诊断：按交期紧迫度、产能吃紧、齐套缺口排优先级，叠加车间负荷与设备可用性瓶颈，给出组合视图与调整建议。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 主动异常预警<code>ai_anomaly</code></h4>
+          <p>对报工、进度、交期、齐套、设备、质量六维做规则体检，落成可持续跟踪的预警中心：命中自动新增、复发自动重开、消失自动关闭。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 深度洞察<code>ai_insight</code></h4>
+          <p>质量、SPC、设备、交期产能、成本五条线的趋势与结构问题一键洞察。系统先只读聚合得到事实，再由模型转写成可读结论并留痕。</p>
+          <span class="ver">v1.0.3</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 场景文书<code>ai_scene_reports</code></h4>
+          <p>把交接班记录、待审报工批量摘要、订单交期风险分析三类高频手写文书，做成一键生成并自动归档。</p>
+          <span class="ver">v1.0.3</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 数字员工<code>ai_employee</code></h4>
+          <p>把一组只读巡检技能（生产日报、交期盯梢、齐套体检、设备可用性、质量异常、库存呆滞）编排成可一键委托的动作，每次执行落审计日志。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 报工视觉助手<code>mes_ai_vision</code></h4>
+          <p>拍照自动计数与缺陷分类：接入视觉大模型（OpenAI 兼容多模态），批量零件照片 AI 数数、不良品照片 AI 判缺陷类型。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>AI 报价助手<code>pricing_ai</code></h4>
+          <p>按 BOM 与最近采购价拆材料成本，按工序单价或标准工时拆加工成本，叠加制造费用率得总成本，再按最低/目标毛利算保本价与目标价。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>高级 BI · 自定义报表<code>exec_bi_enhance</code></h4>
+          <p>在核心经营指标之上提供自助分析：内置销售订单、订单明细、生产工单、回款流水四个白名单数据集，自选维度交叉分析。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 生产 -->
+    <div class="ext-group" data-cat="production">
+      <div class="ext-group-title"><h3>生产制造</h3><span>11 个 · 行业包与车间工具</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>安灯呼叫实时看板<code>andon</code></h4>
+          <p>缺料、设备、品质、技术支援一键呼叫，记录响应与处理时长，超时未响应自动预警，按工位与类型出趋势统计。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>数字孪生产线<code>digital_twin</code></h4>
+          <p>用布局、节点、连线把车间设备摆到画布上，实时状态取自核心设备、点检与在制工单，支持节点级告警与现场快照回放。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>生产异常排查预警<code>production_diagnosis</code></h4>
+          <p>规则 + 统计驱动：报工异常、进度滞后、交期风险、齐套缺口、设备停机、质量缺陷集中六维检测，输出风险评分与根因线索。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>服装纺织包<code>apparel_suite</code></h4>
+          <p>款-尺码-颜色 SKU 矩阵配比、裁床/裁剪单（层数、件数、面料批次）、打样单（头样/齐码样/产前样）跟踪。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>汽配行业包<code>auto_parts_suite</code></h4>
+          <p>IATF 16949 导向：检具量具台账与校准到期预警、PPAP/首末件档案与有效期预警、批次追溯要求。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>电子装配包<code>electronics_suite</code></h4>
+          <p>单板/整机序列号主档与生命周期状态（复用核心 trace_codes 做级联上溯下探）、MSD 湿敏器件车间寿命管理。</p>
+          <span class="ver">v1.0.2</span>
+        </div>
+        <div class="ext-item">
+          <h4>模具管理<code>mold_management</code></h4>
+          <p>注塑、压铸、五金模具全生命周期：台账登记、模次寿命追踪、到期保养预警、维保记录与工序绑定。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>设备产出与良率分析<code>equipment_productivity</code></h4>
+          <p>从设备/产线、工序、产品、报工人员四个维度透视产量、直通率 FPY 与计划达成率，日趋势与产能利用率一览。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>技能矩阵与多能工<code>skill_matrix</code></h4>
+          <p>技能字典、员工 × 技能矩阵、工序技能要求，自动分析多能工排行与工序技能缺口（哪些工序没人能干），为派工提供依据。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>临时报工<code>temp_report</code></h4>
+          <p>班组长代开临时报工单，生成一次性 H5 链接（免登录、凭 token、可设有效期），工人在手机上报数，管理端一键转正式报工。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>人员出勤与工时分析<code>workforce_attendance</code></h4>
+          <p>出勤人天、在岗工时、加班时长、人均产出（件/工时），按部门与个人透视，看清人力利用率与忙闲分布。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 质量 -->
+    <div class="ext-group" data-cat="quality">
+      <div class="ext-group-title"><h3>质量</h3><span>3 个 · 追溯、控制、成本</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>一物一码溯源采集<code>qcode</code></h4>
+          <p>活码页面、表单设计器、周期巡检、多级审批、回填、状态流转看板、Webhook 管理与投递日志、水印安全、标签打印，含 H5 免登录公开填报。</p>
+          <span class="ver">v2.1.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>SPC 过程控制<code>spc_control</code></h4>
+          <p>X̄-R / X̄-s 计量控制图与 p / np / c 计数控制图，自动计算控制限、Cp / Cpk 过程能力，超限判异实时预警。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>质量成本分析<code>quality_cost_analysis</code></h4>
+          <p>以 COQ 视角把不良数据换算成钱：报废与内部失败成本（报工不良量 × SKU 成本价，全链路回溯）、综合与工序不良率、缺陷帕累托。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设备 -->
+    <div class="ext-group" data-cat="equipment">
+      <div class="ext-group-title"><h3>设备</h3><span>3 个 · 点检、可靠性、能耗</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>设备点检<code>equipment_inspection</code></h4>
+          <p>按设备建点检计划（日/周/月），逐项录入合格与异常，自动汇总待检与异常趋势。设备台账只读核心表。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>设备健康与可靠性<code>equipment_health</code></h4>
+          <p>设备健康评分、MTBF / MTTR 可靠性指标、保养与点检到期漏检预警、点检合格率趋势。纯只读洞察，不改核心表结构。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>能耗监控与成本分析<code>energy_monitor</code></h4>
+          <p>水电汽等表计录入与能耗看板，按车间/区域与能源类型统计用量与成本，日/月趋势、环比、Top 耗能表计。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 仓储 -->
+    <div class="ext-group" data-cat="warehouse">
+      <div class="ext-group-title"><h3>仓储</h3><span>3 个 · 盘点、预警、周转</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>库存盘点<code>stock_check</code></h4>
+          <p>按仓库建盘点单，自动快照账面数，逐条录入实盘数，完成后差异一键入账（走核心 adjust_stock，留流水）。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>安全库存预警<code>stock_safety</code></h4>
+          <p>按 SKU / 仓库配置安全库存上下限，订阅宿主 stock.changed 事件即时算预警，每 5 分钟定时全量扫描兜底。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+        <div class="ext-item">
+          <h4>库存周转与呆滞分析<code>inventory_analysis</code></h4>
+          <p>库存金额、周转比、呆滞料识别、ABC 价值分级与出入库趋势，按品类与仓库透视，帮工厂降占用清呆滞。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 采购 -->
+    <div class="ext-group" data-cat="purchase">
+      <div class="ext-group-title"><h3>采购</h3><span>2 个 · 增强与供应商分析</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>采购增强（打印 / 来料批次）<code>purchase_plus</code></h4>
+          <p>订阅宿主 purchase.received 自动建来料批次，支持批次状态、来料标签、采购单打印与 PDF 数据、补同步。核心采购单只读。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>供应商交付与价格分析<code>purchase_supplier_analysis</code></h4>
+          <p>采购总览（采购额、收货完成率、退货率、供应商集中度 Top1）、供应商交付与采购额排名、物料价格区间与趋势。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 销售 -->
+    <div class="ext-group" data-cat="sales">
+      <div class="ext-group-title"><h3>销售</h3><span>2 个 · CRM 与交付履约</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>CRM 套件<code>crm_suite</code></h4>
+          <p>线索、商机、公海、报价、合同、回款、客户画像、售后、活动、目标、输赢单共 11 个页面，复用核心 CRM 62 条 API，只读聚合不改核心表。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>订单交期履约分析<code>delivery_ontime</code></h4>
+          <p>按客户与时间透视准点率 OTD、延期订单、平均延期天数、超期未交与生产周期，守住交期承诺、预警丢单风险。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 财务 -->
+    <div class="ext-group" data-cat="finance">
+      <div class="ext-group-title"><h3>财务</h3><span>3 个 · 总账、对账、人力成本</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>ERP 总账与成本<code>erp_finance</code></h4>
+          <p>科目、凭证、试算平衡、科目余额表，固定资产与折旧，进销项发票与匹配，成本归集与利润表。全自建 ext_erp_* 表。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>往来核对<code>finance_reconciliation</code></h4>
+          <p>客户与供应商往来对账只读看板：按期间汇总应收应付、已核销、未核销与账龄，列出已完工未对账订单，支持 CSV 导出。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>人力成本分析<code>labor_cost_analysis</code></h4>
+          <p>把计件工资明细、工资单与考勤聚合成经营视角：成本总览（计件/计时/奖金/扣款结构）、部门成本与人均、员工计件排名、工时产出效率。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 业务协同 -->
+    <div class="ext-group" data-cat="business">
+      <div class="ext-group-title"><h3>业务协同</h3><span>2 个 · 审批与计时工资</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>审批中心<code>approval_center</code></h4>
+          <p>复用核心 approval_flows 流程定义，自建实例、待办、已办、轨迹表，支持转办、驳回、撤销与审批后回调核心单据。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>计时工资<code>hourly_salary</code></h4>
+          <p>按月跑计时工资：读考勤与员工时薪，调用核心计时工资核对工时，按人汇总成工资运行单，确认后锁定；明细仍落核心 salary_items。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 系统通道 -->
+    <div class="ext-group" data-cat="system">
+      <div class="ext-group-title"><h3>系统与通道</h3><span>4 个 · 权限、通知、观测</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>数据权限（ABAC）<code>abac</code></h4>
+          <p>基于策略与主体绑定的数据权限。核心 authorization.abac_guard 征求策略，未安装时退回纯 RBAC；策略引擎异常按 fail-closed 拒绝。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>企微 / 钉钉通知通道<code>notify_wecom_dingtalk</code></h4>
+          <p>双通道消息推送：群机器人 Webhook、个人工作通知、OAuth 授权、消息卡片、审批回写、组织同步、静默时段与待发队列。</p>
+          <span class="ver">v2.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>公众号推送<code>wechat_mp_push</code></h4>
+          <p>公众号模板消息：模板管理、用户 openid 绑定、发送队列与回执日志。未配置 AppID / Secret 时只排队不发送，避免静默失败。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+        <div class="ext-item">
+          <h4>钩子监控<code>hook_monitor</code></h4>
+          <p>只读观测扩展事件总线：事件目录、最近分发记录、按事件与扩展聚合的成功率与耗时、当前订阅清单。不建表、不写数据。</p>
+          <span class="ver">v1.0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 效率 -->
+    <div class="ext-group" data-cat="productivity">
+      <div class="ext-group-title"><h3>效率工具</h3><span>1 个 · 行业基础数据</span></div>
+      <div class="ext-grid">
+        <div class="ext-item">
+          <h4>行业模板包<code>industry_templates</code></h4>
+          <p>内置家具、五金、电子、注塑、汽配、服装六套行业基础数据模板：工序、缺陷码、检验模板、打印与报表模板，外加建议工艺顺序。</p>
+          <span class="ver">v1.0.1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ext-empty" id="extEmpty">没有匹配的扩展，换个关键词试试。</div>
+
+    <div class="callout info" style="margin-top: 34px">
+      <span>ℹ️</span>
+      <span><b>关于授权：</b>核心代码以 AGPL-3.0 开源，可直接部署、修改与二次开发。扩展是独立包，部分为免费、部分需单独授权，具体以安装时的说明为准 —— 不装不影响核心闭环运行。</span>
+    </div>
+
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <h2>缺的那个能力，也可以自己写</h2>
+    <p>扩展模板在仓库里，manifest v2 加上包式 router、独立迁移和前端插件就能跑。不用等我们排期。</p>
+    <div class="cta-actions">
+      <a class="btn btn-primary btn-lg" href="/deploy.html">看部署方式</a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/likele001/cenkor_mes/tree/master/mes-extensions" target="_blank" rel="noopener">扩展开发模板</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="brand" href="/">
+          <span class="brand-mark">CM</span>
+          <span>CenkorMES <em>独立版</em></span>
+        </a>
+        <p>单租户私有部署的工厂 MES。薄核心 + 扩展宿主，核心开源，数据自持。</p>
+      </div>
+      <div class="footer-cols">
+        <div class="footer-col">
+          <h4>产品</h4>
+          <ul>
+            <li><a href="/#core">核心闭环</a></li>
+            <li><a href="/#arch">架构说明</a></li>
+            <li><a href="/extensions.html">扩展清单</a></li>
+            <li><a href="/#boundary">适用范围</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>上手</h4>
+          <ul>
+            <li><a href="/deploy.html">部署指南</a></li>
+            <li><a href="/deploy.html#config">配置项</a></li>
+            <li><a href="/deploy.html#faq">常见问题</a></li>
+            <li><a href="https://ck.mes.cenkor.cn/" target="_blank" rel="noopener">在线后台</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>开源</h4>
+          <ul>
+            <li><a href="https://github.com/likele001/cenkor_mes" target="_blank" rel="noopener">GitHub 仓库</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/blob/master/LICENSE" target="_blank" rel="noopener">AGPL-3.0 许可</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/releases" target="_blank" rel="noopener">版本发布</a></li>
+            <li><a href="https://github.com/likele001/cenkor_mes/issues" target="_blank" rel="noopener">问题反馈</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Cenkor 辰科 · CenkorMES 独立版 v2.2.0</span>
+      <span>核心代码以 AGPL-3.0 发布</span>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/app.js?v=20261031a"></script>
+</body>
+</html>
