@@ -153,5 +153,8 @@ backend/extensions/
 # 备份/临时副本(含带时间戳的 .bak-*)
 *.bak-*
 dist.bak*/
+# 在线升级的前端产物（临时构建目录 + 上一版备份）
+dist.__bak/
+.dist-build-*/
 refcopy
 docs/pending/process-manufacturing-product-plan.md

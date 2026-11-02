@@ -38,6 +38,7 @@ class StartIn(BaseModel):
 class RollbackIn(BaseModel):
     job_id: int
     restore_db: bool = False
+    skip_frontend: bool = False
 
 
 def _dt(value: datetime | None) -> str | None:
@@ -85,7 +86,7 @@ def start_upgrade(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     upgrade_service.log_note(job.id, f"skip_frontend={payload.skip_frontend}，操作人={user.username}")
-    upgrade_service.run_job(job.id)
+    upgrade_service.run_job(job.id, skip_frontend=payload.skip_frontend)
     return ok(_job_out(job))
 
 
@@ -151,7 +152,9 @@ def rollback(
 ):
     """按指定任务的 from_ref 回滚代码（可选恢复数据库备份）。"""
     try:
-        job = upgrade_service.rollback_job(db, payload.job_id, payload.restore_db)
+        job = upgrade_service.rollback_job(
+            db, payload.job_id, payload.restore_db, payload.skip_frontend
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     job.operator_id = user.id

@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -49,6 +50,8 @@ RESTART_RESULT_DIR = Path("/tmp")
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 ACTIVE_STATUSES = ("pending", "running")
+# nginx 直接服务 dist，代码升级后必须重建；只重建源码有改动的应用
+FRONTEND_APPS = (("frontend-admin-pro", "管理后台"), ("frontend-h5", "H5"))
 
 
 # ── 基础工具 ──────────────────────────────────────────────────────────
@@ -107,6 +110,23 @@ def _disk_free_gb() -> float | None:
         return None
 
 
+def working_tree_dirty() -> bool:
+    """tracked 文件是否有未提交改动（新日志/备份/构建产物均为 untracked，不阻塞升级）。"""
+    res = _run_cmd(
+        ["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
+        timeout=30,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"git status 失败：{(res.stderr or res.stdout).strip()[:300]}")
+    return bool(res.stdout.strip())
+
+
+def _assert_clean_tree(action: str) -> None:
+    """回滚用 checkout -f，会丢弃本地改动；升级 checkout 也可能把改动带进新版本。"""
+    if working_tree_dirty():
+        raise RuntimeError(f"工作区有未提交改动，不能{action}；请先提交或 stash 后再试")
+
+
 def check_update() -> dict:
     """当前版本 / 远端最新版本 / 是否可更新 / 重启命令是否配置 / 磁盘余量。"""
     current = read_local_version()
@@ -116,6 +136,10 @@ def check_update() -> dict:
         has_update = _tag_key(latest) > _tag_key(current)
     else:
         has_update = bool(tags) and latest != current
+    try:
+        dirty = working_tree_dirty()
+    except RuntimeError:
+        dirty = False
     return {
         "current": current,
         "latest": latest,
@@ -124,6 +148,7 @@ def check_update() -> dict:
         "restart_configured": True,
         "restart_mode": "cmd" if RESTART_CMD.strip() else "guard",
         "disk_free_gb": _disk_free_gb(),
+        "working_tree_dirty": dirty,
     }
 
 
@@ -272,6 +297,8 @@ def create_job(db, action: str, to_version: str, operator_id: int | None = None)
     to_version = (to_version or "").strip()
     if not VERSION_RE.match(to_version):
         raise ValueError("版本号格式不合法，应形如 v2.2.1")
+    if working_tree_dirty():
+        raise ValueError("工作区有未提交改动，请先提交或 stash 后再升级")
 
     active = db.execute(
         select(UpgradeJob).where(UpgradeJob.status.in_(ACTIVE_STATUSES))
@@ -303,14 +330,14 @@ def create_job(db, action: str, to_version: str, operator_id: int | None = None)
 # ── 执行入口 ─────────────────────────────────────────────────────────
 
 
-def run_job(job_id: int, restore_db: bool = False) -> threading.Thread:
+def run_job(job_id: int, restore_db: bool = False, skip_frontend: bool = False) -> threading.Thread:
     """守护线程执行任务；进程退出即中断（需要真重启时由 awaiting_restart 兜住）。"""
-    t = threading.Thread(target=_execute, args=(job_id, restore_db), daemon=True)
+    t = threading.Thread(target=_execute, args=(job_id, restore_db, skip_frontend), daemon=True)
     t.start()
     return t
 
 
-def _execute(job_id: int, restore_db: bool) -> None:
+def _execute(job_id: int, restore_db: bool, skip_frontend: bool = False) -> None:
     db = SessionLocal()
     fd = None
     try:
@@ -323,9 +350,9 @@ def _execute(job_id: int, restore_db: bool) -> None:
         db.commit()
         _log(job_id, "开始执行")
         if job.action == "rollback":
-            _do_rollback(db, job, restore_db)
+            _do_rollback(db, job, restore_db, skip_frontend)
         else:
-            _do_upgrade(db, job)
+            _do_upgrade(db, job, skip_frontend)
     except Exception as exc:  # 任何未捕获异常都要落到 failed，不能静默
         _log(job_id, f"执行中断：{exc}")
         try:
@@ -342,12 +369,115 @@ def _execute(job_id: int, restore_db: bool) -> None:
         db.close()
 
 
-def _do_upgrade(db, job: UpgradeJob) -> None:
+def _changed_frontend_apps(from_ref: str | None, to_ref: str | None) -> list[str]:
+    """两个 git ref 之间源码有改动的前端应用；ref 缺失时保守全量重建。"""
+    names = [name for name, _ in FRONTEND_APPS]
+    if not from_ref or not to_ref:
+        return names
+    res = _run_cmd(
+        ["git", "-C", str(ROOT), "diff", "--name-only", f"{from_ref}..{to_ref}", "--", *names],
+        timeout=120,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"比较前端源码改动失败：{(res.stderr or res.stdout).strip()[:300]}")
+    touched = {line.split("/", 1)[0] for line in res.stdout.splitlines() if line.strip()}
+    return [name for name in names if name in touched]
+
+
+def _npm_bin() -> str:
+    npm = shutil.which("npm")
+    if not npm:
+        raise RuntimeError("未找到 npm，无法重建前端；可勾选「跳过前端构建」后重试")
+    return npm
+
+
+def _build_frontend(app: str, job_id: int) -> Path:
+    """构建到临时目录，不碰线上 dist；返回临时产物目录。"""
+    app_dir = ROOT / app
+    if not (app_dir / "package.json").exists():
+        raise RuntimeError(f"{app} 缺少 package.json，无法构建")
+    npm = _npm_bin()
+    out_name = f".dist-build-{job_id}"
+    out_dir = app_dir / out_name
+    shutil.rmtree(out_dir, ignore_errors=True)
+    if not (app_dir / "node_modules").exists():
+        _log(job_id, f"{app}: node_modules 不存在，执行 npm ci")
+        res = _run_cmd([npm, "ci", "--no-audit", "--no-fund"], cwd=app_dir, timeout=1800)
+        _log(job_id, (res.stdout or "")[-1500:])
+        if res.returncode != 0:
+            raise RuntimeError(f"{app} 依赖安装失败：{(res.stderr or res.stdout).strip()[:500]}")
+    _log(job_id, f"{app}: npm run build -- --outDir {out_name}")
+    res = _run_cmd([npm, "run", "build", "--", "--outDir", out_name], cwd=app_dir, timeout=1800)
+    _log(job_id, (res.stdout or "")[-3000:])
+    if res.returncode != 0 or not (out_dir / "index.html").exists():
+        shutil.rmtree(out_dir, ignore_errors=True)
+        raise RuntimeError(f"{app} 构建失败：{(res.stderr or res.stdout).strip()[:500]}")
+    return out_dir
+
+
+def _promote_frontend(app: str, out_dir: Path, job_id: int) -> None:
+    """原子换入：线上 dist 改名为 dist.__bak，临时产物改名为 dist。"""
+    live = ROOT / app / "dist"
+    backup = ROOT / app / "dist.__bak"
+    shutil.rmtree(backup, ignore_errors=True)
+    if live.exists():
+        live.rename(backup)
+    out_dir.rename(live)
+    _log(job_id, f"{app}: 前端产物已换入 dist（旧版备份 dist.__bak）")
+
+
+def _prepare_frontends(
+    job: UpgradeJob,
+    from_ref: str | None,
+    to_ref: str | None,
+    *,
+    skip: bool,
+    strict: bool,
+) -> list[tuple[str, Path]]:
+    """构建受影响的前端到临时目录。
+
+    strict=False 时构建失败只告警并返回空列表（回滚场景：优先恢复代码，
+    线上 dist 保持原样总比停在半途好）。
+    """
+    if skip:
+        _log(job.id, "已跳过前端构建（skip_frontend）")
+        return []
+    apps = _changed_frontend_apps(from_ref, to_ref)
+    if not apps:
+        _log(job.id, "前端源码无改动，跳过构建")
+        return []
+    _log(job.id, "需要重建的前端：" + "、".join(apps))
+    built: list[tuple[str, Path]] = []
+    for app in apps:
+        try:
+            built.append((app, _build_frontend(app, job.id)))
+        except Exception as exc:  # noqa: BLE001 - 清理临时产物后按 strict 决定是否中止
+            for _, tmp in built:
+                shutil.rmtree(tmp, ignore_errors=True)
+            if strict:
+                raise
+            _log(job.id, f"[警告] {exc}；继续执行，线上 dist 保持原样")
+            return []
+    return built
+
+
+def _promote_frontends(built: list[tuple[str, Path]], job_id: int, *, strict: bool) -> None:
+    for app, out_dir in built:
+        try:
+            _promote_frontend(app, out_dir, job_id)
+        except Exception as exc:  # noqa: BLE001
+            shutil.rmtree(out_dir, ignore_errors=True)
+            if strict:
+                raise
+            _log(job_id, f"[警告] {app} 产物换入失败：{exc}")
+
+
+def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
     jid = job.id
 
     # 1) 数据库备份：失败立即中止
     _set(db, job, stage="backup", status="running")
-    _log(jid, "步骤 1/7 备份数据库")
+    _log(jid, "步骤 1/8 备份数据库")
     backup = _backup_database(job)
     job.backup_path = str(backup)
     db.commit()
@@ -355,7 +485,7 @@ def _do_upgrade(db, job: UpgradeJob) -> None:
 
     # 2) fetch
     _set(db, job, stage="fetch")
-    _log(jid, "步骤 2/7 git fetch --tags")
+    _log(jid, "步骤 2/8 git fetch --tags")
     res = _run_cmd(["git", "-C", str(ROOT), "fetch", "--tags"], timeout=300)
     if res.returncode != 0:
         raise RuntimeError(f"git fetch 失败：{(res.stderr or '').strip()[:500]}")
@@ -365,8 +495,9 @@ def _do_upgrade(db, job: UpgradeJob) -> None:
     if not job.from_ref:
         job.from_ref = _current_git_ref()
         db.commit()
+    _assert_clean_tree("升级")
     _set(db, job, stage="checkout")
-    _log(jid, f"步骤 3/7 git checkout {job.to_version}（回滚点 {job.from_ref}）")
+    _log(jid, f"步骤 3/8 git checkout {job.to_version}（回滚点 {job.from_ref}）")
     res = _run_cmd(["git", "-C", str(ROOT), "checkout", job.to_version], timeout=300)
     if res.returncode != 0:
         raise RuntimeError(
@@ -376,7 +507,7 @@ def _do_upgrade(db, job: UpgradeJob) -> None:
 
     # 4) 依赖：失败跳过但记警告
     _set(db, job, stage="deps")
-    _log(jid, "步骤 4/7 安装依赖 backend/requirements.txt")
+    _log(jid, "步骤 4/8 安装依赖 backend/requirements.txt")
     py = _venv_python()
     res = _run_cmd([str(py), "-m", "pip", "install", "-r", str(BACKEND_DIR / "requirements.txt")], timeout=1800)
     _log(jid, (res.stdout or "")[-3000:])
@@ -385,41 +516,64 @@ def _do_upgrade(db, job: UpgradeJob) -> None:
     else:
         _log(jid, "依赖安装完成")
 
-    # 5) 迁移
-    _set(db, job, stage="migrate")
-    _log(jid, "步骤 5/7 alembic upgrade head")
-    res = _run_cmd(
-        [str(py), "-c", "from alembic.config import main; main(['upgrade', 'head'])"],
-        cwd=BACKEND_DIR,
-        timeout=900,
+    # 5) 前端：先构建到临时目录；失败则中止（dist 与数据库都保持原样）
+    _set(db, job, stage="build")
+    _log(jid, "步骤 5/8 构建前端（仅源码有改动的应用）")
+    built = _prepare_frontends(
+        job, job.from_ref, job.to_version, skip=skip_frontend, strict=True
     )
-    if res.returncode != 0:
-        raise RuntimeError(f"数据库迁移失败：{(res.stderr or res.stdout).strip()[:500]}")
-    _log(jid, "迁移完成")
 
-    # 6) 重启：交给重启守护脚本（它会杀掉本进程），后续状态由 reconcile_restarts() 收尾
+    try:
+        # 6) 迁移
+        _set(db, job, stage="migrate")
+        _log(jid, "步骤 6/8 alembic upgrade head")
+        res = _run_cmd(
+            [str(py), "-c", "from alembic.config import main; main(['upgrade', 'head'])"],
+            cwd=BACKEND_DIR,
+            timeout=900,
+        )
+        if res.returncode != 0:
+            raise RuntimeError(f"数据库迁移失败：{(res.stderr or res.stdout).strip()[:500]}")
+        _log(jid, "迁移完成")
+
+        # 7) 换入前端产物（迁移失败时临时目录会被清掉，线上 dist 不动）
+        if built:
+            _log(jid, "步骤 7/8 换入前端产物")
+            _promote_frontends(built, jid, strict=True)
+    except Exception:
+        for _, tmp in built:
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+    # 8) 重启：交给重启守护脚本（它会杀掉本进程），后续状态由 reconcile_restarts() 收尾
     _set(db, job, stage="restart")
-    _log(jid, "步骤 6/7 重启后端")
+    _log(jid, "步骤 8/8 重启后端")
     if not _spawn_restart_guard(jid, job.to_version):
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, "步骤 7/7 由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
+    _log(jid, "由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
     db.commit()
 
 
-def _do_rollback(db, job: UpgradeJob, restore_db: bool) -> None:
+def _do_rollback(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool = False) -> None:
     jid = job.id
     ref = job.from_ref
     if not ref:
         raise RuntimeError("该任务未记录回滚点 from_ref，无法回滚")
 
+    _assert_clean_tree("回滚")
     _set(db, job, stage="checkout", status="running")
+    current_ref = _current_git_ref()
     _log(jid, f"git checkout -f {ref}")
     res = _run_cmd(["git", "-C", str(ROOT), "checkout", "-f", ref], timeout=300)
     if res.returncode != 0:
         raise RuntimeError(f"git checkout -f 失败：{(res.stderr or res.stdout).strip()[:500]}")
     _log(jid, "代码已回滚，VERSION=" + read_local_version())
+
+    # 回滚同样要重建前端；失败只告警，优先保证代码恢复
+    _set(db, job, stage="build")
+    built = _prepare_frontends(job, ref, current_ref, skip=skip_frontend, strict=False)
 
     if restore_db:
         if not job.backup_path:
@@ -428,6 +582,9 @@ def _do_rollback(db, job: UpgradeJob, restore_db: bool) -> None:
         _log(jid, f"恢复数据库：{job.backup_path}")
         _restore_database(job)
         _log(jid, "数据库恢复完成")
+
+    if built:
+        _promote_frontends(built, jid, strict=False)
 
     _set(db, job, stage="restart")
     if not _spawn_restart_guard(jid, job.to_version):
@@ -723,13 +880,15 @@ def _wait_healthy(expected: str, seconds: int) -> tuple[bool, str | None]:
 # ── 对外：回滚 / 单次校验 ────────────────────────────────────────────
 
 
-def rollback_job(db, job_id: int, restore_db: bool = False) -> UpgradeJob:
+def rollback_job(db, job_id: int, restore_db: bool = False, skip_frontend: bool = False) -> UpgradeJob:
     """基于某个已执行任务的回滚点，新建一个 rollback 任务并异步执行。"""
     src = db.get(UpgradeJob, job_id)
     if src is None:
         raise ValueError("任务不存在")
     if not src.from_ref:
         raise ValueError("该任务没有记录回滚点（from_ref），无法回滚")
+    if working_tree_dirty():
+        raise ValueError("工作区有未提交改动，请先提交或 stash 后再回滚")
 
     active = db.execute(
         select(UpgradeJob).where(UpgradeJob.status.in_(ACTIVE_STATUSES))
@@ -755,8 +914,12 @@ def rollback_job(db, job_id: int, restore_db: bool = False) -> UpgradeJob:
     db.add(job)
     db.commit()
     db.refresh(job)
-    _log(job.id, f"回滚任务创建：基于 #{src.id}，目标 {job.to_version}，restore_db={restore_db}")
-    run_job(job.id, restore_db=restore_db)
+    _log(
+        job.id,
+        f"回滚任务创建：基于 #{src.id}，目标 {job.to_version}，"
+        f"restore_db={restore_db}，skip_frontend={skip_frontend}",
+    )
+    run_job(job.id, restore_db=restore_db, skip_frontend=skip_frontend)
     return job
 
 

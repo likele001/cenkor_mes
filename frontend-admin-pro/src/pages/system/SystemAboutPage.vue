@@ -38,12 +38,19 @@
               size="small"
               type="primary"
               :loading="upgradeStarting"
-              :disabled="!upgradeInfo?.latest"
+              :disabled="!upgradeInfo?.latest || upgradeInfo?.working_tree_dirty"
               @click="handleStartUpgrade"
             >
               立即升级
             </el-button>
-            <el-button size="small" type="warning" plain :loading="upgradeRollingBack" @click="handleRollback">
+            <el-button
+              size="small"
+              type="warning"
+              plain
+              :loading="upgradeRollingBack"
+              :disabled="upgradeInfo?.working_tree_dirty"
+              @click="handleRollback"
+            >
               回滚上一版
             </el-button>
           </div>
@@ -79,6 +86,24 @@
               磁盘余量 {{ upgradeInfo.disk_free_gb }} GB
             </span>
           </div>
+        </div>
+      </div>
+
+      <el-alert
+        v-if="upgradeInfo?.working_tree_dirty"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mb-4"
+        title="工作区有未提交改动，已禁用升级/回滚；请先提交或 stash 后再操作。"
+      />
+
+      <div class="mb-4">
+        <el-checkbox v-model="skipFrontend">
+          跳过前端构建（仅更新后端；前端源码有改动时页面不会生效）
+        </el-checkbox>
+        <div class="text-xs text-gray-400 mt-1">
+          默认会检测本次版本是否改动前端，有改动则构建并原子换入 dist，约多花 1~2 分钟。
         </div>
       </div>
 
@@ -221,6 +246,7 @@ const upgradeJobs = ref<UpgradeJobOut[]>([])
 const upgradeLoading = ref(false)
 const upgradeChecking = ref(false)
 const upgradeStarting = ref(false)
+const skipFrontend = ref(false)
 const upgradeRollingBack = ref(false)
 
 const logDialogVisible = ref(false)
@@ -304,7 +330,7 @@ async function handleStartUpgrade() {
   }
   upgradeStarting.value = true
   try {
-    await systemApi.startUpgrade({ target_version: target, skip_frontend: true })
+    await systemApi.startUpgrade({ target_version: target, skip_frontend: skipFrontend.value })
     ElMessage.success('升级任务已启动')
     await loadUpgradeState()
   } catch (e) {

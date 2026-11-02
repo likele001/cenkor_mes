@@ -42,23 +42,55 @@ class MigrationError(RuntimeError):
 
 
 def split_sql(sql_text: str) -> list[str]:
-    """按行尾分号拆分 SQL 语句（忽略空行与 ``--`` 注释）。
+    """按顶层分号拆分 SQL，字符串/标识符/注释里的分号不切。
 
-    注意：仅支持简单语句，扩展迁移请避免使用含分号字符串/存储过程。
+    支持 ``'...'`` ``"..."`` ``` `...` ```（含 ``''`` 与反斜杠转义）、``--`` 行注释和
+    ``/* */`` 块注释。存储过程等内部分号语句仍不支持。
     """
     statements: list[str] = []
-    buffer: list[str] = []
-    for line in sql_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("--"):
+    buf: list[str] = []
+    quote = ""
+    i, n = 0, len(sql_text)
+    while i < n:
+        ch = sql_text[i]
+        nxt = sql_text[i + 1] if i + 1 < n else ""
+        if quote:
+            buf.append(ch)
+            if ch == "\\" and quote in ("'", '"') and nxt:
+                buf.append(nxt)
+                i += 2
+                continue
+            if ch == quote:
+                if nxt == quote:  # 双写转义
+                    buf.append(nxt)
+                    i += 2
+                    continue
+                quote = ""
+            i += 1
             continue
-        buffer.append(line)
-        if stripped.endswith(";"):
-            stmt = "\n".join(buffer).strip().rstrip(";").strip()
+        if ch == "-" and nxt == "-":
+            j = sql_text.find("\n", i)
+            i = n if j == -1 else j
+            continue
+        if ch == "/" and nxt == "*":
+            j = sql_text.find("*/", i + 2)
+            i = n if j == -1 else j + 2
+            continue
+        if ch in ("'", '"', "`"):
+            quote = ch
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ";":
+            stmt = "".join(buf).strip()
             if stmt:
                 statements.append(stmt)
-            buffer = []
-    tail = "\n".join(buffer).strip().rstrip(";").strip()
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
     if tail:
         statements.append(tail)
     return statements
