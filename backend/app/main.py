@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 import logging
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.api.router import api_router
@@ -76,7 +76,18 @@ def _read_version() -> str:
 @app.get("/api/health")
 def health():
     version = _read_version()
-    return ok({"status": "ok", "build": version, "version": version})
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as exc:  # noqa: BLE001 - 健康检查必须给出结果而不是抛 500
+        logging.getLogger("uvicorn.error").warning("health.db_check_failed: %s", exc)
+        db_ok = False
+    data = {"status": "ok" if db_ok else "degraded", "db": "up" if db_ok else "down",
+            "build": version, "version": version}
+    if not db_ok:
+        return JSONResponse(status_code=503, content=ok(data))
+    return ok(data)
 
 
 @app.exception_handler(HTTPException)
@@ -112,6 +123,32 @@ def any_exception_handler(_: Request, exc: Exception):
     return JSONResponse(status_code=200, content=fail(500, "服务器错误"))
 
 
+def _ensure_default_admin(db: Session) -> None:
+    """创建默认管理员：dev 用内置口令，其他环境必须显式配置 ADMIN_INIT_PASSWORD。"""
+    if db.scalar(select(User).where(User.username == "admin")):
+        return
+    if settings.APP_ENV == "dev":
+        init_password = "admin123"
+    else:
+        init_password = (settings.ADMIN_INIT_PASSWORD or "").strip()
+    if not init_password or len(init_password) < settings.PASSWORD_MIN_LENGTH:
+        logger.warning(
+            "未创建默认管理员：APP_ENV=%s 时请设置 ADMIN_INIT_PASSWORD（至少 %d 位）",
+            settings.APP_ENV,
+            settings.PASSWORD_MIN_LENGTH,
+        )
+        return
+    from app.models.role import Role
+    admin_role = db.scalar(select(Role).where(Role.code == "admin"))
+    admin = create_user(db, "admin", init_password, full_name="系统管理员", is_superuser=True)
+    if admin_role:
+        admin.roles = [admin_role]
+    if settings.APP_ENV == "dev":
+        logger.info("已创建默认管理员账号: admin / admin123")
+    else:
+        logger.info("已创建默认管理员账号: admin（口令来自 ADMIN_INIT_PASSWORD）")
+
+
 @app.on_event("startup")
 def on_startup():
     ensure_secure_jwt_secret()
@@ -130,16 +167,7 @@ def on_startup():
 
             ensure_permissions(db)
             create_default_roles(db)
-
-            # 创建默认管理员账号
-            admin = db.scalar(select(User).where(User.username == "admin"))
-            if not admin:
-                from app.models.role import Role
-                admin_role = db.scalar(select(Role).where(Role.code == "admin"))
-                admin = create_user(db, "admin", "admin123", full_name="系统管理员", is_superuser=True)
-                if admin_role:
-                    admin.roles = [admin_role]
-                logger.info("已创建默认管理员账号: admin / admin123")
+            _ensure_default_admin(db)
 
             # 定时任务默认配置（幂等：已存在的按 name 跳过）
             from app.services.cron_job_seeder import seed_default_cron_jobs

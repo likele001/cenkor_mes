@@ -9,10 +9,12 @@ from app.api.admin.system.common import write_op_log
 from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.material import get_material_by_id
+from app.crud.locking import lock_row
 from app.crud.approval_record import record_status
 from app.crud.purchase_order import confirm_purchase_order, create_purchase_order, get_purchase_order_by_id, list_purchase_orders
 from app.crud.supplier import get_supplier_by_id
 from app.crud.warehouse import adjust_stock
+from app.models.purchase import PurchaseOrder
 from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.schemas.purchase_order import PurchaseOrderCreateIn, PurchaseOrderReceiveIn, PurchaseOrderReturnIn
@@ -163,6 +165,8 @@ def receive_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if not lock_row(db, PurchaseOrder, order_id):
+        raise HTTPException(status_code=404, detail="采购单不存在")
     po = get_purchase_order_by_id(db, order_id=order_id, with_items=True)
     if not po:
         raise HTTPException(status_code=404, detail="采购单不存在")
@@ -268,6 +272,8 @@ def return_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if not lock_row(db, PurchaseOrder, order_id):
+        raise HTTPException(status_code=404, detail="采购单不存在")
     po = get_purchase_order_by_id(db, order_id=order_id, with_items=True)
     if not po:
         raise HTTPException(status_code=404, detail="采购单不存在")

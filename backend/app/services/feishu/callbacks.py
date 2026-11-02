@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import logging
 
@@ -33,10 +34,30 @@ def _decrypt_feishu_event(encrypt_key: str, encrypted: str) -> dict:
     return json.loads(plain.decode("utf-8"))
 
 
-def parse_event_body(body: dict, *, encrypt_key: str = "") -> dict:
-    if body.get("encrypt") and encrypt_key:
-        return _decrypt_feishu_event(encrypt_key, str(body["encrypt"]))
-    return body
+def parse_event_body(
+    body: dict,
+    *,
+    encrypt_key: str = "",
+    verification_token: str = "",
+) -> dict:
+    """解析回调报文并校验来源。
+
+    配置了 Encrypt Key 时只接受加密报文；配置了 Verification Token 时校验
+    事件里的 token（v2 在 ``header.token``，v1 与 URL 校验在顶层 ``token``）。
+    """
+    if encrypt_key:
+        if not body.get("encrypt"):
+            raise ValueError("飞书回调未加密，已拒绝（请确认平台已配置 Encrypt Key）")
+        event = _decrypt_feishu_event(encrypt_key, str(body["encrypt"]))
+    else:
+        event = body
+
+    if verification_token:
+        header = event.get("header") or {}
+        token = header.get("token") or event.get("token") or ""
+        if not hmac.compare_digest(str(token), verification_token):
+            raise ValueError("飞书回调 Verification Token 校验失败")
+    return event
 
 
 def _message_text(content: str) -> str:

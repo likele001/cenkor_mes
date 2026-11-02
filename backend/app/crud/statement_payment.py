@@ -119,7 +119,10 @@ def create_payment(
     created_by: int | None = None,
 ) -> StatementPayment:
     Model, party_type, party_attr = _model_for(statement_type)
-    stmt = db.get(Model, statement_id)
+    # 锁行后再校验余额，避免两笔并发核销都用旧的 paid_amount 通过校验
+    stmt = db.execute(
+        select(Model).where(Model.id == statement_id).with_for_update()
+    ).scalar_one_or_none()
     if not stmt:
         raise ValueError("对账单不存在")
     if stmt.status == "draft":

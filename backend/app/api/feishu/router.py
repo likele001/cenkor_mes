@@ -18,17 +18,24 @@ from app.services.feishu.settings import get_feishu_settings_raw
 router = APIRouter(tags=["feishu-open"])
 
 
-def _resolve_encrypt_key(db: Session, body: dict) -> str:
-    """单租户版：直接读取唯一的飞书配置"""
+def _resolve_feishu_security(db: Session) -> tuple[str, str]:
+    """单租户版：直接读取唯一的飞书配置，返回 (encrypt_key, verification_token)。"""
     cfg = get_feishu_settings_raw(db)
-    return (cfg.get("encrypt_key") or "").strip()
+    return (cfg.get("encrypt_key") or "").strip(), (cfg.get("verification_token") or "").strip()
 
 
 @router.post("/events")
 async def feishu_events_api(request: Request, db: Session = Depends(get_db)):
     body = await request.json()
-    encrypt_key = _resolve_encrypt_key(db, body)
-    event = parse_event_body(body, encrypt_key=encrypt_key)
+    encrypt_key, verification_token = _resolve_feishu_security(db)
+    try:
+        event = parse_event_body(
+            body,
+            encrypt_key=encrypt_key,
+            verification_token=verification_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     result = handle_feishu_event(db, event)
     if result:
         return result

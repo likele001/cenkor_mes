@@ -10,6 +10,7 @@ from app.models.material_issue import MaterialIssue, MaterialIssueItem, Material
 from app.models.material import Material
 from app.models.sku import Sku
 from app.models.warehouse import Stock
+from app.crud.locking import lock_row
 from app.crud.warehouse import adjust_stock
 
 
@@ -102,6 +103,9 @@ def create_issue(
 
 def issue_materials(db: Session, issue: MaterialIssue, issued_by: int | None = None) -> MaterialIssue:
     """确认领料：扣减库存 + 记流水，标记 issued"""
+    issue = lock_row(db, MaterialIssue, issue.id)
+    if issue is None:
+        raise ValueError("领料单不存在")
     if issue.status != "draft":
         raise ValueError(f"领料单 {issue.code} 状态不允许领料")
     for it in issue.items:
@@ -122,6 +126,9 @@ def issue_materials(db: Session, issue: MaterialIssue, issued_by: int | None = N
 
 
 def cancel_issue(db: Session, issue: MaterialIssue) -> MaterialIssue:
+    issue = lock_row(db, MaterialIssue, issue.id)
+    if issue is None:
+        raise ValueError("领料单不存在")
     if issue.status != "draft":
         raise ValueError(f"领料单 {issue.code} 状态不允许取消")
     issue.status = "cancelled"

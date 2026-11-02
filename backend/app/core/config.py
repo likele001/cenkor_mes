@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     REMEMBER_ME_EXPIRE_MINUTES: int = 10080
     PUBLIC_BASE_URL: str = ""
     H5_PUBLIC_BASE_URL: str = ""
+    # 非 dev 环境创建默认 admin 时的初始口令；留空则不创建默认管理员
+    ADMIN_INIT_PASSWORD: str = ""
 
     # 安全基线
     JWT_SECRET_MIN_LENGTH: int = 32          # 生产环境 JWT 密钥最小长度
