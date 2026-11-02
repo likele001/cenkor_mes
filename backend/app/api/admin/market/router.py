@@ -122,6 +122,39 @@ def _clear_setting(db: Session, key: str) -> None:
         db.commit()
 
 
+TOKEN_ENC_PREFIX = "enc:v1:"
+
+
+def _set_instance_token(db: Session, token: str) -> None:
+    """实例令牌加密入库（AES-256-GCM，密钥派生自 JWT_SECRET）。"""
+    if not token:
+        _clear_setting(db, INSTANCE_TOKEN_KEY)
+        return
+    from app.storage.crypto import encrypt
+
+    _set_setting(db, INSTANCE_TOKEN_KEY, TOKEN_ENC_PREFIX + (encrypt(token) or ""))
+
+
+def _get_instance_token(db: Session) -> str:
+    """读实例令牌；历史明文行在首次读取时透明迁移为密文。"""
+    from app.storage.crypto import decrypt
+
+    raw = _get_setting(db, INSTANCE_TOKEN_KEY)
+    if not raw:
+        return ""
+    if not raw.startswith(TOKEN_ENC_PREFIX):
+        try:
+            _set_instance_token(db, raw)
+        except Exception as e:  # noqa: BLE001 - 迁移失败不影响本次使用
+            logger.warning("market.instance_token_encrypt_failed: %s", e)
+        return raw
+    try:
+        return decrypt(raw[len(TOKEN_ENC_PREFIX):])
+    except Exception as e:  # noqa: BLE001 - 换过 JWT_SECRET 且无 OLD 密钥时解不开
+        logger.warning("market.instance_token_decrypt_failed: %s", e)
+        return ""
+
+
 def _hub_url(db: Session) -> str:
     return _get_setting(db, HUB_URL_KEY).rstrip("/")
 
@@ -271,7 +304,7 @@ def market_status(db: Session = Depends(get_db)):
     概况字段是纯增量，老前端不读也不受影响。
     """
     hub = _hub_url(db)
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     return ok({
         "hub_url": hub,
         "product": PRODUCT,
@@ -338,7 +371,7 @@ def bind_poll(db: Session = Depends(get_db)):
     data = resp.json()
     status = data.get("status")
     if status == "approved":
-        _set_setting(db, INSTANCE_TOKEN_KEY, data.get("instance_token", ""))
+        _set_instance_token(db, data.get("instance_token", ""))
         if data.get("instance_uid"):
             _set_setting(db, INSTANCE_UID_KEY, data["instance_uid"])
         _set_setting(db, ACCOUNT_KEY, data.get("account") or "")
@@ -365,7 +398,7 @@ def bind_cancel(db: Session = Depends(get_db)):
 @router.post("/bind/unbind")
 def bind_unbind(db: Session = Depends(get_db)):
     """解绑本实例：通知 hub 吊销令牌并清理本地凭证。"""
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     if token:
         try:
             url = _store_url(db, "cloud/instance/revoke-self")
@@ -398,7 +431,7 @@ def _fetch_catalog(db: Session) -> list[dict]:
 
 def _fetch_purchases(db: Session) -> list[dict]:
     """已购授权（需 Bearer 实例令牌）。未绑定/失败返回空列表。"""
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     if not token:
         return []
     try:
@@ -418,7 +451,7 @@ def _fetch_purchases_checked(db: Session) -> tuple[bool, list[dict]]:
 
     未绑定（无 token）或请求异常/非 200 均返回 (False, [])，供上层失败开放。
     """
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     if not token:
         return False, []
     try:
@@ -461,7 +494,7 @@ def sync_entitlements(db: Session) -> bool:
     顺带把结果记进 `_LAST_SYNC_OK`，供 `/status` 回答「hub 可不可达」。
     """
     global _LAST_SYNC_OK
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     if not token:
         _LAST_SYNC_OK = None          # 未绑定：不谈可达性
         runtime.clear_entitlement_enforcement()
@@ -544,7 +577,7 @@ def list_market_apps(db: Session = Depends(get_db)):
         sync_entitlements(db)
     except Exception as e:  # noqa: BLE001
         logger.warning("market.apps_sync_entitlements_failed: %s", e)
-    token = _get_setting(db, INSTANCE_TOKEN_KEY)
+    token = _get_instance_token(db)
     catalog = _fetch_catalog(db)
     purchases = _fetch_purchases(db)
     licensed = {p.get("app_key"): p for p in purchases if p.get("app_key")}

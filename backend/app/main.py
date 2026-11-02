@@ -116,6 +116,11 @@ def any_exception_handler(_: Request, exc: Exception):
 def on_startup():
     ensure_secure_jwt_secret()
     if settings.DB_AUTO_CREATE:
+        if settings.APP_ENV != "dev":
+            logger.warning(
+                "DB_AUTO_CREATE=true（APP_ENV=%s）：启动时执行 DDL；生产环境建议关闭并改用 alembic upgrade head",
+                settings.APP_ENV,
+            )
         Base.metadata.create_all(bind=engine)
     if settings.DB_AUTO_SEED:
         db: Session = SessionLocal()

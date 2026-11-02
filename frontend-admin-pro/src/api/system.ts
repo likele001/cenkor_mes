@@ -151,6 +151,7 @@ export type UpgradeInfoOut = {
   restart_configured: boolean
   restart_mode?: 'cmd' | 'guard' | string
   disk_free_gb: number | null
+  working_tree_dirty?: boolean
 }
 
 export type UpgradeJobOut = {
@@ -521,7 +522,7 @@ export const systemApi = {
       timeout: 60000,
     })
   },
-  rollbackUpgrade(data: { job_id: number; restore_db?: boolean }) {
+  rollbackUpgrade(data: { job_id: number; restore_db?: boolean; skip_frontend?: boolean }) {
     return http.request<UpgradeJobOut>({ url: '/admin/system/upgrade/rollback', method: 'POST', data })
   },
 }

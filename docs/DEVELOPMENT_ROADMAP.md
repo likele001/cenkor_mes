@@ -10,7 +10,7 @@
 
 | 维度 | 事实 | 结论 |
 |---|---|---|
-| 云存储 | `app/storage/factory.py` 中 `get_active_storage/build_storage/get_storage_for` **全部写死 `return LocalStorage()`**；`.env` 的 OSS/COS/七牛 凭据为空壳 | 重大缺口，但已有完整蓝图 + 源仓可参考 |
+| 云存储 | 初始盘点时 `factory.py` **全部写死 `return LocalStorage()`**；现已完成 CS-1–CS-5（加密凭据、云驱动、后台配置页） | 已落地 |
 | 依赖 | `requirements.txt` 已含 `oss2`、`cos-python-sdk-v5`、`qiniu`、`cryptography` | 落地无需重型新增依赖 |
 | 源参考 | `/www/wwwroot/cenkor-admin/.../apps/cloud_storage/`（crypto/models/drivers/router） | 可移植，但需 **async→sync、S3→原生 SDK** 适配 |
 | 测试 | 后端 **13** 个测试文件 vs **108** 个 API 路由模块；Alembic 仅 **4** 个迁移 | 覆盖薄弱、schema 演进靠自动建表 |
@@ -29,10 +29,10 @@
 | 阶段 | 任务 | 产出 | 工时 | 状态 |
 |---|---|---|---|---|
 | **CS-1** | 凭据 AES-256-GCM 加密模块 + `factory` 去写死（驱动注册表 + 向后兼容降级） | `app/storage/crypto.py`、重构 `factory.py`、单元测试 | 0.5d | ✅ 本轮完成 |
-| **CS-2** | `CloudStorageConfig` 模型 + Alembic 迁移 + 配置 CRUD（凭据密文入库、读取脱敏） | `models/cloud_storage.py`、`alembic/versions/0005_*`、`services/cloud_storage_config.py` | 1d | ⏳ |
-| **CS-3** | 真实云驱动（实现现有 `Storage` 协议）：阿里 OSS / 腾讯 COS / 七牛 Kodo | `app/storage/drivers/{aliyun,cos,qiniu}.py` + 注册 | 1.5d | ⏳ |
-| **CS-4** | 管理端 API `/admin/cloud-storage/*`：config 读写、activate 热切换、health 连通性、presign 直传 + 权限点 | `api/admin/cloud_storage.py`、`seed.py` 加 `cloud_storage.manage` | 1d | ⏳ |
-| **CS-5** | 前端"系统设置→云存储"页面 + 菜单 + i18n | `pages/system/CloudStoragePage.vue` | 0.5d | ⏳ |
+| **CS-2** | `CloudStorageConfig` 模型 + Alembic 迁移 + 配置 CRUD（凭据密文入库、读取脱敏） | `models/cloud_storage.py`、`alembic/versions/0005_cloud_storage.py`、`services/cloud_storage_config.py` | 1d | ✅ |
+| **CS-3** | 真实云驱动（实现现有 `Storage` 协议）：阿里 OSS / 腾讯 COS / 七牛 Kodo | `app/storage/drivers/{aliyun,tencent,qiniu}.py` + 注册 | 1.5d | ✅ |
+| **CS-4** | 管理端 API `/admin/cloud-storage/*`：config 读写、activate 热切换、health 连通性、presign 直传 + 权限点 | `api/admin/system/cloud_storage.py`、`seed.py` 加 `cloud_storage.manage` | 1d | ✅ |
+| **CS-5** | 前端"系统设置→云存储"页面 + 菜单 + i18n | `pages/system/CloudStoragePage.vue` | 0.5d | ✅ |
 | **CS-6** | 历史附件迁移任务（本地→云，带进度/失败重试，P1） | 迁移任务 + 状态查询 | 1d | ⏳ |
 
 ### 关键设计决策
@@ -95,8 +95,8 @@
 ## 4. 建议排期（单人）
 
 ```
-第 1 周：CS-1(✅) → CS-2 → CS-3        云存储打通真实上传
-第 2 周：CS-4 → CS-5                    后台可配置 + 前端页
+第 1 周：CS-1(✅) → CS-2(✅) → CS-3(✅) 云存储打通真实上传
+第 2 周：CS-4(✅) → CS-5(✅)            后台可配置 + 前端页
 第 2 周并行：QA-1 → QA-2                测试脚手架 + 核心闭环回归
 第 3 周：QA-3 → QA-4 → QA-5            安全/迁移/CI 门禁
 第 3–4 周：PERF-1 → PERF-2 → PERF-3 → PERF-4   性能与可观测
@@ -107,9 +107,11 @@
 
 ---
 
-## 5. 本轮已交付（CS-1）
-- `backend/app/storage/crypto.py`：AES-256-GCM 凭据加解密（密钥派生自 `JWT_SECRET`，支持轮换回退、脱敏）。
-- `backend/app/storage/factory.py`：移除写死返回，改为**驱动注册表 + 配置解析 + 向后兼容降级**。
-- `backend/tests/test_storage_crypto.py`：加密往返/随机 nonce/防篡改/脱敏 + 工厂选择与降级单测。
+## 5. 已交付
+- **CS-1**：`backend/app/storage/crypto.py`（AES-256-GCM，密钥派生自 `JWT_SECRET`，支持轮换回退、脱敏）；`factory.py` 改为**驱动注册表 + 配置解析 + 向后兼容降级**；`backend/tests/test_storage_crypto.py`。
+- **CS-2**：`models/cloud_storage.py` + `alembic/versions/0005_cloud_storage.py` + `services/cloud_storage_config.py`（凭据密文入库、读取脱敏）。
+- **CS-3**：`app/storage/drivers/{aliyun,tencent,qiniu}.py` 原生 SDK 驱动并注册。
+- **CS-4**：`api/admin/system/cloud_storage.py`（config 读写、activate 热切换、health 连通性、presign 直传），`seed.py` 增加 `cloud_storage.manage`。
+- **CS-5**：`frontend-admin-pro/src/pages/system/CloudStoragePage.vue` + 路由菜单 + 三语文案。
 
-后续按 CS-2 起推进（需你确认继续）。
+剩余：CS-6（历史附件本地→云迁移任务，按需启动）。
