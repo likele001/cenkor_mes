@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.crud.warehouse import adjust_stock
 from app.crud.approval_record import record_status
+from app.crud.locking import lock_row
 from app.models.material import Material
 from app.models.material_issue import MaterialReturn
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.sku import Sku
 from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
-from app.crud.warehouse import adjust_stock
 
 
 def _reject_return_entry(material_return_id: int | None) -> None:
@@ -157,6 +157,9 @@ def create_entry(
 
 
 def confirm_entry(db: Session, entry: WarehouseEntry, confirmed_by: int | None = None, *, channel: str = "web") -> WarehouseEntry:
+    entry = lock_row(db, WarehouseEntry, entry.id)
+    if entry is None:
+        raise ValueError("入库单不存在")
     if entry.status != "draft":
         raise ValueError(f"入库单 {entry.code} 状态不允许确认")
     _reject_return_entry(entry.material_return_id)
@@ -198,6 +201,9 @@ def confirm_entry(db: Session, entry: WarehouseEntry, confirmed_by: int | None =
 
 
 def cancel_entry(db: Session, entry: WarehouseEntry, *, operator_id: int | None = None, channel: str = "web") -> WarehouseEntry:
+    entry = lock_row(db, WarehouseEntry, entry.id)
+    if entry is None:
+        raise ValueError("入库单不存在")
     if entry.status != "draft":
         raise ValueError(f"入库单 {entry.code} 状态不允许取消")
     entry.status = "cancelled"

@@ -276,7 +276,7 @@ def test_records_api_returns_newest_first(session: Session, test_user: User, cus
     submit_order_for_review(session, order, operator_id=test_user.id)
     reject_order(session, order, "缺附件", operator_id=test_user.id)
 
-    res = list_records_api(biz_type="order", biz_id=order.id, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user)
+    res = list_records_api(biz_type="order", biz_id=order.id, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user, permission_codes=["order.view"])
     data = res["data"]
     items = data["items"]
     assert data["total"] == 2
@@ -287,11 +287,11 @@ def test_records_api_returns_newest_first(session: Session, test_user: User, cus
 
 def test_records_api_rejects_bad_filters(session: Session, test_user: User):
     with pytest.raises(HTTPException) as e1:
-        list_records_api(biz_type="whatever", biz_id=1, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user)
+        list_records_api(biz_type="whatever", biz_id=1, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user, permission_codes=["order.view"])
     assert e1.value.status_code == 400
 
     with pytest.raises(HTTPException) as e2:
-        list_records_api(biz_type=None, biz_id=1, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user)
+        list_records_api(biz_type=None, biz_id=1, operator_id=None, action=None, offset=0, limit=50, db=session, user=test_user, permission_codes=["order.view"])
     assert e2.value.status_code == 400
 
 

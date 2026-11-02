@@ -8,7 +8,7 @@ from starlette.responses import FileResponse, RedirectResponse
 
 from app.services.report_media_settings import get_report_media_settings
 from app.core.config import settings
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_permissions, get_current_user, get_db
 from app.core.response import ok
 from app.utils.upload_mime import looks_like_web_content, mime_allowed, resolve_upload_content_type
 from app.crud.attachment import create_attachment, get_attachment_by_id
@@ -126,10 +126,17 @@ def get_file(
     url: bool = Query(False, alias="url"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions),
 ):
     att = get_attachment_by_id(db, attachment_id=attachment_id)
     if not att:
         raise HTTPException(status_code=404, detail="文件不存在")
+    if not (
+        getattr(user, "is_superuser", False)
+        or att.uploader_id == user.id
+        or "attachment.view" in permission_codes
+    ):
+        raise HTTPException(status_code=403, detail="无权访问该文件")
 
     storage = get_storage_for(att.storage_driver, db)
     play_url = attachment_play_url(att, db=db)

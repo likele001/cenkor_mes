@@ -461,15 +461,62 @@ def _prepare_frontends(
     return built
 
 
-def _promote_frontends(built: list[tuple[str, Path]], job_id: int, *, strict: bool) -> None:
+def _promote_frontends(
+    built: list[tuple[str, Path]], job_id: int, *, strict: bool
+) -> list[str]:
+    """换入产物；返回已换入的应用名，供失败时回退。"""
+    promoted: list[str] = []
     for app, out_dir in built:
         try:
             _promote_frontend(app, out_dir, job_id)
+            promoted.append(app)
         except Exception as exc:  # noqa: BLE001
             shutil.rmtree(out_dir, ignore_errors=True)
             if strict:
                 raise
             _log(job_id, f"[警告] {app} 产物换入失败：{exc}")
+    return promoted
+
+
+def _restore_frontend(app: str, job_id: int) -> None:
+    """把线上 dist 退回升级前的 dist.__bak（仅对已换入的应用调用）。"""
+    live = ROOT / app / "dist"
+    backup = ROOT / app / "dist.__bak"
+    if not backup.exists():
+        _log(job_id, f"[警告] {app} 未找到 dist.__bak，前端产物未回退")
+        return
+    try:
+        if live.exists():
+            shutil.rmtree(live, ignore_errors=True)
+        backup.rename(live)
+        _log(job_id, f"{app}: 前端产物已回退为升级前版本")
+    except OSError as exc:
+        _log(job_id, f"[错误] {app} 前端产物回退失败：{exc}；请手动从 dist.__bak 恢复")
+
+
+def _restore_code(job: UpgradeJob, job_id: int) -> None:
+    """升级失败后把代码退回 from_ref。
+
+    只回代码：MySQL DDL 无法事务回滚，已执行的迁移不会退回，
+    日志里明确提示，由人工决定是否用备份恢复数据库。
+    """
+    ref = job.from_ref
+    if not ref:
+        _log(job_id, "[警告] 任务未记录回滚点 from_ref，无法自动恢复代码，请手动处理")
+        return
+    res = _run_cmd(["git", "-C", str(ROOT), "checkout", "-f", ref], timeout=300)
+    if res.returncode != 0:
+        _log(
+            job_id,
+            f"[错误] 代码自动恢复失败，请手动执行 git checkout -f {ref}："
+            f"{(res.stderr or res.stdout).strip()[:300]}",
+        )
+        return
+    _log(
+        job_id,
+        f"代码已恢复到 {ref}（仅代码；已执行的数据库迁移未回滚，"
+        f"如需恢复数据请使用备份 {job.backup_path or '-'}）",
+    )
 
 
 def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
@@ -519,11 +566,14 @@ def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
     # 5) 前端：先构建到临时目录；失败则中止（dist 与数据库都保持原样）
     _set(db, job, stage="build")
     _log(jid, "步骤 5/8 构建前端（仅源码有改动的应用）")
-    built = _prepare_frontends(
-        job, job.from_ref, job.to_version, skip=skip_frontend, strict=True
-    )
+    built: list[tuple[str, Path]] = []
+    promoted: list[str] = []
 
     try:
+        built = _prepare_frontends(
+            job, job.from_ref, job.to_version, skip=skip_frontend, strict=True
+        )
+
         # 6) 迁移
         _set(db, job, stage="migrate")
         _log(jid, "步骤 6/8 alembic upgrade head")
@@ -539,10 +589,16 @@ def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
         # 7) 换入前端产物（迁移失败时临时目录会被清掉，线上 dist 不动）
         if built:
             _log(jid, "步骤 7/8 换入前端产物")
-            _promote_frontends(built, jid, strict=True)
+            promoted = _promote_frontends(built, jid, strict=True)
     except Exception:
+        # 构建/迁移/换入失败：代码回退到升级前，已换入的前端产物一并回退，
+        # 避免出现「新前端 + 旧后端」或「新代码 + 旧库」的错位
+        _log(jid, "升级步骤失败，开始回退代码与前端产物")
         for _, tmp in built:
             shutil.rmtree(tmp, ignore_errors=True)
+        for app in reversed(promoted):
+            _restore_frontend(app, jid)
+        _restore_code(job, jid)
         raise
 
     # 8) 重启：交给重启守护脚本（它会杀掉本进程），后续状态由 reconcile_restarts() 收尾

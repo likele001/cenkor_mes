@@ -70,9 +70,10 @@ DEFAULT_ROLES: list[tuple[str, str]] = [
 
 ROLE_PERMISSION_PRESETS: dict[str, set[str]] = {
     "admin": {code for code, _ in DEFAULT_PERMISSIONS},
-    "qc": {"report.audit", "trace.query", "salary.view"},
+    "qc": {"report.audit", "trace.query", "salary.view", "attachment.view"},
     "leader": {"dispatch.manage", "report.audit", "report.submit", "salary.view", "dashboard.view", "report.view",
-               "order.manage", "plan.manage", "work.manage", "task.manage", "notification.view", "attendance.manage"},
+               "order.manage", "plan.manage", "work.manage", "task.manage", "notification.view", "attendance.manage",
+               "attachment.view"},
     "employee": {"report.submit", "salary.view", "notification.view"},
     "customer": {"notification.view"},
 }

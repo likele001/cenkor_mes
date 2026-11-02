@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
+import logging
 
 from app.core.config import settings
 from app.core.deps import get_current_user, get_db, require_permissions
@@ -128,8 +129,9 @@ def delete_api(
     storage = get_storage_for(att.storage_driver, db)
     try:
         storage.delete(key=att.storage_key)
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger(__name__).warning("附件存储删除失败 attachment_id=%s: %s", att.id, exc)
+        raise HTTPException(status_code=500, detail="文件删除失败，请稍后重试") from exc
     delete_attachment(db, att)
     db.commit()
     return ok(True)

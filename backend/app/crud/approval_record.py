@@ -83,6 +83,7 @@ def list_records(
     db: Session,
     *,
     biz_type: str | None = None,
+    biz_types: list[str] | None = None,
     biz_id: int | None = None,
     operator_id: int | None = None,
     action: str | None = None,
@@ -92,6 +93,8 @@ def list_records(
     conditions = []
     if biz_type:
         conditions.append(ApprovalRecord.biz_type == biz_type)
+    if biz_types is not None:
+        conditions.append(ApprovalRecord.biz_type.in_(biz_types))
     if biz_id is not None:
         conditions.append(ApprovalRecord.biz_id == biz_id)
     if operator_id is not None:

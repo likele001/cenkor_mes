@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.crm import CrmOpportunity, CrmOpportunityActivity, CustomerContact, CustomerTag, CustomerTagLink
 from app.models.customer import Customer
+from app.models.order import Order
 from app.models.user import User
+from app.crud.order import create_order, get_order_by_code
+from app.services.code_generator import BizType, allocate_code
 
 # 以下为扩展模型，若模型尚未定义会使用回退占位符，保持模块可导入。
 try:
@@ -1223,17 +1226,94 @@ def deactivate_quotation(db: Session, quotation):
     return quotation
 
 
-def convert_quotation_to_order(db: Session, tenant_id: int, quotation_id: int, user_id: int):
+def convert_quotation_to_order(
+    db: Session,
+    tenant_id: int,
+    quotation_id: int,
+    user_id: int,
+    **overrides,
+):
+    """报价转订单：生成订单与明细并带入报价单价；已转过则幂等返回。
+
+    订单数量为整数，报价数量带小数时直接拒绝，不做静默取整。
+    单价按「明细折扣 × 整单折扣」折算，税额仍由后续订单/财务口径处理。
+    """
     quotation = get_quotation_by_id(db, tenant_id, quotation_id)
     if quotation is None:
         return None
-    # 该实现占位：真实订单模型不在本文件内，这里仅更新报价单状态并返回结构化结果
+
+    if quotation.converted_order_id:
+        existing = db.get(Order, quotation.converted_order_id)
+        if existing is not None:
+            return {
+                "order_id": existing.id,
+                "order_code": existing.code,
+                "quotation": quotation,
+                "items": get_quotation_items(db, tenant_id, quotation_id),
+                "created": False,
+            }
+
+    if quotation.status not in ("accepted", "approved", "ordered"):
+        raise ValueError("仅已接受或已批准的报价单可转订单")
+    if not quotation.customer_id or db.get(Customer, quotation.customer_id) is None:
+        raise ValueError("报价单缺少有效客户")
+
+    items = get_quotation_items(db, tenant_id, quotation_id)
+    if not items:
+        raise ValueError("报价单没有明细，无法转订单")
+
+    header_disc = Decimal(str(quotation.discount_rate or 0))
+    rows = []
+    for idx, it in enumerate(items, start=1):
+        if not it.sku_id:
+            raise ValueError(f"第 {idx} 行缺少产品型号（SKU），无法转订单")
+        qty = Decimal(str(it.quantity or 0))
+        if qty <= 0 or qty != qty.to_integral_value():
+            raise ValueError(f"第 {idx} 行数量必须是正整数（当前 {it.quantity}）")
+        price = (
+            Decimal(str(it.unit_price or 0))
+            * (Decimal("1") - Decimal(str(it.discount_rate or 0)))
+            * (Decimal("1") - header_disc)
+        )
+        rows.append((
+            idx,
+            int(it.sku_id),
+            int(qty),
+            it.product_name or it.remark,
+            price.quantize(Decimal("0.0001")),
+        ))
+
+    due_date = overrides.get("due_date")
+    if isinstance(due_date, str):
+        due_date = date.fromisoformat(due_date)
+    if due_date is None:
+        dates = [it.delivery_date for it in items if it.delivery_date]
+        due_date = min(dates) if dates else quotation.valid_until
+
+    code = allocate_code(db, BizType.ORDER)
+    while get_order_by_code(db, code=code):
+        code = allocate_code(db, BizType.ORDER)
+    order = create_order(
+        db,
+        customer_id=int(quotation.customer_id),
+        code=code,
+        due_date=due_date,
+        remark=overrides.get("remark") or f"由报价单 {quotation.code} 转入",
+        items=rows,
+        opportunity_id=quotation.opportunity_id,
+    )
     quotation.status = "ordered"
-    quotation.converted_order_id = None  # 调用方可按需替换为真实 order.id
-    if hasattr(quotation, "owner_user_id") and quotation.owner_user_id is None:
+    quotation.converted_order_id = order.id
+    if quotation.owner_user_id is None:
         quotation.owner_user_id = user_id
     db.flush()
-    return {"quotation": quotation, "items": get_quotation_items(db, tenant_id, quotation_id)}
+    return {
+        "order_id": order.id,
+        "order_code": order.code,
+        "quotation": quotation,
+        "items": items,
+        "created": True,
+    }
 
 
 # ============================
