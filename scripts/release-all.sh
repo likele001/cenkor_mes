@@ -111,6 +111,20 @@ else
   _run git commit -m "chore(release): bump version to $NEW_VER" -m "$CHANGE_DESC"
 fi
 
+# ---- 闸门：VERSION / CHANGELOG / 即将打的 tag 三者必须一致 ----
+# 本脚本刚写完 VERSION 和 CHANGELOG，按理不会不一致；但仍要验一遍：
+# 磁盘满导致 JSON 被截断、python3 写入半途失败、VERSION 里混进 \r 等情况
+# 都会让 GitHub Release 正文退化成空壳，而那时 tag 已经推上去了。
+# 失败就中止——此时还没打 tag、没推送，修好重跑即可。
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  echo "==> 版本一致性校验"
+  if ! bash "$ROOT/scripts/release-check.sh" --tag "$NEW_VER"; then
+    echo "✗ 版本一致性校验未通过，已中止（未打 tag、未推送）" >&2
+    echo "  VERSION 已写入 $NEW_VER，修复后重新执行本脚本即可" >&2
+    exit 1
+  fi
+fi
+
 # ---- 打附注 tag（GitHub 上由 tag 触发 Actions 自动生成 Release）----
 TAG="$NEW_VER"
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
