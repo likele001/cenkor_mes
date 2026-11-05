@@ -194,12 +194,12 @@ def on_startup():
     except Exception as e:
         logger.warning("seed system versions failed: %s", e)
 
-    # 在线升级：若上次升级在重启阶段被中断，按守护脚本结果回填任务最终状态
+    # 在线升级：回填重启结果，并收尸旧进程遗留的 running 任务（否则会永久阻塞升级/回滚）
     try:
         from app.services import upgrade_service
         db = SessionLocal()
         try:
-            upgrade_service.reconcile_restarts(db)
+            upgrade_service.reconcile_jobs(db)
         finally:
             db.close()
     except Exception as e:
