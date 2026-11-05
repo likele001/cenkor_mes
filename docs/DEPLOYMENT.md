@@ -418,20 +418,40 @@ docker run --rm -v cenkormes_storage_data:/data -v "$PWD/backup":/backup \
 > 版本号真源为根目录 `VERSION`；「关于/版本」页显示当前实例所跑版本，
 > 对照 [CHANGELOG](../backend/CHANGELOG.json) 决定是否升级。
 
+升级通道只有一条：**下载发布产物包**。包里已经带好预构建的前端 `dist`，
+所以升级既不需要 `git`、也不需要 SSH key、更不需要在服务器上装 node。
+
 ### 8.1 获取新版本
 
-- **GitHub Releases（推荐）**：每个 `vX.Y.Z` tag 提供 Source code (tar.gz/zip)，下载后覆盖部署目录。
-- **git**：`git clone` 后 `git checkout v2.1.0`（切到目标 tag）或 `git pull` 跟最新分支。
+每个 `vX.Y.Z` 的 GitHub Release 提供两个附件：
+
+| 附件 | 用途 |
+|---|---|
+| `cenkormes-vX.Y.Z.tar.gz` | 完整产物包（代码 + 预构建 dist），约 8 MB |
+| `cenkormes-vX.Y.Z.tar.gz.sha256` | 摘要，安装前必须校验 |
+
+Source code (tar.gz/zip) 是 GitHub 自动生成的**源码**快照，**不含前端产物**，
+不能直接拿来部署（除非你打算自己在服务器上 `npm ci && npm run build`）。
 
 ### 8.2 一键升级脚本（裸机 / 宝塔）
 
 ```bash
-# 仓库根执行；脚本会：备份库 → 拉代码 → 装依赖 → alembic 迁移 → 重建前端
-bash scripts/upgrade.sh                 # 按当前分支 pull 升级
-bash scripts/upgrade.sh --target v2.1.0 # 升级到指定 tag
-bash scripts/upgrade.sh --dry-run       # 只打印将执行的动作
-bash scripts/upgrade.sh --no-pull       # 代码已手动更新，只做迁移+构建
+bash scripts/upgrade.sh --list                 # 列出远端可安装的版本
+bash scripts/upgrade.sh                        # 装最新正式版
+bash scripts/upgrade.sh --version v2.2.1       # 装指定版本（也可用于修复被改坏的文件）
+bash scripts/upgrade.sh --dry-run              # 只打印将执行的动作
+bash scripts/upgrade.sh --skip-backup          # 跳过数据库备份（不推荐）
+bash scripts/upgrade.sh --git                  # 开发机：改回 git fetch/checkout
 ```
+
+脚本做的事：备份数据库 → 下载产物包 → **校验 SHA256** → 解包 → 覆盖代码
+→ `pip install -r requirements.txt` → `alembic upgrade head` → 提示重启。
+
+覆盖安装**只写包内存在的文件**，并且**永不覆盖**这些现场资产：
+
+- `backend/.env`（以及任何 `.env*`）
+- `backend/data/`（上传件、备份、扩展、模型、日志）
+- `node_modules/`、`.git/`
 
 > 脚本**不会重启任何服务**。跑完后需**手动重启后端**（uvicorn / celery）才生效。
 
@@ -439,24 +459,60 @@ bash scripts/upgrade.sh --no-pull       # 代码已手动更新，只做迁移+�
 
 ```bash
 # ① 备份数据库（见第 7 节）+ 备份 backend/.env
-# ② 停旧后端（避免 create_all 在迁移前抢建表）
-# ③ 拉新代码：git pull  或  下载 Release 源码覆盖
-cd backend
+# ② 下载产物包并校验
+TAG=v2.2.1
+curl -fsSL -O https://github.com/likele001/cenkor_mes/releases/download/$TAG/cenkormes-$TAG.tar.gz
+curl -fsSL -O https://github.com/likele001/cenkor_mes/releases/download/$TAG/cenkormes-$TAG.tar.gz.sha256
+sha256sum -c cenkormes-$TAG.tar.gz.sha256 --ignore-missing
+# ③ 只覆盖代码，不动现场资产
+mkdir -p /tmp/pkg && tar xzf cenkormes-$TAG.tar.gz -C /tmp/pkg
+tar -C /tmp/pkg/cenkormes-$TAG -c --exclude='./backend/data' --exclude='./backend/.env' --exclude='./.env' . \
+  | tar -C /你的部署目录 -x
 # ④ 更新依赖
-pip install -r requirements.txt
+cd backend && pip install -r requirements.txt
 # ⑤ 先迁移数据库（此时 app 未运行，不会抢建表）
 alembic upgrade head
-# ⑥ 重建前端（覆盖 dist，nginx 直接服务，无需重启）
-cd ../frontend-admin-pro && npm ci && npm run build
-# ⑦ 最后再启动新后端（加载新路由 + 同步版本页）
+# ⑥ 最后再启动新后端（加载新路由 + 同步版本页）
 ```
 
-Docker 部署则：`git pull` → `docker compose build` → 进 backend 容器 `alembic upgrade head` → `docker compose up -d`。
+**不需要 `npm run build`**：包内已经是构建好的 `dist`。这一点和旧文档不同——
+旧流程要求每台机器都装 node，内网环境经常卡在这里。
+
+Docker 部署则：`docker compose pull`（或 `docker compose build`）→ 进 backend 容器
+`alembic upgrade head` → `docker compose up -d`。
 
 ### 8.4 关键注意事项
 
 - **先迁移、后启动**：生产 `DB_AUTO_CREATE` 建议保持 `false`（本仓库默认已改），schema 完全由 alembic 权威管理。若为 `true`，新后端启动时 `create_all` 会抢在新迁移前建表，导致 `alembic upgrade head` 报 `1050 Table already exists`。
 - **全新安装**：首次部署需先跑 `alembic upgrade head` 建表（或临时置 `DB_AUTO_CREATE=true` 启动一次建表后再改回 `false`）。
 - **迁移不可跳**：`alembic upgrade head` 会按序补齐所有中间版本迁移，无需逐版升级；升级前务必先备份。
-- **回滚**：数据库用 8.4 前的备份 dump 恢复；代码 `git checkout` 回旧 tag 后重建前端并重启。
+- **回滚**：数据库用备份 dump 恢复；代码**重新安装上一个版本的产品包**
+  （`bash scripts/upgrade.sh --version v2.2.0`），不需要本地留着 git 历史。
 - **重启由运维执行**：本仓库约定服务启停由人工完成，升级脚本与文档均不自动重启。
+- **不要手改包内文件**：现场改动会被下一次升级覆盖；需要长期生效的定制请走扩展机制。
+
+### 8.5 后台「在线升级」按钮
+
+「关于/版本」页的升级与回滚按钮走的是**同一套产物包**，只是由后端代跑：
+
+| 环节 | 需要什么 | 说明 |
+|---|---|---|
+| 查最新版本 | 能访问 `api.github.com` | 公开仓库匿名读，不需要令牌 |
+| 下载产物包 | 能访问 `github.com` | 走 Release 附件，直链下载 |
+| 校验 | 无需额外依赖 | 优先用接口自带 digest，其次 `.sha256` 附件；两者都没有会**拒绝安装** |
+| 前端 | **不需要 node** | 包内已带 dist，原子换入 |
+| 数据库备份 | `mysqldump` | 失败即中止，绝不带病继续 |
+
+相关环境变量：
+
+| 变量 | 默认值 | 作用 |
+|---|---|---|
+| `CENKORMES_UPGRADE_MODE` | `artifact` | `artifact` 产物包；`git` 开发机用；`auto` 按有无 `.git` 自动选 |
+| `CENKORMES_REPO` | `likele001/cenkor_mes` | 私有化部署指向自己的仓库 |
+| `CENKORMES_GITHUB_API` | `https://api.github.com` | 内网镜像或 GitHub Enterprise |
+| `CENKORMES_ALLOW_UNVERIFIED` | 空 | 设 `1` 才允许安装无摘要的包（不建议） |
+| `CENKORMES_RESTART_CMD` | 空 | 自定义重启命令；不配则杀监听进程等面板守护拉起 |
+| `CENKORMES_CELERY_UNITS` | `cenkormes-celery cenkormes-beat` | 升级后要重启的 worker 单元名 |
+
+> 若服务器完全无外网，请用 8.2/8.3 的离线方式：把包下载到内网后手动覆盖安装。
+> 后台按钮在没有外网时只会提示「无法检查更新」。

@@ -196,9 +196,9 @@ else
   if [ "$DRY" = 1 ]; then
     echo "[dry-run] curl -fL -o $TMP/pkg.tar.gz $PKG_URL"
   else
-    curl -fL --retry 3 --connect-timeout 20 -o "$TMP/pkg.tar.gz" "$PKG_URL"
+    curl -fsS --retry 3 --connect-timeout 20 -o "$TMP/pkg.tar.gz" "$PKG_URL"
     if [ "$SHA_URL" != "-" ]; then
-      curl -fL --retry 3 --connect-timeout 20 -o "$TMP/pkg.sha256" "$SHA_URL"
+      curl -fsS --retry 3 --connect-timeout 20 -o "$TMP/pkg.sha256" "$SHA_URL"
       # .sha256 里写的是发版时的文件名，这里改成本地文件名再校验
       EXPECT="$(awk '{print $1}' "$TMP/pkg.sha256" | head -1)"
       ACTUAL="$(sha256sum "$TMP/pkg.tar.gz" | awk '{print $1}')"
