@@ -70,6 +70,9 @@ BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
 # 旧窗口 180s 会早 26~27s 放弃，把实际健康的服务误判为 failed。420s 留足一轮
 # 自愈 + 应用启动 + 余量；面板策略变化时可用 CENKORMES_VERIFY_TIMEOUT 覆盖。
 VERIFY_TIMEOUT = int(os.environ.get("CENKORMES_VERIFY_TIMEOUT", "420"))
+# startup 钩子比 uvicorn 开始 accept 连接更早，此时 /api/health 必然探不通。
+# 这段时间内保留 running/restart 等下一次 reconcile，超时才判死，避免误判 + 卡死。
+RESTART_GRACE_SECONDS = 600
 RESTART_RESULT_DIR = Path("/tmp")
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
@@ -1875,6 +1878,13 @@ def _reconcile_restart_jobs(db) -> None:
                     f"守护脚本窗口内未等到（回报 {actual or '无响应'}），但复核 /api/health "
                     f"实测 {live_version}，判定为成功",
                 )
+            elif live is None and job.started_at and (
+                datetime.now() - job.started_at
+            ).total_seconds() < RESTART_GRACE_SECONDS:
+                # 常见于服务刚被面板拉起、startup 钩子先跑完但端口还没对外服务。
+                # 保留 running/restart，等任务列表接口或后续 reconcile 再判定。
+                _log(job.id, "守护脚本超时且健康端点暂不可达（服务可能仍在启动），暂缓判定")
+                continue
             else:
                 job.status = "failed"
                 job.stage = "done"

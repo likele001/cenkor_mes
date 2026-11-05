@@ -232,9 +232,11 @@ def test_reconcile_corrects_guard_timeout_when_service_is_healthy(monkeypatch, t
     assert db.commits == 1
 
 
-def test_reconcile_keeps_failed_when_service_is_still_down(monkeypatch, tmp_path):
-    """服务真的没起来 → 仍判 failed，不能靠复核洗白。"""
-    job = _job()
+def test_reconcile_keeps_failed_when_service_is_still_down(monkeypatch):
+    """过了启动宽限期服务仍没起来 → 判 failed，不能靠复核洗白。"""
+    from datetime import timedelta
+
+    job = _job(started_at=datetime.now() - timedelta(minutes=20))
     db = _FakeDB(job)
     monkeypatch.setattr(us, "_read_restart_result", lambda _p: {"ok": "0", "version": "", "finished_at": "x"})
     monkeypatch.setattr(us, "_probe_health", lambda: None)
@@ -243,6 +245,20 @@ def test_reconcile_keeps_failed_when_service_is_still_down(monkeypatch, tmp_path
 
     assert job.status == "failed"
     assert "健康校验失败" in job.error
+
+
+def test_reconcile_defers_while_service_is_still_starting(monkeypatch):
+    """startup 钩子早于端口可用：暂缓判定，等下一次 reconcile，不误标 failed。"""
+    job = _job()
+    db = _FakeDB(job)
+    monkeypatch.setattr(us, "_read_restart_result", lambda _p: {"ok": "0", "version": "", "finished_at": "x"})
+    monkeypatch.setattr(us, "_probe_health", lambda: None)
+
+    us._reconcile_restart_jobs(db)
+
+    assert job.status == "running"
+    assert job.stage == "restart"
+    assert db.commits == 0
 
 
 def test_reconcile_keeps_failed_on_version_mismatch(monkeypatch, tmp_path):
