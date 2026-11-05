@@ -518,3 +518,19 @@ Docker 部署则：`docker compose pull`（或 `docker compose build`）→ 进 
 
 > 若服务器完全无外网，请用 8.2/8.3 的离线方式：把包下载到内网后手动覆盖安装。
 > 后台按钮在没有外网时只会提示「无法检查更新」。
+
+## 9. 前端产物属主（在线升级前置条件）
+
+后端服务与在线升级均以 `www` 用户运行，`frontend-*/dist` 必须属于 `www:www`。
+若用 root 手动执行 `npm run build` 或 rsync 上传 dist，目录会变成 `root:root`：
+在线升级换入产物时 `_promote_frontend()` 里的 `shutil.rmtree(dist.__bak, ignore_errors=True)`
+删不掉旧产物且会静默忽略，残留持续占空间，还会让后续 rename 与回滚失败
+（2026-11-02~11-05 任务 #7 反复出现 disk full 的诱因之一）。
+
+手动构建或上传前端产物后，务必执行：
+
+```bash
+chown -R www:www frontend-admin-pro/dist frontend-h5/dist
+```
+
+CI 产物包由升级进程（www）解压，属主天然正确，无需额外处理。
