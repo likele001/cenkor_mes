@@ -53,6 +53,28 @@ ACTIVE_STATUSES = ("pending", "running")
 # nginx 直接服务 dist，代码升级后必须重建；只重建源码有改动的应用
 FRONTEND_APPS = (("frontend-admin-pro", "管理后台"), ("frontend-h5", "H5"))
 
+# 每个阶段允许的最长执行时间（秒）。用于识别「进程已死但任务还挂在 running」的僵尸任务。
+# backup 给 90 分钟：大库 mysqldump 本身就要很久，绝不能按短超时误杀。
+STAGE_TIMEOUTS = {
+    "backup": 5400,
+    "fetch": 900,
+    "checkout": 900,
+    "deps": 2400,
+    "build": 3600,   # npm ci + build 两个前端
+    "migrate": 1800,
+    "restart": 900,  # 重启另有守护脚本结果文件兜底，这里只是最后防线
+}
+DEFAULT_STAGE_TIMEOUT = 3600
+
+# 升级/回滚开始前要求的最小可用空间（字节）。
+# 11-02 任务 #7 就是磁盘满导致前端产物换入失败，与其跑到一半炸，不如开工前拒绝。
+MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024  # 2 GiB
+
+# 本进程正在执行的任务 id。进程重启后该集合为空——这正是判定僵尸任务的关键依据：
+# 任务标记为 running，却不在本进程的执行集合里，说明执行线程已随旧进程消失。
+# 前提是单 worker 部署（宝塔 Python 项目为 uvicorn 单进程），多 worker 需改用 DB 心跳。
+_RUNNING_JOBS: set[int] = set()
+
 
 # ── 基础工具 ──────────────────────────────────────────────────────────
 
@@ -238,6 +260,41 @@ def _set(db, job: UpgradeJob, *, status: str | None = None, stage: str | None = 
 # ── 锁 ───────────────────────────────────────────────────────────────
 
 
+def _pid_alive(pid: int) -> bool:
+    """判断 pid 对应的进程是否还活着（不发送真实信号，只做存在性探测）。
+
+    Returns:
+        True 表示进程存在（含「存在但属于其他用户」的情况，保守处理）。
+    """
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # 进程存在，只是当前用户没权限发信号
+    except OSError:
+        return False
+    return True
+
+
+def _lock_holder_pid() -> int | None:
+    """读锁文件里记录的持有者 pid（_acquire_lock 写入的就是 os.getpid()）。
+
+    Returns:
+        持有者 pid；锁不存在或内容不是整数时返回 None。
+    """
+    try:
+        raw = LOCK_FILE.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def _acquire_lock() -> int:
     LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -342,6 +399,8 @@ def _execute(job_id: int, restore_db: bool, skip_frontend: bool = False) -> None
     fd = None
     try:
         fd = _acquire_lock()
+        # 先登记再改状态：reconcile_jobs() 靠这个集合区分「本进程在跑」与「旧进程僵尸」
+        _RUNNING_JOBS.add(job_id)
         job = db.get(UpgradeJob, job_id)
         if job is None:
             return
@@ -365,6 +424,7 @@ def _execute(job_id: int, restore_db: bool, skip_frontend: bool = False) -> None
         except Exception:
             db.rollback()
     finally:
+        _RUNNING_JOBS.discard(job_id)
         _release_lock(fd)
         db.close()
 
@@ -416,13 +476,35 @@ def _build_frontend(app: str, job_id: int) -> Path:
 
 
 def _promote_frontend(app: str, out_dir: Path, job_id: int) -> None:
-    """原子换入：线上 dist 改名为 dist.__bak，临时产物改名为 dist。"""
+    """换入产物：线上 dist 先改名为 dist.__bak，再把临时产物改名为 dist。
+
+    两次 rename 之间线上 dist 并不存在，因此第二次失败（disk full / inode 耗尽）
+    必须立刻把 dist.__bak 改回去，否则站点会直接 404。
+    11-02 任务 #7 的「产物换入失败：disk full」正踩在这里。
+    """
     live = ROOT / app / "dist"
     backup = ROOT / app / "dist.__bak"
     shutil.rmtree(backup, ignore_errors=True)
+    moved_away = False
     if live.exists():
         live.rename(backup)
-    out_dir.rename(live)
+        moved_away = True
+    try:
+        out_dir.rename(live)
+    except OSError as exc:
+        if moved_away and not live.exists() and backup.exists():
+            try:
+                backup.rename(live)
+                _log(job_id, f"[错误] {app} 产物换入失败，线上 dist 已还原：{exc}")
+            except OSError as restore_exc:
+                _log(
+                    job_id,
+                    f"[严重] {app} 产物换入失败且还原失败，站点可能已 404："
+                    f"{exc}；{restore_exc}；请手动执行 mv {backup} {live}",
+                )
+        else:
+            _log(job_id, f"[错误] {app} 产物换入失败：{exc}")
+        raise
     _log(job_id, f"{app}: 前端产物已换入 dist（旧版备份 dist.__bak）")
 
 
@@ -519,11 +601,87 @@ def _restore_code(job: UpgradeJob, job_id: int) -> None:
     )
 
 
+def _check_disk_space(job_id: int) -> None:
+    """开工前检查可用空间，不足则拒绝升级。
+
+    磁盘满是「跑到一半才炸」的典型失败模式：mysqldump 写一半、前端产物换入
+    失败、dist 与 dist.__bak 与临时构建目录同时占空间。前置检查成本几乎为零。
+    """
+    try:
+        usage = shutil.disk_usage(ROOT)
+    except OSError as exc:  # 拿不到磁盘信息不该阻断升级
+        _log(job_id, f"[警告] 无法获取磁盘信息（{exc}），跳过空间检查")
+        return
+    need_mb = MIN_FREE_BYTES // (1024 * 1024)
+    free_mb = usage.free // (1024 * 1024)
+    _log(job_id, f"磁盘可用 {free_mb} MB（要求至少 {need_mb} MB）")
+    if usage.free < MIN_FREE_BYTES:
+        raise RuntimeError(
+            f"磁盘可用空间不足：仅 {free_mb} MB，至少需要 {need_mb} MB"
+            f"（数据库备份 + 前端构建产物 + 换入占位）。请先清理后重试"
+        )
+
+
+def _deps_satisfied(py: Path, req: Path) -> tuple[bool, str]:
+    """pip install 失败后的复核：现有环境是否已满足 requirements。
+
+    只依赖 --dry-run 的退出码与「Would install」关键字，不解析具体包名——
+    requirements 里的环境标记、VCS 依赖、嵌套 -r 都会把解析逻辑写脆。
+
+    Args:
+        py: 虚拟环境 python 路径。
+        req: requirements.txt 路径。
+
+    Returns:
+        (是否已满足, 说明文本)。
+    """
+    res = _run_cmd([str(py), "-m", "pip", "install", "-r", str(req), "--dry-run"], timeout=900)
+    out = f"{res.stdout or ''}\n{res.stderr or ''}".strip()
+    if res.returncode != 0:
+        return False, f"dry-run 复核失败：{out[:300]}"
+    if "Would install" in out:
+        return False, "仍有未满足依赖：" + out.split("Would install", 1)[1].strip()[:300]
+    return True, "already satisfied"
+
+
+def _install_deps(job_id: int, py: Path) -> None:
+    """安装依赖；失败后复核环境，确认不满足则中止。
+
+    旧实现里 pip install 非 0 只写一行警告就继续，任务最后可能仍显示 success，
+    但进程可能起不来、或跑到某个功能才炸。现在区分两种失败：
+      - 环境其实已满足（多为网络/源抖动）→ 记明理由后放行
+      - 环境仍不满足，或复核本身失败 → 抛错，由调用方回退代码
+
+    Raises:
+        RuntimeError: 依赖安装失败且环境不满足。
+    """
+    req = BACKEND_DIR / "requirements.txt"
+    if not req.exists():
+        _log(job_id, f"[警告] {req} 不存在，跳过依赖安装")
+        return
+    res = _run_cmd([str(py), "-m", "pip", "install", "-r", str(req)], timeout=1800)
+    _log(job_id, (res.stdout or "")[-3000:])
+    if res.returncode == 0:
+        _log(job_id, "依赖安装完成")
+        return
+
+    _log(job_id, f"[警告] 依赖安装失败：{(res.stderr or '').strip()[:500]}")
+    ok, detail = _deps_satisfied(py, req)
+    if ok:
+        _log(job_id, "复核结论：当前环境已满足 requirements.txt（失败疑似网络抖动），继续升级")
+        return
+    raise RuntimeError(f"依赖安装失败且环境不满足 requirements.txt：{detail}")
+
+
 def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
     jid = job.id
 
+    # 0) 前置体检：空间不足直接拒绝，此时还没有任何东西被改动过
+    _set(db, job, stage="preflight", status="running")
+    _check_disk_space(jid)
+
     # 1) 数据库备份：失败立即中止
-    _set(db, job, stage="backup", status="running")
+    _set(db, job, stage="backup")
     _log(jid, "步骤 1/8 备份数据库")
     backup = _backup_database(job)
     job.backup_path = str(backup)
@@ -552,24 +710,22 @@ def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
         )
     _log(jid, "checkout 完成，VERSION=" + read_local_version())
 
-    # 4) 依赖：失败跳过但记警告
-    _set(db, job, stage="deps")
-    _log(jid, "步骤 4/8 安装依赖 backend/requirements.txt")
+    # 4)~7) 从 checkout 之后统一纳入回退保护：任一步失败都把代码退回 from_ref。
+    # 依赖失败曾经在保护范围之外，结果是「磁盘上是新代码、进程里是旧代码、
+    # 依赖还缺着」，重启后服务起不来，比直接中止危险得多。
     py = _venv_python()
-    res = _run_cmd([str(py), "-m", "pip", "install", "-r", str(BACKEND_DIR / "requirements.txt")], timeout=1800)
-    _log(jid, (res.stdout or "")[-3000:])
-    if res.returncode != 0:
-        _log(jid, f"[警告] 依赖安装失败，已跳过：{(res.stderr or '').strip()[:500]}")
-    else:
-        _log(jid, "依赖安装完成")
-
-    # 5) 前端：先构建到临时目录；失败则中止（dist 与数据库都保持原样）
-    _set(db, job, stage="build")
-    _log(jid, "步骤 5/8 构建前端（仅源码有改动的应用）")
     built: list[tuple[str, Path]] = []
     promoted: list[str] = []
 
     try:
+        # 4) 依赖：失败先复核环境是否已满足，不满足则中止
+        _set(db, job, stage="deps")
+        _log(jid, "步骤 4/8 安装依赖 backend/requirements.txt")
+        _install_deps(jid, py)
+
+        # 5) 前端：先构建到临时目录；失败则中止（dist 与数据库都保持原样）
+        _set(db, job, stage="build")
+        _log(jid, "步骤 5/8 构建前端（仅源码有改动的应用）")
         built = _prepare_frontends(
             job, job.from_ref, job.to_version, skip=skip_frontend, strict=True
         )
@@ -860,7 +1016,7 @@ def _read_restart_result(path: Path) -> dict[str, str] | None:
     return data
 
 
-def reconcile_restarts(db) -> None:
+def _reconcile_restart_jobs(db) -> None:
     """把重启守护脚本落盘的结果回写到任务表。
 
     重启会杀掉本进程，执行线程随之消失，任务会停在 running/restart；
@@ -908,6 +1064,124 @@ def reconcile_restarts(db) -> None:
             LOCK_FILE.unlink(missing_ok=True)  # 旧进程已被替换，残留锁一并清掉
         except OSError:
             pass
+
+
+# ── 僵尸任务收尸 ─────────────────────────────────────────────────────
+
+# pending 状态的宽限期（秒）：任务创建后线程需要一点时间接管，
+# 这段时间内不能判死，否则会误杀刚点下升级的任务。
+PENDING_GRACE_SECONDS = 300
+
+
+def _job_created_at(job: UpgradeJob) -> datetime | None:
+    """任务的创建时间近似值：优先 started_at，其次日志文件 mtime。"""
+    if job.started_at is not None:
+        return job.started_at
+    try:
+        return datetime.fromtimestamp(_log_path(job.id).stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _job_dead_reason(job: UpgradeJob) -> str | None:
+    """判断一个「进行中」任务是否已是僵尸。
+
+    判据组合（宁可漏判，不误杀）：
+      1. 在本进程执行集合里 → 还活着，直接放过；
+      2. 锁由另一个**存活**进程持有且未超时 → 保守放过（多 worker 场景）；
+      3. 其余情况（无人持锁 / 锁持有者已退出 / 已超阶段时限）→ 判死。
+
+    pid 存活不能单独作为「还活着」的证据（pid 会被系统复用），
+    因此额外用「阶段超时」作为交叉验证。
+
+    Returns:
+        判死原因文本；仍存活时返回 None。
+    """
+    if job.id in _RUNNING_JOBS:
+        return None
+
+    holder = _lock_holder_pid()
+    holder_is_other_alive = (
+        holder is not None and holder != os.getpid() and _pid_alive(holder)
+    )
+
+    stage = job.stage or "未知"
+    limit = STAGE_TIMEOUTS.get(stage, DEFAULT_STAGE_TIMEOUT)
+    created = _job_created_at(job)
+    elapsed = (datetime.now() - created).total_seconds() if created else None
+    overtime = elapsed is not None and elapsed > limit
+
+    if holder_is_other_alive and not overtime:
+        return None
+    if holder_is_other_alive and overtime:
+        return f"{stage} 阶段已超过 {limit // 60} 分钟仍未结束"
+
+    if job.status == "pending":
+        if elapsed is None:
+            return None  # 无任何时间线索，不动
+        if elapsed <= PENDING_GRACE_SECONDS:
+            return None  # 线程可能正在接管
+        return f"任务创建后 {int(elapsed // 60)} 分钟仍未开始执行"
+
+    suffix = f"，且已超过 {limit // 60} 分钟" if overtime else ""
+    return f"执行进程已退出（无存活持锁者），任务停在 {stage} 阶段{suffix}"
+
+
+def _release_stale_lock() -> None:
+    """清掉上次进程残留的锁；仅当持锁进程确实不存在时才删。
+
+    锁持有者是本进程或另一个存活进程时一律不动，避免把正在跑的任务锁删掉。
+    """
+    holder = _lock_holder_pid()
+    if holder is None:
+        return
+    if holder == os.getpid() or _pid_alive(holder):
+        return
+    try:
+        LOCK_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _reap_zombie_jobs(db) -> None:
+    """把「进程已死但任务仍是 running」的任务置为 failed，解除升级/回滚阻塞。
+
+    这是 11-02 之后补上的兜底：reconcile 原先只收 restart 阶段，其余阶段被
+    中断（重启、OOM、面板重启）的任务会永久停在 running，而 create_job 与
+    rollback_job 都有 active 拦截 —— 升级被挡、回滚也被挡，只能登库手改状态。
+    """
+    rows = db.execute(
+        select(UpgradeJob).where(UpgradeJob.status.in_(ACTIVE_STATUSES))
+    ).scalars().all()
+    for job in rows:
+        if job.stage == "restart":
+            continue  # 重启阶段由 _reconcile_restart_jobs 按守护脚本结果处理
+        reason = _job_dead_reason(job)
+        if reason is None:
+            continue
+        job.status = "failed"
+        job.stage = "done"
+        job.error = f"任务已中止：{reason}。请查看升级日志后重试或回滚"
+        job.finished_at = datetime.now()
+        db.add(job)
+        db.commit()
+        _log(job.id, f"[收尸] {reason}；已置为 failed 以解除升级/回滚阻塞")
+    _release_stale_lock()
+
+
+def reconcile_jobs(db) -> None:
+    """任务状态自愈入口：重启阶段收尾 + 僵尸任务收尸。
+
+    幂等，任务接口、详情接口与服务启动钩子都可以反复调用。
+    """
+    _reconcile_restart_jobs(db)
+    _reap_zombie_jobs(db)
+
+
+# 兼容旧调用点（api_upgrade.py / main.py 已改用 reconcile_jobs）
+def reconcile_restarts(db) -> None:
+    """已废弃别名，等价于 reconcile_jobs()。"""
+    reconcile_jobs(db)
 
 
 def _probe_health(timeout: float = 5.0) -> dict | None:
@@ -976,6 +1250,31 @@ def rollback_job(db, job_id: int, restore_db: bool = False, skip_frontend: bool 
         f"restore_db={restore_db}，skip_frontend={skip_frontend}",
     )
     run_job(job.id, restore_db=restore_db, skip_frontend=skip_frontend)
+    return job
+
+
+def force_fail_job(db, job_id: int, reason: str = "", operator: str = "-") -> UpgradeJob:
+    """人工把卡住的任务强制置为失败，解除升级/回滚阻塞。
+
+    正常路径下 _reap_zombie_jobs 会自动收尸，本函数只用于自动判定失灵时
+    （例如锁被外部进程长期占用）的紧急解锁，避免只能登库改状态。
+
+    Raises:
+        ValueError: 任务不存在，或当前状态本就不是「进行中」。
+    """
+    job = db.get(UpgradeJob, job_id)
+    if job is None:
+        raise ValueError("任务不存在")
+    if job.status not in ACTIVE_STATUSES:
+        raise ValueError(f"任务 #{job_id} 当前状态为 {job.status}，无需强制结束")
+    job.status = "failed"
+    job.stage = "done"
+    job.error = (reason.strip() or "由管理员强制结束")[:2000]
+    job.finished_at = datetime.now()
+    db.add(job)
+    db.commit()
+    _log(job_id, f"[强制结束] 操作人={operator}；{job.error}")
+    _release_stale_lock()
     return job
 
 

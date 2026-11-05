@@ -41,6 +41,10 @@ class RollbackIn(BaseModel):
     skip_frontend: bool = False
 
 
+class ForceFailIn(BaseModel):
+    reason: str = ""
+
+
 def _dt(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
@@ -96,7 +100,7 @@ def list_jobs(
     _user: User = Depends(get_superuser),
 ):
     """最近 20 条任务。"""
-    upgrade_service.reconcile_restarts(db)  # 重启后旧进程线程已消失，这里补回任务状态
+    upgrade_service.reconcile_jobs(db)  # 重启收尾 + 僵尸任务收尸，避免长期阻塞
     rows = db.execute(select(UpgradeJob).order_by(UpgradeJob.id.desc()).limit(20)).scalars().all()
     return ok({"items": [_job_out(x) for x in rows]})
 
@@ -107,7 +111,7 @@ def get_job(
     db: Session = Depends(get_db),
     _user: User = Depends(get_superuser),
 ):
-    upgrade_service.reconcile_restarts(db)
+    upgrade_service.reconcile_jobs(db)
     job = db.get(UpgradeJob, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -142,6 +146,21 @@ def verify_job(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return ok(result)
+
+
+@router.post("/jobs/{job_id}/force-fail")
+def force_fail(
+    job_id: int,
+    payload: ForceFailIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_superuser),
+):
+    """强制结束卡住的任务（自动收尸失灵时的兜底，仅超级管理员）。"""
+    try:
+        job = upgrade_service.force_fail_job(db, job_id, payload.reason, user.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return ok(_job_out(job))
 
 
 @router.post("/rollback")
