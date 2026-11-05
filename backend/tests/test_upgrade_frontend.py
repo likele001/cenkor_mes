@@ -197,12 +197,16 @@ def test_assert_clean_tree_blocks_dirty(monkeypatch):
 
 
 def test_create_job_rejects_dirty_tree_before_db(monkeypatch):
+    # 工作区脏是 git 模式独有的拦截；产物包模式下该检查不存在
+    monkeypatch.setattr(us, "UPGRADE_MODE_ENV", "git")
     monkeypatch.setattr(us, "working_tree_dirty", lambda: True)
     with pytest.raises(ValueError, match="未提交改动"):
         us.create_job(None, "upgrade", "v9.9.9")
 
 
 def test_check_update_reports_dirty_flag(monkeypatch):
+    # 本用例验证 git 模式的「工作区脏」提示；产物包模式没有这个概念，另有用例覆盖
+    monkeypatch.setattr(us, "UPGRADE_MODE_ENV", "git")
     monkeypatch.setattr(us, "read_local_version", lambda: "v1.0.0")
     monkeypatch.setattr(us, "list_remote_tags", lambda: ["v1.1.0"])
     monkeypatch.setattr(us, "_disk_free_gb", lambda: 10.0)

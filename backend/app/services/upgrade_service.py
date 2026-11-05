@@ -12,17 +12,34 @@
 - 重启会杀掉本进程，因此重启 + 健康校验交给一份独立会话的守护脚本执行，结果落盘
   到 /tmp/cenkormes-upgrade-restart-{job}.json，下次访问任务接口或服务启动时由
   reconcile_restarts() 回写最终状态，任务不会永远停在 running。
+
+两种升级模式（CENKORMES_UPGRADE_MODE）：
+- artifact（默认）：从 GitHub Release 下载发布产物包（含预构建 dist），校验
+  SHA256 后解包覆盖。客户机不需要 git、不需要 SSH key、不需要 node/npm。
+- git：git fetch + checkout，仅适用于「开发机即生产机」的场景，需要有 .git 与
+  远端读权限。
+
+为什么默认改成 artifact：原实现靠 git checkout，对客户机是走不通的。
+  - 客户拿到的是 zip/tarball，根本没有 .git，ls-remote 与 checkout 全部失败；
+  - .gitignore 忽略了 dist/ 与 node_modules/，checkout 只换源码，前端产物必须
+    在客户机上 npm ci + build 重建，客户机没 node 或连不上 registry 就当场炸；
+  - 客户现场改过一个 tracked 文件，_assert_clean_tree 就直接拒绝升级。
+  加上 remote 是 git@github.com: 形式时还需要每台机器配 deploy key，这条路
+  本质上是「开发者自用」，不能当产品分发通道。
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
+import tarfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -57,14 +74,49 @@ ACTIVE_STATUSES = ("pending", "running")
 # nginx 直接服务 dist，代码升级后必须重建；只重建源码有改动的应用
 FRONTEND_APPS = (("frontend-admin-pro", "管理后台"), ("frontend-h5", "H5"))
 
+# ── 产物包升级（artifact 模式）─────────────────────────────────────────
+# GitHub 仓库标识与 API 入口。公开仓库匿名即可读 Releases，不需要任何令牌，
+# 这也正是客户机能用的通道——不能用需要授权的接口。
+REPO_SLUG = os.environ.get("CENKORMES_REPO", "likele001/cenkor_mes")
+GITHUB_API = os.environ.get("CENKORMES_GITHUB_API", "https://api.github.com").rstrip("/")
+# artifact = 下载发布产物包（默认，客户机用）；git = fetch + checkout（开发机用）
+# 留空或 auto 时按是否存在 .git 自动选择，便于同一份代码在两处都跑得起来。
+UPGRADE_MODE_ENV = os.environ.get("CENKORMES_UPGRADE_MODE", "artifact").strip().lower()
+# 产物包与解包目录放在 backend/data 下：该目录已被 git 忽略，且和项目在同一个
+# 文件系统上，改名/复制不会跨挂载点。
+CACHE_DIR = BACKEND_DIR / "data/upgrade_cache"
+# 记录上一版装过哪些文件，用于安全地判断「哪些文件已被上游删除」。
+# 没有它就只能保守地不删任何文件（宁可留垃圾，不能删客户文件）。
+MANIFEST_NAME = ".release-manifest.txt"
+# 这些路径永远不被产物包覆盖，也不会被「清理废弃文件」删掉：
+# .env 是现场配置，backend/data 下是客户数据（上传件、备份、扩展、模型）。
+PROTECTED_PREFIXES = (
+    "backend/data/",
+    ".git/",
+    "node_modules/",
+    "backend/node_modules/",
+    "backend/.venv/",
+    "backend/venv/",
+    ".venv/",
+    "venv/",
+    "logs/",
+)
+PROTECTED_SUFFIX_DIRS = ("dist.__bak/", ".dist-build-", ".dist-new-")
+# Release 里没有 SHA256 摘要时是否仍允许安装。默认拒绝：升级包是直接覆盖代码的，
+# 校验不了完整性就等于把「下载被中间人替换」的风险敞口全部打开。
+ALLOW_UNVERIFIED = os.environ.get("CENKORMES_ALLOW_UNVERIFIED", "") == "1"
+# 发布列表缓存时间：匿名 GitHub API 每小时 60 次，About 页轮询很容易打满
+RELEASE_CACHE_TTL = int(os.environ.get("CENKORMES_RELEASE_CACHE_TTL", "300"))
+_release_cache: dict[str, object] = {"at": 0.0, "rows": []}
+
 # 每个阶段允许的最长执行时间（秒）。用于识别「进程已死但任务还挂在 running」的僵尸任务。
 # backup 给 90 分钟：大库 mysqldump 本身就要很久，绝不能按短超时误杀。
 STAGE_TIMEOUTS = {
     "backup": 5400,
-    "fetch": 900,
-    "checkout": 900,
+    "fetch": 1800,     # artifact 模式这里是下载产物包
+    "checkout": 1800,  # artifact 模式这里是逐文件覆盖 + 前端换入
     "deps": 2400,
-    "build": 3600,   # npm ci + build 两个前端
+    "build": 3600,     # npm ci + build 两个前端（仅 git 模式）
     "migrate": 1800,
     "restart": 900,  # 重启另有守护脚本结果文件兜底，这里只是最后防线
 }
@@ -109,6 +161,141 @@ def _tag_key(tag: str) -> tuple[int, ...]:
         return (0, 0, 0)
 
 
+def upgrade_mode() -> str:
+    """当前生效的升级模式："artifact" 或 "git"。
+
+    Returns:
+        "artifact"（下载发布产物包）或 "git"（fetch + checkout）。
+
+    Raises:
+        RuntimeError: 显式要求 git 模式但目录不是 git 仓库。
+    """
+    mode = UPGRADE_MODE_ENV
+    has_git = (ROOT / ".git").exists()
+    if mode == "auto":
+        return "git" if has_git else "artifact"
+    if mode == "git" and not has_git:
+        raise RuntimeError(
+            "已配置 CENKORMES_UPGRADE_MODE=git，但当前目录不是 git 仓库；"
+            "请改为 artifact 模式（默认），或重新 clone 后再升级"
+        )
+    return "git" if mode == "git" else "artifact"
+
+
+def _http_get_json(url: str, timeout: int = 30) -> dict | list:
+    """匿名 GET JSON。公开仓库的 Releases 接口无需任何凭据。"""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "cenkormes-upgrade",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def list_remote_releases(*, refresh: bool = False) -> list[dict]:
+    """列出远端已发布版本（不含草稿与预发布），按语义版本升序。
+
+    返回结构::
+
+        [{"version": "v2.2.1", "published_at": "...", "assets": [{"name","url","size","digest"}]}]
+
+    Args:
+        refresh: 忽略缓存强制刷新。
+
+    Returns:
+        版本信息列表，升序。
+
+    Raises:
+        RuntimeError: 接口不可达或返回非列表。
+    """
+    now = time.time()
+    cached = _release_cache.get("rows") or []
+    if not refresh and cached and now - float(_release_cache.get("at") or 0) < RELEASE_CACHE_TTL:
+        return list(cached)  # type: ignore[arg-type]
+
+    rows: list[dict] = []
+    # per_page=30 够用：升级只需要「最新版」与「上一版」，翻太多反而慢
+    data = _http_get_json(f"{GITHUB_API}/repos/{REPO_SLUG}/releases?per_page=30")
+    if not isinstance(data, list):
+        raise RuntimeError(f"Releases 接口返回异常：{str(data)[:200]}")
+    for rel in data:
+        tag = (rel.get("tag_name") or "").strip()
+        if not VERSION_RE.match(tag) or rel.get("draft") or rel.get("prerelease"):
+            continue
+        assets = [
+            {
+                "name": a.get("name") or "",
+                "url": a.get("browser_download_url") or "",
+                "size": a.get("size") or 0,
+                "digest": a.get("digest") or "",
+            }
+            for a in rel.get("assets") or []
+        ]
+        rows.append(
+            {"version": tag, "published_at": rel.get("published_at") or "", "assets": assets}
+        )
+    rows.sort(key=lambda r: _tag_key(r["version"]))
+    if not rows:
+        raise RuntimeError(
+            f"仓库 {REPO_SLUG} 没有任何带产物包的正式 Release；"
+            "请先按发版流程打 tag 并等待 Release 工作流完成"
+        )
+    _release_cache["at"] = now
+    _release_cache["rows"] = rows
+    return rows
+
+
+def _find_release(version: str) -> dict:
+    """取指定版本的 Release 信息。
+
+    Raises:
+        RuntimeError: 该版本没有发布产物包。
+    """
+    for rel in list_remote_releases():
+        if rel["version"] == version:
+            return rel
+    raise RuntimeError(f"远端没有 {version} 的正式 Release，无法安装该版本")
+
+
+def _pick_asset(rel: dict, suffix: str) -> dict | None:
+    for a in rel["assets"]:
+        if a["name"].endswith(suffix):
+            return a
+    return None
+
+
+def _asset_sha256(rel: dict, asset: dict) -> str:
+    """取产物包的 SHA256：优先接口自带的 digest，其次同名 .sha256 文件。
+
+    Raises:
+        RuntimeError: 两种来源都拿不到，且未显式允许未校验安装。
+    """
+    digest = (asset.get("digest") or "").strip()
+    if digest.startswith("sha256:"):
+        return digest[len("sha256:") :].strip().lower()
+
+    sha_asset = _pick_asset(rel, ".sha256")
+    if sha_asset:
+        try:
+            body = urllib.request.urlopen(sha_asset["url"], timeout=30).read().decode("utf-8", "replace")
+            first = body.strip().split()[0] if body.strip() else ""
+            if re.fullmatch(r"[0-9a-fA-F]{64}", first):
+                return first.lower()
+        except (urllib.error.URLError, OSError):
+            pass
+
+    if ALLOW_UNVERIFIED:
+        return ""
+    raise RuntimeError(
+        f"{asset['name']} 没有可用的 SHA256 摘要，已拒绝安装（无法校验完整性）。"
+        "确认来源可信时可设 CENKORMES_ALLOW_UNVERIFIED=1 跳过校验"
+    )
+
+
 def list_remote_tags() -> list[str]:
     """git ls-remote --tags origin，过滤 ^{} 解引用行，按语义版本升序返回。"""
     res = _run_cmd(["git", "-C", str(ROOT), "ls-remote", "--tags", "origin"], timeout=60)
@@ -137,7 +324,13 @@ def _disk_free_gb() -> float | None:
 
 
 def working_tree_dirty() -> bool:
-    """tracked 文件是否有未提交改动（新日志/备份/构建产物均为 untracked，不阻塞升级）。"""
+    """tracked 文件是否有未提交改动（新日志/备份/构建产物均为 untracked，不阻塞升级）。
+
+    非 git 部署（客户拿产物包安装，没有 .git）恒为 False：没有「工作区」这个概念，
+    也就没有会被 checkout 覆盖的本地改动。
+    """
+    if not (ROOT / ".git").exists():
+        return False
     res = _run_cmd(
         ["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
         timeout=30,
@@ -156,12 +349,18 @@ def _assert_clean_tree(action: str) -> None:
 def check_update() -> dict:
     """当前版本 / 远端最新版本 / 是否可更新 / 重启命令是否配置 / 磁盘余量。"""
     current = read_local_version()
-    tags = list_remote_tags()          # 远端不可达时抛 RuntimeError，由路由转 400
-    latest = tags[-1] if tags else current
-    if tags and VERSION_RE.match(current):
+    mode = upgrade_mode()
+    if mode == "artifact":
+        # 产物包模式只认「有正式 Release 且有包」的版本：只有 tag 没有包的版本
+        # 点了升级也装不上，不该在界面上提示可更新。
+        versions = [r["version"] for r in list_remote_releases() if _pick_asset(r, ".tar.gz")]
+    else:
+        versions = list_remote_tags()  # 远端不可达时抛 RuntimeError，由路由转 400
+    latest = versions[-1] if versions else current
+    if versions and VERSION_RE.match(current):
         has_update = _tag_key(latest) > _tag_key(current)
     else:
-        has_update = bool(tags) and latest != current
+        has_update = bool(versions) and latest != current
     try:
         dirty = working_tree_dirty()
     except RuntimeError:
@@ -175,6 +374,8 @@ def check_update() -> dict:
         "restart_mode": "cmd" if RESTART_CMD.strip() else "guard",
         "disk_free_gb": _disk_free_gb(),
         "working_tree_dirty": dirty,
+        "upgrade_mode": mode,
+        "repo": REPO_SLUG if mode == "artifact" else None,
     }
 
 
@@ -358,8 +559,16 @@ def create_job(db, action: str, to_version: str, operator_id: int | None = None)
     to_version = (to_version or "").strip()
     if not VERSION_RE.match(to_version):
         raise ValueError("版本号格式不合法，应形如 v2.2.1")
-    if working_tree_dirty():
-        raise ValueError("工作区有未提交改动，请先提交或 stash 后再升级")
+    mode = upgrade_mode()
+    if mode == "git":
+        # git 模式靠 checkout 换代码，本地改动会被带进新版本
+        if working_tree_dirty():
+            raise ValueError("工作区有未提交改动，请先提交或 stash 后再升级")
+    else:
+        # artifact 模式先确认远端真有这个版本的包，避免建了任务才发现装不上
+        rel = _find_release(to_version)
+        if not _pick_asset(rel, ".tar.gz"):
+            raise ValueError(f"{to_version} 的 Release 里没有 .tar.gz 产物包，无法升级")
 
     active = db.execute(
         select(UpgradeJob).where(UpgradeJob.status.in_(ACTIVE_STATUSES))
@@ -678,6 +887,14 @@ def _install_deps(job_id: int, py: Path) -> None:
 
 
 def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
+    """按当前模式分派：artifact 下载产物包覆盖，git 走 fetch + checkout。"""
+    if upgrade_mode() == "artifact":
+        _do_upgrade_artifact(db, job, skip_frontend)
+    else:
+        _do_upgrade_git(db, job, skip_frontend)
+
+
+def _do_upgrade_git(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
     jid = job.id
 
     # 0) 前置体检：空间不足直接拒绝，此时还没有任何东西被改动过
@@ -773,6 +990,13 @@ def _do_upgrade(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
 
 
 def _do_rollback(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool = False) -> None:
+    if upgrade_mode() == "artifact":
+        _do_rollback_artifact(db, job, restore_db, skip_frontend)
+    else:
+        _do_rollback_git(db, job, restore_db, skip_frontend)
+
+
+def _do_rollback_git(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool = False) -> None:
     jid = job.id
     ref = job.from_ref
     if not ref:
@@ -804,6 +1028,457 @@ def _do_rollback(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool = Fa
 
     _set(db, job, stage="restart")
     if not _spawn_restart_guard(jid, job.to_version):
+        _log(jid, "重启脚本启动失败，请手动重启后端后点「健康校验」")
+        job.status = "rolled_back"
+        db.commit()
+        return
+    _log(jid, "代码与数据已回滚，由守护脚本重启并校验；最终状态约 60~180s 后回写")
+    db.commit()
+
+
+# ── 产物包升级 / 回滚（客户机路径：无 git、无 SSH、无 node）──────────────
+
+
+def _sha256_of(path: Path, chunk: int = 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(chunk), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _is_protected(rel: str) -> bool:
+    """该相对路径是否属于「现场资产」或由别的逻辑专门处理，永不被覆盖/删除。"""
+    if rel == MANIFEST_NAME:
+        return True
+    name = rel.rsplit("/", 1)[-1]
+    if name == ".env" or name.startswith(".env."):
+        return True
+    if rel.startswith(PROTECTED_PREFIXES):
+        return True
+    # 前端产物由 _promote_frontend 整体原子换入，不走逐文件覆盖
+    if any(rel.startswith(f"{app}/dist/") for app, _ in FRONTEND_APPS):
+        return True
+    # 临时产物目录与旧产物备份
+    return any(tag in rel for tag in PROTECTED_SUFFIX_DIRS)
+
+
+def _read_manifest() -> set[str] | None:
+    """读上一版安装清单；不存在时返回 None（首次以产物包升级）。"""
+    f = ROOT / MANIFEST_NAME
+    if not f.exists():
+        return None
+    try:
+        rows = {ln.strip() for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()}
+    except (OSError, UnicodeDecodeError):
+        return None
+    return rows or None
+
+
+def _write_manifest(rels: set[str]) -> None:
+    """原子写清单：先写临时文件再改名，避免中途失败留下半截清单。"""
+    f = ROOT / MANIFEST_NAME
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text("\n".join(sorted(rels)) + "\n", encoding="utf-8")
+    tmp.replace(f)
+
+
+def _seed_manifest_from_git() -> set[str] | None:
+    """首次升级时若目录仍是 git 仓库，用 git ls-files 反推上一版清单。
+
+    这样从「git 部署」切到「产物包部署」的第一跳也能精确算出哪些文件被上游
+    删除，而不是因为缺清单就永久不清理。
+    """
+    if not (ROOT / ".git").exists():
+        return None
+    res = _run_cmd(["git", "-C", str(ROOT), "-c", "core.quotePath=false", "ls-files"], timeout=120)
+    if res.returncode != 0:
+        return None
+    rows = {ln.strip() for ln in res.stdout.splitlines() if ln.strip()}
+    return rows or None
+
+
+def _download_package(rel: dict, job_id: int) -> Path:
+    """下载产物包并校验 SHA256；本地缓存摘要一致时跳过下载。
+
+    Args:
+        rel: list_remote_releases() 的一项。
+        job_id: 任务号，用于写日志。
+
+    Returns:
+        本地产物包路径。
+
+    Raises:
+        RuntimeError: 无产物包、下载失败或摘要不匹配。
+    """
+    asset = _pick_asset(rel, ".tar.gz")
+    if not asset:
+        raise RuntimeError(f"{rel['version']} 的 Release 里没有 .tar.gz 产物包")
+    expected = _asset_sha256(rel, asset)
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = CACHE_DIR / f"{rel['version']}.tar.gz"
+    if dest.exists() and dest.stat().st_size > 0:
+        if not expected or _sha256_of(dest) == expected:
+            _log(job_id, f"命中本地缓存：{dest.name}（{dest.stat().st_size // 1024} KB）")
+            return dest
+        _log(job_id, f"本地缓存 {dest.name} 摘要不匹配，重新下载")
+        dest.unlink(missing_ok=True)
+
+    part = dest.with_suffix(".part")
+    _log(job_id, f"下载产物包：{asset['url']}")
+    try:
+        with urllib.request.urlopen(asset["url"], timeout=120) as resp, part.open("wb") as out:
+            total = int(resp.headers.get("Content-Length") or asset.get("size") or 0)
+            done = 0
+            next_mark = 25
+            while True:
+                block = resp.read(1024 * 256)
+                if not block:
+                    break
+                out.write(block)
+                done += len(block)
+                if total and done * 100 // total >= next_mark:
+                    _log(job_id, f"下载进度 {next_mark}%（{done // 1024} / {total // 1024} KB）")
+                    next_mark += 25
+    except (urllib.error.URLError, OSError) as exc:
+        part.unlink(missing_ok=True)
+        raise RuntimeError(f"下载产物包失败：{exc}") from exc
+
+    if part.stat().st_size == 0:
+        part.unlink(missing_ok=True)
+        raise RuntimeError("下载到的产物包为空")
+
+    if expected:
+        actual = _sha256_of(part)
+        if actual != expected:
+            part.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"SHA256 校验失败：期望 {expected[:16]}…，实际 {actual[:16]}…（下载可能被截断或篡改）"
+            )
+        _log(job_id, f"SHA256 校验通过：{expected[:16]}…")
+    else:
+        _log(job_id, "[警告] 该 Release 未提供摘要，已按 CENKORMES_ALLOW_UNVERIFIED=1 跳过校验")
+
+    part.replace(dest)
+    _log(job_id, f"产物包就绪：{dest.name}（{dest.stat().st_size // 1024} KB）")
+    return dest
+
+
+def _package_root(extract_dir: Path) -> Path:
+    """定位包含 VERSION 的包根目录（兼容有无顶层目录两种打包方式）。"""
+    if (extract_dir / "VERSION").is_file():
+        return extract_dir
+    subs = [p for p in extract_dir.iterdir() if p.is_dir()]
+    if len(subs) == 1 and (subs[0] / "VERSION").is_file():
+        return subs[0]
+    raise RuntimeError("产物包结构异常：找不到 VERSION 文件（应含 backend/、frontend-*/ 与 VERSION）")
+
+
+def _extract_dir(job_id: int) -> Path:
+    """解包工作目录（按任务号隔离，便于失败时定向清理）。"""
+    return CACHE_DIR / f"extract-{job_id}"
+
+
+def _extract_package(pkg: Path, job_id: int) -> Path:
+    """解包到独立目录，返回包根。
+
+    Raises:
+        RuntimeError: 包损坏或结构不对。
+    """
+    target = _extract_dir(job_id)
+    shutil.rmtree(target, ignore_errors=True)
+    target.mkdir(parents=True, exist_ok=True)
+    _log(job_id, f"解包到 {target}")
+    try:
+        with tarfile.open(pkg, "r:gz") as tf:
+            try:
+                # filter="data" 拦截绝对路径与 ../ 穿越、拒绝设备文件，py3.12+
+                tf.extractall(target, filter="data")
+            except TypeError:  # 老版本 Python 没有 filter 参数
+                tf.extractall(target)
+    except (tarfile.TarError, OSError) as exc:
+        shutil.rmtree(target, ignore_errors=True)
+        raise RuntimeError(f"解包失败：{exc}") from exc
+    return _package_root(target)
+
+
+def _verify_package(root: Path, version: str, job_id: int) -> None:
+    """校验包内容与目标版本一致、关键文件齐全。
+
+    Raises:
+        RuntimeError: 版本不符或关键文件缺失。
+    """
+    try:
+        ver = (root / "VERSION").read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"读取包内 VERSION 失败：{exc}") from exc
+    if ver != version:
+        raise RuntimeError(f"包内 VERSION={ver} 与目标版本 {version} 不一致，已中止")
+    required = ("backend/app/main.py", "backend/requirements.txt")
+    missing = [r for r in required if not (root / r).is_file()]
+    if missing:
+        raise RuntimeError("产物包缺少关键文件：" + "、".join(missing))
+    for app, label in FRONTEND_APPS:
+        if not (root / app / "dist" / "index.html").is_file():
+            _log(job_id, f"[警告] 包内缺少 {label} 前端产物（{app}/dist），将保留线上现有 dist")
+    _log(job_id, f"产物包校验通过：VERSION={ver}")
+
+
+def _collect_package_files(root: Path) -> tuple[list[str], dict[str, Path]]:
+    """列出包内需要覆盖的文件，前端 dist 单独返回以便原子换入。
+
+    Returns:
+        (普通文件相对路径列表, {前端应用: 包内 dist 目录})
+    """
+    dist_dirs = {app: root / app / "dist" for app, _ in FRONTEND_APPS if (root / app / "dist").is_dir()}
+    dist_prefixes = tuple(f"{app}/dist/" for app in dist_dirs)
+    files: list[str] = []
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(root).as_posix()
+        if rel.startswith(dist_prefixes):
+            continue
+        if _is_protected(rel):
+            continue
+        files.append(rel)
+    return files, dist_dirs
+
+
+def _apply_package(root: Path, job_id: int, *, replace_dist: bool = True) -> list[str]:
+    """把包内容覆盖到项目目录。
+
+    覆盖是逐文件 copy2（不删目录、不用外部命令），因此不需要 rsync；
+    受保护路径（.env、backend/data、node_modules、.git）一律跳过。
+    上游已删除的文件按「旧清单 − 新清单」精确清理，不用清单就不删。
+
+    Args:
+        root: 包根目录。
+        job_id: 任务号。
+        replace_dist: 是否换入前端 dist（skip_frontend 时为 False）。
+
+    Returns:
+        已换入 dist 的前端应用名列表，供失败回退。
+
+    Raises:
+        RuntimeError: 覆盖过程中写文件失败。
+    """
+    files, dist_dirs = _collect_package_files(root)
+    _log(job_id, f"准备覆盖 {len(files)} 个文件")
+    for rel in files:
+        src = root / rel
+        dst = ROOT / rel
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        except OSError as exc:
+            raise RuntimeError(f"写入 {rel} 失败：{exc}") from exc
+    _log(job_id, "代码文件覆盖完成")
+
+    promoted: list[str] = []
+    if replace_dist:
+        for app, dist_src in dist_dirs.items():
+            staged = ROOT / app / f".dist-new-{job_id}"
+            shutil.rmtree(staged, ignore_errors=True)
+            shutil.copytree(dist_src, staged)
+            _promote_frontend(app, staged, job_id)
+            promoted.append(app)
+    elif dist_dirs:
+        _log(job_id, "已跳过前端产物换入（skip_frontend）")
+
+    # 清单必须在覆盖成功之后才写：中途失败时旧清单仍然有效，便于下次比对
+    new_manifest = set(files)
+    for app, _ in FRONTEND_APPS:
+        for p in (ROOT / app / "dist").rglob("*"):
+            if p.is_file():
+                new_manifest.add(p.relative_to(ROOT).as_posix())
+    old_manifest = _read_manifest()
+    if old_manifest is None:
+        old_manifest = _seed_manifest_from_git()
+        if old_manifest:
+            _log(job_id, f"首次以产物包升级，用 git ls-files 反推上一版清单（{len(old_manifest)} 项）")
+    if old_manifest:
+        _prune_removed_files(old_manifest, new_manifest, job_id)
+    else:
+        _log(job_id, "[警告] 无上一版清单，跳过废弃文件清理（宁可留垃圾，不删无法确认的文件）")
+    _write_manifest(new_manifest)
+    _log(job_id, f"安装清单已更新（{len(new_manifest)} 项）")
+    return promoted
+
+
+def _prune_removed_files(old: set[str], new: set[str], job_id: int) -> None:
+    """删除「上一版有、这一版没有」且不在受保护路径下的文件。"""
+    root_abs = ROOT.resolve()
+    removed = 0
+    for rel in sorted(old - new):
+        if _is_protected(rel):
+            continue
+        p = ROOT / rel
+        try:
+            if not p.resolve().is_relative_to(root_abs):  # 防御清单被篡改
+                _log(job_id, f"[警告] 拒绝删除项目目录外的路径：{rel}")
+                continue
+            if p.is_file() or p.is_symlink():
+                p.unlink()
+                removed += 1
+        except OSError as exc:
+            _log(job_id, f"[警告] 删除已废弃文件 {rel} 失败：{exc}")
+    if removed:
+        _log(job_id, f"清理上游已删除的文件：{removed} 个")
+
+
+def _reinstall_version(version: str, job_id: int, note: str) -> None:
+    """重新安装指定版本（失败回灌用）。
+
+    Raises:
+        RuntimeError: 该版本不可获取或安装失败。
+    """
+    rel = _find_release(version)
+    pkg = _download_package(rel, job_id)
+    try:
+        root = _extract_package(pkg, job_id)
+        _verify_package(root, version, job_id)
+        _apply_package(root, job_id, replace_dist=True)
+    finally:
+        shutil.rmtree(_extract_dir(job_id), ignore_errors=True)
+    _log(job_id, note)
+
+
+def _do_upgrade_artifact(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
+    """产物包升级主流程：备份 → 下载校验 → 解包 → 覆盖 → 依赖 → 迁移 → 重启。"""
+    jid = job.id
+    target = job.to_version
+
+    # 0) 前置体检：空间不足直接拒绝，此时没有任何东西被改动
+    _set(db, job, stage="preflight", status="running")
+    _log(jid, f"升级模式：产物包（仓库 {REPO_SLUG}），无需 git / SSH / node")
+    _check_disk_space(jid)
+
+    # 1) 数据库备份：失败立即中止
+    _set(db, job, stage="backup")
+    _log(jid, "步骤 1/7 备份数据库")
+    backup = _backup_database(job)
+    job.backup_path = str(backup)
+    db.commit()
+    _log(jid, f"备份完成：{backup}")
+
+    # 2) 下载 + 校验
+    _set(db, job, stage="fetch")
+    _log(jid, f"步骤 2/7 获取 {target} 产物包")
+    rel = _find_release(target)
+    pkg = _download_package(rel, jid)
+
+    # 3) 解包 + 校验（放在 try 内，失败也走统一清理）
+    py = _venv_python()
+    promoted: list[str] = []
+    applied = False
+    try:
+        _set(db, job, stage="checkout")
+        _log(jid, "步骤 3/7 解包并校验产物内容")
+        root = _extract_package(pkg, jid)
+        _verify_package(root, target, jid)
+
+        # 4) 覆盖代码（前端 dist 原子换入）
+        _log(jid, "步骤 4/7 覆盖代码（保留 .env 与 backend/data）")
+        applied = True  # 一旦开始写盘就不能再假定目录是干净的
+        promoted = _apply_package(root, jid, replace_dist=not skip_frontend)
+        _log(jid, "代码已更新，VERSION=" + read_local_version())
+
+        # 5) 依赖：包内已带预构建前端，不再需要 node/npm
+        _set(db, job, stage="deps")
+        _log(jid, "步骤 5/7 安装后端依赖")
+        _install_deps(jid, py)
+
+        # 6) 迁移
+        _set(db, job, stage="migrate")
+        _log(jid, "步骤 6/7 alembic upgrade head")
+        res = _run_cmd(
+            [str(py), "-c", "from alembic.config import main; main(['upgrade', 'head'])"],
+            cwd=BACKEND_DIR,
+            timeout=900,
+        )
+        if res.returncode != 0:
+            raise RuntimeError(f"数据库迁移失败：{(res.stderr or res.stdout).strip()[:500]}")
+        _log(jid, "迁移完成")
+    except Exception:
+        if not applied:
+            _log(jid, "失败发生在写盘之前，项目目录未被改动，无需回灌")
+            raise
+        _log(jid, "安装步骤失败，开始回灌升级前版本")
+        for app in reversed(promoted):
+            _restore_frontend(app, jid)
+        prev = job.from_version
+        if VERSION_RE.match(prev or ""):
+            try:
+                _reinstall_version(
+                    prev,
+                    jid,
+                    f"代码已回灌到 {prev}（数据库迁移不会自动回退，"
+                    f"如需恢复数据请用备份 {job.backup_path or '-'}）",
+                )
+            except Exception as exc:  # noqa: BLE001 - 回灌失败只能如实告警
+                _log(
+                    jid,
+                    f"[严重] 回灌 {prev} 失败：{exc}；"
+                    f"请手动安装该版本，或使用备份 {job.backup_path or '-'} 恢复",
+                )
+        else:
+            _log(jid, f"[严重] 无法确定升级前版本号（{prev}），请手动处理")
+        raise
+    finally:
+        shutil.rmtree(_extract_dir(jid), ignore_errors=True)
+
+    # 7) 重启：交给守护脚本（它会杀掉本进程）
+    _set(db, job, stage="restart")
+    _log(jid, "步骤 7/7 重启后端")
+    if not _spawn_restart_guard(jid, target):
+        _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
+        _set(db, job, status="awaiting_restart", stage="restart")
+        return
+    _log(jid, "由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
+    db.commit()
+
+
+def _do_rollback_artifact(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool = False) -> None:
+    """回滚 = 重新安装上一版产物包（不再依赖本地 git 里还留着旧 commit）。"""
+    jid = job.id
+    target = job.to_version
+    if not VERSION_RE.match(target or ""):
+        raise RuntimeError(f"回滚目标版本号无效：{target}")
+
+    _set(db, job, stage="preflight", status="running")
+    _log(jid, f"回滚模式：重新安装 {target} 产物包（当前 {job.from_version}）")
+    _check_disk_space(jid)
+
+    _set(db, job, stage="fetch")
+    _log(jid, f"步骤 1/4 获取 {target} 产物包")
+    rel = _find_release(target)
+    pkg = _download_package(rel, jid)
+
+    _set(db, job, stage="checkout")
+    _log(jid, "步骤 2/4 解包并覆盖代码")
+    try:
+        root = _extract_package(pkg, jid)
+        _verify_package(root, target, jid)
+        _apply_package(root, jid, replace_dist=not skip_frontend)
+    finally:
+        shutil.rmtree(_extract_dir(jid), ignore_errors=True)
+    _log(jid, "代码已回滚，VERSION=" + read_local_version())
+
+    if restore_db:
+        if not job.backup_path:
+            raise RuntimeError("未找到数据库备份文件，无法恢复数据")
+        _set(db, job, stage="migrate")
+        _log(jid, f"步骤 3/4 恢复数据库：{job.backup_path}")
+        _restore_database(job)
+        _log(jid, "数据库恢复完成")
+    else:
+        _log(jid, "步骤 3/4 跳过数据库恢复（未勾选）")
+
+    _set(db, job, stage="restart")
+    _log(jid, "步骤 4/4 重启后端")
+    if not _spawn_restart_guard(jid, target):
         _log(jid, "重启脚本启动失败，请手动重启后端后点「健康校验」")
         job.status = "rolled_back"
         db.commit()
@@ -1220,10 +1895,17 @@ def rollback_job(db, job_id: int, restore_db: bool = False, skip_frontend: bool 
     src = db.get(UpgradeJob, job_id)
     if src is None:
         raise ValueError("任务不存在")
-    if not src.from_ref:
-        raise ValueError("该任务没有记录回滚点（from_ref），无法回滚")
-    if working_tree_dirty():
-        raise ValueError("工作区有未提交改动，请先提交或 stash 后再回滚")
+    if upgrade_mode() == "git":
+        if not src.from_ref:
+            raise ValueError("该任务没有记录回滚点（from_ref），无法回滚")
+        if working_tree_dirty():
+            raise ValueError("工作区有未提交改动，请先提交或 stash 后再回滚")
+    else:
+        target_ver = src.from_version
+        if not VERSION_RE.match(target_ver or ""):
+            raise ValueError(f"该任务未记录升级前版本号（{target_ver or '空'}），无法确定回滚目标")
+        if not _pick_asset(_find_release(target_ver), ".tar.gz"):
+            raise ValueError(f"{target_ver} 的 Release 里没有产物包，无法回滚到该版本")
 
     active = db.execute(
         select(UpgradeJob).where(UpgradeJob.status.in_(ACTIVE_STATUSES))

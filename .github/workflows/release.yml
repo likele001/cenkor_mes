@@ -1,8 +1,8 @@
-# 监听 vX.Y.Z 标签推送，自动在 GitHub 创建对应 Release。
+# 监听 vX.Y.Z 标签推送，自动在 GitHub 创建对应 Release，并构建发布产物包。
 # 触发方式：scripts/release-all.sh 发版时会打并推送 tag，从而驱动本工作流。
 # Release 说明取自 backend/CHANGELOG.json 中该版本号对应的 description。
 #
-# 2026-11 加固：新增 preflight 闸门。此前 tag 与 CHANGELOG.json 之间没有任何
+# 2026-11 加固一：新增 preflight 闸门。此前 tag 与 CHANGELOG.json 之间没有任何
 # 一致性约束——打了 tag 但忘了补 CHANGELOG 条目时，Release 照样创建成功，
 # 正文退化成 "Release vX.Y.Z"，而 About 页显示的是新版本号，只有翻 GitHub
 # 才发现。（实测该仓库已有 4 个 tag 从未建过 Release，v2.2.0 就是其中之一。）
@@ -12,13 +12,19 @@
 #   主干     → tooling/  只取脚本本体
 # 因为回填历史版本时，目标 tag 里可能根本没有 release-check.sh（脚本是后加的），
 # 直接 checkout 到 tag 再跑脚本会 exit 127。
+#
+# 2026-11 加固二：新增 package + attach 两个 job，产出 cenkormes-vX.Y.Z.tar.gz
+# 与 .sha256 挂到 Release 附件。这是客户机在线升级的唯一通道：
+# 后台按 Releases API 找版本 → 下载包 → 校验 SHA256 → 覆盖。客户机不需要
+# git、不需要 SSH key、也不需要 node（包内已带预构建 dist）。
+# 没有附件时，客户点「立即升级」只会得到「该版本没有产物包」。
 name: Release
 
 on:
   push:
     tags:
       - "v*"
-  # 手动触发：可为任意已存在的 tag 补建 Release（用于回填历史版本）
+  # 手动触发：可为任意已存在的 tag 补建 Release / 补挂产物包（回填历史版本）
   workflow_dispatch:
     inputs:
       tag:
@@ -29,13 +35,15 @@ on:
 permissions:
   contents: write
 
+env:
+  # tag 推送事件取 ref_name；手动触发取输入的 tag
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+
 jobs:
   # ---------- 1. 闸门：tag / VERSION / CHANGELOG.json 三者必须一致 ----------
   preflight:
     name: 版本一致性闸门
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - name: 检出目标 tag（被校验对象）
         uses: actions/checkout@v4
@@ -60,9 +68,6 @@ jobs:
     name: 创建 GitHub Release
     runs-on: ubuntu-latest
     needs: [preflight]
-    env:
-      # tag 推送事件取 ref_name；手动触发取输入的 tag
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       # 正文取自该 tag 的 CHANGELOG.json，必须 checkout 到 tag 本身
       - name: Checkout 目标 tag
@@ -101,3 +106,103 @@ jobs:
           else
             gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
           fi
+
+  # ---------- 3. 构建发布产物包（客户机升级就靠它）----------
+  package:
+    name: 构建发布产物包
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    steps:
+      - name: Checkout 目标 tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: 准备 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # 客户机不该需要 node，所以前端必须在这里构建好打进包
+      - name: 构建管理后台前端
+        run: |
+          cd frontend-admin-pro
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: 构建 H5 前端
+        run: |
+          cd frontend-h5
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: 打包
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/stage"
+          ROOTDIR="$STAGE/cenkormes-$TAG"
+          rm -rf "$STAGE"
+          mkdir -p "$ROOTDIR"
+
+          # 只取被 git 跟踪的文件：.env、backend/data、node_modules 天然不会进来
+          git archive --format=tar HEAD | tar -x -C "$ROOTDIR"
+
+          # 把预构建产物放进包里（dist 被 gitignore，git archive 带不出来）
+          for app in frontend-admin-pro frontend-h5; do
+            test -f "$app/dist/index.html" || { echo "✗ $app 没有构建产物"; exit 1; }
+            rm -rf "$ROOTDIR/$app/dist"
+            cp -a "$app/dist" "$ROOTDIR/$app/dist"
+          done
+
+          # 双保险：现场配置与客户数据绝不能被发出去
+          rm -rf "$ROOTDIR/backend/data"
+          find "$ROOTDIR" \( -name ".env" -o -name ".env.*" \) -delete
+          if find "$ROOTDIR" -name ".env" | grep -q .; then
+            echo "✗ 包内仍存在 .env，已中止"; exit 1
+          fi
+
+          # 包自检：这三样缺了客户机装上去就起不来
+          for f in VERSION backend/app/main.py backend/requirements.txt; do
+            test -f "$ROOTDIR/$f" || { echo "✗ 包内缺少 $f"; exit 1; }
+          done
+          echo "包内 VERSION = $(cat "$ROOTDIR/VERSION")"
+
+          cd "$STAGE"
+          tar czf "$RUNNER_TEMP/cenkormes-$TAG.tar.gz" "cenkormes-$TAG"
+          cd "$RUNNER_TEMP"
+          sha256sum "cenkormes-$TAG.tar.gz" > "cenkormes-$TAG.tar.gz.sha256"
+          ls -lh "cenkormes-$TAG.tar.gz"
+          cat "cenkormes-$TAG.tar.gz.sha256"
+
+      - name: 上传产物（供 attach job 使用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/cenkormes-*.tar.gz*
+          if-no-files-found: error
+
+  # ---------- 4. 把产物挂到 Release ----------
+  # 单独成一个 job：Release 创建（秒级）不能被前端构建（数分钟）拖住
+  attach:
+    name: 挂载产物到 Release
+    runs-on: ubuntu-latest
+    needs: [github-release, package]
+    steps:
+      - name: 下载产物
+        uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: pkg
+
+      - name: 上传到 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          ls -lh pkg
+          gh release upload "$TAG" pkg/* --clobber
+          echo "--- 附件清单 ---"
+          gh release view "$TAG" --json assets --jq '.assets[].name'
