@@ -29,6 +29,16 @@ class _FakeDB:
         return self.job if pk == self.job.id else None
 
 
+@pytest.fixture(autouse=True)
+def _force_git_mode(monkeypatch):
+    """本文件验证的是 git 模式（fetch/checkout）的失败回退链。
+
+    产物包模式没有 from_ref / checkout 这套东西，回灌逻辑由
+    test_upgrade_artifact.py 单独覆盖。
+    """
+    monkeypatch.setattr(us, "UPGRADE_MODE_ENV", "git")
+
+
 @pytest.fixture
 def upgrade_env(monkeypatch):
     job = SimpleNamespace(
