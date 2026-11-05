@@ -205,6 +205,34 @@ def on_startup():
     except Exception as e:
         logger.warning("reconcile upgrade jobs failed: %s", e)
 
+    # 守护脚本 kill 完就退出，面板自愈往往还没把 uvicorn 拉起来，startup 里的
+    # reconcile 探 /api/health 必然失败（会暂缓判定）。后台线程延时复核，服务
+    # ready 后自动定终态，不必依赖人工点「健康校验」或前端轮询任务列表。
+    def _delayed_reconcile() -> None:
+        import threading
+        import time
+
+        def _run() -> None:
+            from app.services import upgrade_service
+
+            for _ in range(3):
+                time.sleep(30)
+                try:
+                    db = SessionLocal()
+                    try:
+                        upgrade_service.reconcile_jobs(db)
+                    finally:
+                        db.close()
+                except Exception:  # noqa: BLE001 - 后台复核失败不影响主服务
+                    logger.warning("delayed reconcile failed", exc_info=True)
+
+        threading.Thread(target=_run, name="upgrade-reconcile", daemon=True).start()
+
+    try:
+        _delayed_reconcile()
+    except Exception as e:
+        logger.warning("start delayed reconcile failed: %s", e)
+
     # 扩展宿主启动：执行扩展迁移 + 注入权限点 + 启动授权同步线程（异常不阻塞主流程）
     try:
         startup_host()

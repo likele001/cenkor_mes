@@ -9,10 +9,11 @@
 - 数据库备份失败立即中止，绝不带病继续；
 - 重启分两种模式：配置了 CENKORMES_RESTART_CMD 则执行该命令；未配置则「杀掉
   8500 监听进程，由宝塔面板的项目守护进程在约 60s 内拉起」；
-- 重启会杀掉本进程，因此重启 + 健康校验交给一份独立会话的守护脚本执行，结果落盘
-  到 /tmp/cenkormes-upgrade-restart-{job}.json，下次访问任务接口或服务启动时由
-  reconcile_restarts() 回写最终状态，任务不会永远停在 running。结果回报 ok=0 时
-  还会再实测一次 /api/health，避免「脚本窗口不够但服务其实已恢复」的误判。
+- 重启会杀掉本进程，因此 kill + 释放端口交给一份独立会话的守护脚本执行；脚本
+  **立即退出**（长期存活会被宝塔误记为项目主进程、阻塞自愈），结果落盘
+  /tmp/cenkormes-upgrade-restart-{job}.json 标记为 pending。服务被面板拉起后，
+  startup 钩子 / 任务接口 / 后台延时线程调用 reconcile_restarts()，实测
+  /api/health 版本后回写最终状态，任务不会永远停在 running。
 
 两种升级模式（CENKORMES_UPGRADE_MODE）：
 - artifact（默认）：从 GitHub Release 下载发布产物包（含预构建 dist），校验
@@ -66,10 +67,12 @@ BACKEND_DIR = ROOT / "backend"
 ENV_FILE = BACKEND_DIR / ".env"
 HEALTH_URL = os.environ.get("CENKORMES_HEALTH_URL", "http://127.0.0.1:8500/api/health")
 BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
-# 宝塔 Python 项目管理器自愈实测 3m36s / 3m38s（2026-11-05 v2.2.3 升级+回滚）。
-# 旧窗口 180s 会早 26~27s 放弃，把实际健康的服务误判为 failed。420s 留足一轮
-# 自愈 + 应用启动 + 余量；面板策略变化时可用 CENKORMES_VERIFY_TIMEOUT 覆盖。
-VERIFY_TIMEOUT = int(os.environ.get("CENKORMES_VERIFY_TIMEOUT", "420"))
+# 2026-11-05 任务 #8 实测推翻了「宝塔自愈要 3m36s」的旧判断：守护脚本是
+# 从 uvicorn 内部 spawn 的子进程且 cwd 指在项目根，宝塔会把它记进
+# /www/server/python_project/vhost/pids/cenkermes.pid；只要脚本还活着，
+# 面板就认为服务在跑、不会拉起 uvicorn。把健康窗口从 180s 加到 420s 反而
+# 让 8500 多停了 2 分钟。因此守护脚本 kill 完立即退出，健康判定改由服务
+# 恢复后的 reconcile_jobs() 实测 /api/health 完成，不再轮询等待。
 # startup 钩子比 uvicorn 开始 accept 连接更早，此时 /api/health 必然探不通。
 # 这段时间内保留 running/restart 等下一次 reconcile，超时才判死，避免误判 + 卡死。
 RESTART_GRACE_SECONDS = 600
@@ -991,7 +994,7 @@ def _do_upgrade_git(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, f"由守护脚本做健康校验；本进程即将退出，任务最终状态最长 {VERIFY_TIMEOUT}s 内回写")
+    _log(jid, "守护脚本只 kill + 释放端口并立即退出；服务恢复后由 reconcile 实测健康并回写终态")
     db.commit()
 
 
@@ -1038,7 +1041,7 @@ def _do_rollback_git(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool 
         job.status = "rolled_back"
         db.commit()
         return
-    _log(jid, "代码与数据已回滚，由守护脚本重启并校验；最终状态约 60~180s 后回写")
+    _log(jid, "代码与数据已回滚；守护脚本只 kill 释放端口，服务恢复后由 reconcile 实测回写终态")
     db.commit()
 
 
@@ -1560,7 +1563,7 @@ def _do_upgrade_artifact(db, job: UpgradeJob, skip_frontend: bool = False) -> No
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, f"由守护脚本做健康校验；本进程即将退出，任务最终状态最长 {VERIFY_TIMEOUT}s 内回写")
+    _log(jid, "守护脚本只 kill + 释放端口并立即退出；服务恢复后由 reconcile 实测健康并回写终态")
     db.commit()
 
 
@@ -1607,7 +1610,7 @@ def _do_rollback_artifact(db, job: UpgradeJob, restore_db: bool, skip_frontend: 
         job.status = "rolled_back"
         db.commit()
         return
-    _log(jid, "代码与数据已回滚，由守护脚本重启并校验；最终状态约 60~180s 后回写")
+    _log(jid, "代码与数据已回滚；守护脚本只 kill 释放端口，服务恢复后由 reconcile 实测回写终态")
     db.commit()
 
 
@@ -1685,7 +1688,6 @@ TARGET='{target_version}'
 LOG='{log}'
 RESULT='{result}'
 PORT='{BACKEND_PORT}'
-MAX_WAIT='{VERIFY_TIMEOUT}'
 PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
@@ -1695,7 +1697,7 @@ ts() {{ date '+%Y-%m-%d %H:%M:%S'; }}
 say() {{ echo "[$(ts)] $*" >> "$LOG"; }}
 
 say "重启守护脚本启动：旧 pid=${{PID:-无}}，目标版本 $TARGET"
-say "健康校验最长等待 ${{MAX_WAIT}}s（面板守护自愈实测约 216s）"
+say "本脚本只 kill + 释放端口，随即退出；健康判定由服务恢复后的 reconcile 实测"
 rm -f '{LOCK_FILE}'
 sleep 2
 
@@ -1731,32 +1733,17 @@ else
   say "端口 $PORT 未监听，交由面板守护进程拉起"
 fi
 
-OK=0
-ACTUAL=''
-SEEN=0
-DEADLINE=$(( $(date +%s) + MAX_WAIT ))
-while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-  ACTUAL=$("$PY" -c 'import json,os,urllib.request;d=json.load(urllib.request.urlopen(os.environ["H"],timeout=5));print((d.get("data") or dict()).get("version") or "")' 2>/dev/null)
-  if [ -n "$ACTUAL" ]; then
-    if [ "$SEEN" = "0" ]; then
-      SEEN=1
-      say "健康端点已响应（当前版本 $ACTUAL），继续等待目标版本 $TARGET"
-    fi
-    if [ "$ACTUAL" = "$TARGET" ]; then OK=1; break; fi
-  fi
-  sleep 3
-done
-
-if [ "$OK" = "1" ]; then
-  say "健康校验通过，当前版本 $ACTUAL"
-else
-  say "健康校验未通过：期望 $TARGET，实际 ${{ACTUAL:-无响应}}"
-fi
+# 绝不在这里轮询等待：脚本作为宝塔按 cwd / 进程树追踪到的子进程，只要存活
+# 就会被写进项目 pid 文件，面板据此认为服务仍在运行而不触发自愈拉起 uvicorn
+# （任务 #8 实测 8500 停服 7 分钟）。kill 完立即退出，让面板尽快接管端口；
+# 服务恢复后 reconcile_jobs() 会实测 /api/health 判定成功或失败。
+say "旧进程已退出、端口已释放；守护脚本退出，健康判定交由 reconcile 实测"
 {{
-  echo "ok=$OK"
-  echo "version=$ACTUAL"
+  echo "ok=pending"
+  echo "version="
   echo "finished_at=$(ts)"
 }} > "$RESULT"
+exit 0
 """
 
 
@@ -1802,7 +1789,10 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
             # 独立会话：本进程被 kill 后，子进程仍继续执行重启与校验
             subprocess.Popen(
                 ["bash", str(script)],
-                cwd=str(ROOT),
+                # 必须脱离项目根：宝塔按 cwd/进程树识别项目主进程，若守护脚本
+                # 以 ROOT 为 cwd，它会被写进 cenkermes.pid 并阻塞面板自愈。
+                # 脚本内所有路径都是绝对路径，改 cwd 不影响行为。
+                cwd="/tmp",
                 stdout=out,
                 stderr=out,
                 start_new_session=True,
@@ -1875,8 +1865,8 @@ def _reconcile_restart_jobs(db) -> None:
                 job.error = None
                 _log(
                     job.id,
-                    f"守护脚本窗口内未等到（回报 {actual or '无响应'}），但复核 /api/health "
-                    f"实测 {live_version}，判定为成功",
+                    f"守护脚本未做健康判定（回报 {data.get('ok') or 'unknown'}），"
+                    f"复核 /api/health 实测 {live_version}，判定为成功",
                 )
             elif live is None and job.started_at and (
                 datetime.now() - job.started_at
