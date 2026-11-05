@@ -140,7 +140,7 @@ def verify_job(
     db: Session = Depends(get_db),
     _user: User = Depends(get_superuser),
 ):
-    """对指定任务做一次健康校验（awaiting_restart 后手动确认用）。"""
+    """健康校验：awaiting_restart 定终态，或纠正守护窗口误判的 failed。"""
     try:
         result = upgrade_service.verify_job(db, job_id)
     except ValueError as exc:
