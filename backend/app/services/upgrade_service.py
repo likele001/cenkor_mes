@@ -11,7 +11,8 @@
   8500 监听进程，由宝塔面板的项目守护进程在约 60s 内拉起」；
 - 重启会杀掉本进程，因此重启 + 健康校验交给一份独立会话的守护脚本执行，结果落盘
   到 /tmp/cenkormes-upgrade-restart-{job}.json，下次访问任务接口或服务启动时由
-  reconcile_restarts() 回写最终状态，任务不会永远停在 running。
+  reconcile_restarts() 回写最终状态，任务不会永远停在 running。结果回报 ok=0 时
+  还会再实测一次 /api/health，避免「脚本窗口不够但服务其实已恢复」的误判。
 
 两种升级模式（CENKORMES_UPGRADE_MODE）：
 - artifact（默认）：从 GitHub Release 下载发布产物包（含预构建 dist），校验
@@ -65,8 +66,10 @@ BACKEND_DIR = ROOT / "backend"
 ENV_FILE = BACKEND_DIR / ".env"
 HEALTH_URL = os.environ.get("CENKORMES_HEALTH_URL", "http://127.0.0.1:8500/api/health")
 BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
-# 杀进程后要等面板守护进程（约 60s 一轮）拉起，再留出应用启动时间
-VERIFY_TIMEOUT = 180
+# 宝塔 Python 项目管理器自愈实测 3m36s / 3m38s（2026-11-05 v2.2.3 升级+回滚）。
+# 旧窗口 180s 会早 26~27s 放弃，把实际健康的服务误判为 failed。420s 留足一轮
+# 自愈 + 应用启动 + 余量；面板策略变化时可用 CENKORMES_VERIFY_TIMEOUT 覆盖。
+VERIFY_TIMEOUT = int(os.environ.get("CENKORMES_VERIFY_TIMEOUT", "420"))
 RESTART_RESULT_DIR = Path("/tmp")
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
@@ -985,7 +988,7 @@ def _do_upgrade_git(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, "由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
+    _log(jid, f"由守护脚本做健康校验；本进程即将退出，任务最终状态最长 {VERIFY_TIMEOUT}s 内回写")
     db.commit()
 
 
@@ -1246,6 +1249,117 @@ def _collect_package_files(root: Path) -> tuple[list[str], dict[str, Path]]:
     return files, dist_dirs
 
 
+class PreflightError(RuntimeError):
+    """开工前体检未通过：项目目录尚未被任何写操作改动，不需要回灌。"""
+
+
+def _perm_bits(path: Path, *, uid: int, gids: frozenset[int]) -> int:
+    """返回指定身份对 path 的 rwx 位。
+
+    不用 ``os.access``：以 root 跑单测时它恒为 True，测不出 www 的权限问题。
+    直接看 mode 位 + 注入 uid/gids，生产与单测行为一致。
+
+    Args:
+        path: 已存在的路径。
+        uid: 生效 uid；None 由调用方解析为 os.geteuid()。
+        gids: 补充组 gid 集合。
+
+    Returns:
+        0o0~0o7 的权限位；root 视为拥有全部权限。
+    """
+    if uid == 0:
+        return 0o7
+    st = path.stat()
+    if st.st_uid == uid:
+        return (st.st_mode >> 6) & 0o7
+    if st.st_gid in gids:
+        return (st.st_mode >> 3) & 0o7
+    return st.st_mode & 0o7
+
+
+def _nearest_existing_dir(path: Path) -> Path | None:
+    """找 path 最近的已存在祖先目录；链断裂或祖先是文件时返回 None。"""
+    cur = path
+    while not cur.exists():
+        if cur == cur.parent:
+            return None
+        cur = cur.parent
+    return cur if cur.is_dir() else None
+
+
+def _preflight_writable(
+    files: list[str],
+    dist_dirs: dict[str, Path],
+    job_id: int,
+    *,
+    uid: int | None = None,
+    gids: frozenset[int] | None = None,
+) -> None:
+    """覆盖前检查全部目标路径对服务运行身份可写，fail-fast 不留半新半旧代码。
+
+    2026-11-05 任务 #4 的教训：项目里 66304 个文件属主是 root，产物包覆盖
+    第 1 个文件就 PermissionError，连自动回灌也被同一权限挡住。磁盘体检只管
+    空间，管不了属主，所以必须在**动第一个文件之前**把整批路径扫一遍。
+    前端 dist 是整目录 rename + rmtree，删除只需父目录可写，因此目录树里
+    每一层目录都要有 wx 位（光看顶层会漏掉 root 拥有的子目录）。
+
+    Args:
+        files: 待覆盖的普通文件相对路径（已由 _collect_package_files 过滤）。
+        dist_dirs: 待原子换入的前端 dist 目录，键为应用目录名。
+        job_id: 任务号，仅用于写日志。
+        uid: 判定用的 uid；None 表示 os.geteuid()，单测可注入模拟 www。
+        gids: 判定用的 gid 集合；None 表示当前进程的组集合。
+
+    Raises:
+        PreflightError: 任一路径不可写。此时项目目录完全未被改动，外层不应回灌。
+    """
+    eff_uid = os.geteuid() if uid is None else uid
+    eff_gids = (
+        frozenset(set(os.getgroups()) | {os.getegid()}) if gids is None else gids
+    )
+    problems: list[str] = []
+
+    def dir_ok(directory: Path, label: str) -> None:
+        cur = _nearest_existing_dir(directory)
+        if cur is None:
+            problems.append(f"{label}：父目录链不存在或祖先不是目录")
+            return
+        if (_perm_bits(cur, uid=eff_uid, gids=eff_gids) & 0o3) != 0o3:
+            problems.append(f"{label}：目录 {cur} 缺写/执行权限")
+
+    for rel in files:
+        dst = ROOT / rel
+        if dst.is_dir():
+            problems.append(f"{rel}：目标是目录，包内却是文件")
+        elif dst.exists():
+            if not (_perm_bits(dst, uid=eff_uid, gids=eff_gids) & 0o2):
+                problems.append(f"{rel}：已存在但当前身份不可写")
+        else:
+            dir_ok(dst.parent, rel)
+
+    for app in dist_dirs:
+        app_dir = ROOT / app
+        dir_ok(app_dir, f"{app}/dist 换入")
+        for label, live in (("dist", app_dir / "dist"), ("dist.__bak", app_dir / "dist.__bak")):
+            if not live.is_dir():
+                continue
+            for sub in (live, *(x for x in live.rglob("*") if x.is_dir())):
+                if (_perm_bits(sub, uid=eff_uid, gids=eff_gids) & 0o3) != 0o3:
+                    problems.append(
+                        f"{app}/{label} 内目录 {sub.name} 不可写（旧产物无法清理/换入）"
+                    )
+                    break
+
+    if problems:
+        preview = "；".join(problems[:5])
+        more = f"（另有 {len(problems) - 5} 项）" if len(problems) > 5 else ""
+        raise PreflightError(
+            f"目录可写性预检未通过（{len(problems)} 项）：{preview}{more}。"
+            f"请以服务运行身份修复属主后重试：chown -R www:www {ROOT}"
+        )
+    _log(job_id, f"可写性预检通过（{len(files)} 个文件 + {len(dist_dirs)} 个前端产物）")
+
+
 def _apply_package(root: Path, job_id: int, *, replace_dist: bool = True) -> list[str]:
     """把包内容覆盖到项目目录。
 
@@ -1262,9 +1376,11 @@ def _apply_package(root: Path, job_id: int, *, replace_dist: bool = True) -> lis
         已换入 dist 的前端应用名列表，供失败回退。
 
     Raises:
+        PreflightError: 覆盖前可写性预检未通过，项目目录未被改动。
         RuntimeError: 覆盖过程中写文件失败。
     """
     files, dist_dirs = _collect_package_files(root)
+    _preflight_writable(files, dist_dirs, job_id)
     _log(job_id, f"准备覆盖 {len(files)} 个文件")
     for rel in files:
         src = root / rel
@@ -1401,6 +1517,11 @@ def _do_upgrade_artifact(db, job: UpgradeJob, skip_frontend: bool = False) -> No
         if res.returncode != 0:
             raise RuntimeError(f"数据库迁移失败：{(res.stderr or res.stdout).strip()[:500]}")
         _log(jid, "迁移完成")
+    except PreflightError:
+        # 预检跑在 _apply_package 的第一个 copy2 之前，此时 applied 位虽然已经
+        # 置上（防止中途失败时不回灌），但磁盘分毫未动，绝不能去下载旧包回灌。
+        _log(jid, "可写性预检未通过，项目目录未被改动，无需回灌")
+        raise
     except Exception:
         if not applied:
             _log(jid, "失败发生在写盘之前，项目目录未被改动，无需回灌")
@@ -1436,7 +1557,7 @@ def _do_upgrade_artifact(db, job: UpgradeJob, skip_frontend: bool = False) -> No
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, "由守护脚本做健康校验；本进程即将退出，任务最终状态约 60~180s 后回写")
+    _log(jid, f"由守护脚本做健康校验；本进程即将退出，任务最终状态最长 {VERIFY_TIMEOUT}s 内回写")
     db.commit()
 
 
@@ -1561,6 +1682,7 @@ TARGET='{target_version}'
 LOG='{log}'
 RESULT='{result}'
 PORT='{BACKEND_PORT}'
+MAX_WAIT='{VERIFY_TIMEOUT}'
 PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
@@ -1570,6 +1692,7 @@ ts() {{ date '+%Y-%m-%d %H:%M:%S'; }}
 say() {{ echo "[$(ts)] $*" >> "$LOG"; }}
 
 say "重启守护脚本启动：旧 pid=${{PID:-无}}，目标版本 $TARGET"
+say "健康校验最长等待 ${{MAX_WAIT}}s（面板守护自愈实测约 216s）"
 rm -f '{LOCK_FILE}'
 sleep 2
 
@@ -1607,9 +1730,17 @@ fi
 
 OK=0
 ACTUAL=''
-for i in $(seq 1 60); do
+SEEN=0
+DEADLINE=$(( $(date +%s) + MAX_WAIT ))
+while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   ACTUAL=$("$PY" -c 'import json,os,urllib.request;d=json.load(urllib.request.urlopen(os.environ["H"],timeout=5));print((d.get("data") or dict()).get("version") or "")' 2>/dev/null)
-  if [ "$ACTUAL" = "$TARGET" ]; then OK=1; break; fi
+  if [ -n "$ACTUAL" ]; then
+    if [ "$SEEN" = "0" ]; then
+      SEEN=1
+      say "健康端点已响应（当前版本 $ACTUAL），继续等待目标版本 $TARGET"
+    fi
+    if [ "$ACTUAL" = "$TARGET" ]; then OK=1; break; fi
+  fi
   sleep 3
 done
 
@@ -1730,13 +1861,28 @@ def _reconcile_restart_jobs(db) -> None:
             job.error = None
             _log(job.id, f"守护脚本回报：健康校验通过，当前版本 {actual}")
         else:
-            job.status = "failed"
-            job.stage = "done"
-            job.error = (
-                f"重启后健康校验失败：期望 {job.to_version}，实际 {actual or '无响应'}；"
-                f"请查看升级日志，必要时执行回滚"
-            )
-            _log(job.id, job.error)
+            # 守护脚本的窗口可能不够（面板自愈偶发 >3min），结果文件是在它放弃的
+            # 那一刻写的；这里通常更晚（新进程 startup 钩子），实测一次再说。
+            # 只在版本精确匹配时纠正，避免把「服务起来了但代码没换」误判为成功。
+            live = _probe_health()
+            live_version = (live or {}).get("version")
+            if live_version == job.to_version:
+                job.status = "rolled_back" if job.action == "rollback" else "success"
+                job.stage = "done"
+                job.error = None
+                _log(
+                    job.id,
+                    f"守护脚本窗口内未等到（回报 {actual or '无响应'}），但复核 /api/health "
+                    f"实测 {live_version}，判定为成功",
+                )
+            else:
+                job.status = "failed"
+                job.stage = "done"
+                job.error = (
+                    f"重启后健康校验失败：期望 {job.to_version}，实际 {live_version or actual or '无响应'}；"
+                    f"请查看升级日志，必要时执行回滚"
+                )
+                _log(job.id, job.error)
         job.finished_at = datetime.now()
         db.add(job)
         db.commit()
@@ -1966,7 +2112,23 @@ def force_fail_job(db, job_id: int, reason: str = "", operator: str = "-") -> Up
 
 
 def verify_job(db, job_id: int) -> dict:
-    """单独的健康校验入口：用于 awaiting_restart 后手动确认。"""
+    """健康校验入口：awaiting_restart 定终态，或纠正守护窗口误判的 failed。
+
+    纠正 failed 有严格前提，防止把真失败的任务洗成成功：
+      1. 实测 /api/health 版本必须精确等于 ``job.to_version``；
+      2. 任务必须真的走到过重启守护阶段（结果文件存在、stage 已是 done）；
+      3. 只纠正状态与错误文案，不触碰任何代码、数据库备份或日志。
+
+    Args:
+        db: 数据库会话。
+        job_id: 任务号。
+
+    Returns:
+        含 job_id / expected / actual / healthy / status / corrected 的字典。
+
+    Raises:
+        ValueError: 任务不存在。
+    """
     job = db.get(UpgradeJob, job_id)
     if job is None:
         raise ValueError("任务不存在")
@@ -1977,6 +2139,7 @@ def verify_job(db, job_id: int) -> dict:
         "actual": actual,
         "healthy": ok_,
         "status": job.status,
+        "corrected": False,
     }
     if job.status == "awaiting_restart":
         if ok_:
@@ -1992,4 +2155,16 @@ def verify_job(db, job_id: int) -> dict:
             _log(job.id, job.error)
         db.commit()
         result["status"] = job.status
+    elif job.status == "failed" and ok_ and job.stage == "done":
+        # 结果文件是「走到过重启阶段」的物证；失败在 checkout / 备份阶段的任务
+        # 没有它，即使版本号碰巧一致也不会被误纠正。
+        if _read_restart_result(_restart_result_path(job.id)) is not None:
+            job.status = "rolled_back" if job.action == "rollback" else "success"
+            job.stage = "done"
+            job.error = None
+            job.finished_at = datetime.now()
+            _log(job.id, f"人工健康校验纠正误判：实测版本 {actual}，任务状态改为 {job.status}")
+            db.commit()
+            result["status"] = job.status
+            result["corrected"] = True
     return result
