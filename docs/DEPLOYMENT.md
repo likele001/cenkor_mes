@@ -418,6 +418,8 @@ docker run --rm -v cenkormes_storage_data:/data -v "$PWD/backup":/backup \
 > 版本号真源为根目录 `VERSION`；「关于/版本」页显示当前实例所跑版本，
 > 对照 [CHANGELOG](../backend/CHANGELOG.json) 决定是否升级。
 
+> 发版侧（维护者怎么打 tag、CI 怎么出包）见 [RELEASE_PROCESS.md](./RELEASE_PROCESS.md)。
+
 升级通道只有一条：**下载发布产物包**。包里已经带好预构建的前端 `dist`，
 所以升级既不需要 `git`、也不需要 SSH key、更不需要在服务器上装 node。
 
