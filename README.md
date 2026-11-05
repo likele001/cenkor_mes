@@ -218,6 +218,7 @@ cenkormes/
 ## 文档
 
 - [部署指南 `docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) —— Docker 一键部署、手动部署、端口覆盖、Nginx 反代、离线安装包与多架构构建
+- [发版与升级说明 `docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) —— 发版 SOP、CI 出包链路、产物包规格、客户机升级与回滚、排错手册
 - [与商业版对比 `docs/cenkormes-vs-lightmes.html`](docs/cenkormes-vs-lightmes.html) —— 开源独立版与商业 SaaS 版的完整能力差异
 - [安全公告 `SECURITY.md`](SECURITY.md) —— 安全策略与漏洞上报
 - [版本说明 `VERSION`](VERSION)
