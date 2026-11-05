@@ -198,5 +198,10 @@
     "version": "v2.2.2",
     "release_date": "2026-11-05",
     "description": "本版把「在线升级」从 git 通道彻底换成发布产物包，客户机从此不需要 git、不需要 SSH key、更不需要装 node。\n\n在线升级（通道重构）：\n1) 客户机不再依赖源码仓库。此前升级走 git ls-remote / fetch / checkout，客户机必须能拉到仓库（私有仓库要 SSH key），前端还得在服务器上 npm ci && build；现在改为从 GitHub Release 下载产物包 cenkormes-vX.Y.Z.tar.gz，校验 SHA256 后逐文件覆盖。包内已带 CI 构建好的 dist，这一步彻底消失。\n2) 产物包由 CI 自动产出。tag 推送后 package job 构建两个前端 → git archive 只取被跟踪的文件 → 灌入 dist → 二次删除 .env 与 backend/data 并用 find 断言兜底 → 检查 VERSION/main.py/requirements.txt 三样齐全 → 打 tar.gz + sha256 挂到 Release。Source code 快照不含 dist，不能直接部署。\n3) 覆盖安装只写包内存在的文件，永不覆盖 backend/.env、backend/data/、node_modules/、.git/、虚拟环境与 logs/；前端 dist 整体原子换入并保留 dist.__bak。上游已删除的文件按 .release-manifest.txt 的「旧清单 − 新清单」精确清理，首次以产物包升级时因无清单一份都不删——宁可留垃圾，不删客户文件。\n4) 校验缺失即拒绝安装。Release 既无 digest 也无 .sha256 时报错中止，不再有「装了再说」的路径；确需安装必须显式设 CENKORMES_ALLOW_UNVERIFIED=1。\n\n发版链路加固：\n- 新增 preflight 闸门：tag / VERSION / CHANGELOG.json 三者必须一致，不一致就在建 Release 之前失败。此前打了 tag 忘补说明，Release 正文会退化成空壳，只有翻 GitHub 才发现。\n- 闸门用两个独立 checkout：校验脚本从主干取，--root 指向目标 tag。回填历史版本时旧 tag 里可能没有脚本，直接 checkout 过去会 exit 127——校验逻辑不能放在被检查对象里。\n- attach 单独成 job 并显式 --repo。Release 创建是秒级、前端构建是分钟级，合并会让窗口期内点「立即升级」拿到「该版本没有产物包」；该 job 没 checkout，gh 无法从 .git 推断仓库，必须显式指定。\n\n文档：\n- 新增 docs/RELEASE_PROCESS.md：维护者发版 SOP、CI 四道 job 职责、产物包规格与保护清单、客户机两条升级通道、回滚与排错手册（含全部真实踩坑）。\n- docs/DEPLOYMENT.md 第 8 章改为产物包通道，明确「Source code 快照不含 dist，不能直接部署」。\n\n升级说明：本版无新增数据库迁移。客户机可用后台「立即升级」或 scripts/upgrade.sh 升级到本版；从本版起，后续每个版本都能靠这套通道自我升级。"
+  },
+  {
+    "version": "v2.2.3",
+    "release_date": "2026-11-05",
+    "description": "运维加固：前端 dist 属主对齐 www:www，避免在线升级清理旧产物失败与回滚残留；补部署文档第 9 章。本版用于产物包在线升级与回滚的端到端验证，无数据库迁移。"
   }
 ]
