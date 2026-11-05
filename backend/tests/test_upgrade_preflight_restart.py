@@ -203,16 +203,41 @@ def test_do_upgrade_does_not_reinstall_on_preflight_error(monkeypatch, tmp_path)
 
 # ── P0：守护窗口 ────────────────────────────────────────────────────────
 
-def test_restart_script_waits_long_enough_and_reports_two_phases():
-    """窗口来自 VERIFY_TIMEOUT，旧 180s 循环必须彻底消失。"""
+def test_restart_script_exits_immediately_without_health_polling():
+    """守护脚本只 kill + 写 pending 后退出；长期轮询会阻塞宝塔自愈。
+
+    任务 #8 实测：脚本以项目根为 cwd 且存活 420s 时，宝塔把它写进
+    cenkermes.pid 并认为服务仍在运行，8500 停服 7 分钟。
+    """
     body = us._build_restart_script(
-        job_id=9, target_version="v2.2.4", pid=12345, py=Path("/usr/bin/python3"), custom=""
+        job_id=9, target_version="v2.2.5", pid=12345, py=Path("/usr/bin/python3"), custom=""
     )
-    assert us.VERIFY_TIMEOUT >= 360
-    assert f"MAX_WAIT='{us.VERIFY_TIMEOUT}'" in body
-    assert "seq 1 60" not in body
-    assert "DEADLINE=" in body
-    assert "健康端点已响应" in body  # 区分「没起来」与「起来了但版本没换」
+    assert "ok=pending" in body
+    assert "exit 0" in body
+    assert "守护脚本退出" in body
+    for forbidden in ("MAX_WAIT", "DEADLINE", "seq 1 60", "nohup", "setsid"):
+        assert forbidden not in body, forbidden
+
+
+def test_guard_spawns_outside_project_root(monkeypatch, tmp_path):
+    """守护脚本必须以 /tmp 为 cwd 启动，避免被宝塔当成项目主进程。"""
+    captured: dict = {}
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(us, "_listener_pid", lambda: 12345)
+    monkeypatch.setattr(us, "_venv_python", lambda: Path("/usr/bin/python3"))
+    monkeypatch.setattr(us, "_log", lambda *a, **k: None)
+    monkeypatch.setattr(us, "RESTART_CMD", "")
+
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            captured["args"] = args
+            captured.update(kwargs)
+
+    monkeypatch.setattr(us.subprocess, "Popen", _FakePopen)
+    us._spawn_restart_guard(1, "v2.2.5")
+
+    assert captured["cwd"] == "/tmp"
+    assert captured["start_new_session"] is True
 
 
 # ── P0：reconcile 实测复核 ──────────────────────────────────────────────
@@ -229,6 +254,20 @@ def test_reconcile_corrects_guard_timeout_when_service_is_healthy(monkeypatch, t
     assert job.status == "success"
     assert job.stage == "done"
     assert job.error is None
+    assert db.commits == 1
+
+
+def test_reconcile_resolves_pending_when_service_is_healthy(monkeypatch):
+    """新守护脚本只写 pending，服务恢复后由 reconcile 实测定终态。"""
+    job = _job()
+    db = _FakeDB(job)
+    monkeypatch.setattr(us, "_read_restart_result", lambda _p: {"ok": "pending", "version": "", "finished_at": "x"})
+    monkeypatch.setattr(us, "_probe_health", lambda: {"version": job.to_version, "db": "up"})
+
+    us._reconcile_restart_jobs(db)
+
+    assert job.status == "success"
+    assert job.stage == "done"
     assert db.commits == 1
 
 

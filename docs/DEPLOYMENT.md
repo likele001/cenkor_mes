@@ -535,22 +535,25 @@ chown -R www:www frontend-admin-pro/dist frontend-h5/dist
 
 CI 产物包由升级进程（www）解压，属主天然正确，无需额外处理。
 
-### 9.1 覆盖前可写性预检与重启健康窗口
+### 9.1 覆盖前可写性预检与重启判定
 
 v2.2.4 起，`_apply_package()` 在写第一个文件之前会对整批目标路径做可写性
 预检（普通文件看写位，前端 `dist` / `dist.__bak` 目录树逐层看写+执行位），
 不通过就抛 `PreflightError` 并**直接中止、不回灌**——避免在属主异常时留下
 半新半旧的代码。报错信息会列出前 5 个问题路径并给出 `chown` 命令。
 
-重启守护脚本的健康等待窗口由 `CENKORMES_VERIFY_TIMEOUT` 控制，默认 **420s**
-（宝塔自愈实测约 216s，旧的 180s 会把健康服务误判为失败）。守护脚本超时
-回报 `ok=0` 时，`reconcile_jobs()` 还会再实测一次 `/api/health`，只有版本
-精确匹配才纠正为成功；后台「健康校验」按钮也能纠正这类误判（仅限确实
-走到过重启阶段、且有守护结果文件的任务）。startup 钩子早于端口可用时
-会暂缓判定（10 分钟宽限），保留 `running/restart` 等任务列表接口再次 reconcile，
-不会把刚拉起的服务误判成失败、也不会让任务永久卡住。
+**v2.2.5 重启判定重构（重要）**：守护脚本**只做 kill + 释放端口，写完
+`ok=pending` 立即退出**，不再轮询 `/api/health`，且以 `/tmp` 为 cwd 启动。
+原因：脚本从 uvicorn 内部 spawn、cwd 在项目根时，宝塔 Python 项目管理器会把
+它写进 `cenkermes.pid`；只要脚本还活着，面板就认为服务在运行而不触发自愈。
+任务 #8 实测把健康窗口从 180s 加到 420s 后，8500 端口整整停了 7 分钟。
 
-```bash
-# 可选：面板守护策略更慢的实例
-CENKORMES_VERIFY_TIMEOUT=600   # 写入 backend/.env 或宝塔项目环境变量
-```
+最终状态由服务被面板拉起后判定：
+
+- `reconcile_jobs()` 实测 `/api/health`，版本精确等于 `to_version` 才判成功；
+- startup 钩子早于端口可用时暂缓判定（10 分钟宽限，保留 `running/restart`）；
+- `main.py` 启动后另起 daemon 线程，30/60/90s 各复核一次，自动定终态；
+- 后台「健康校验」按钮可纠正误判的 `failed`（要求实测版本匹配 + 有守护结果文件）。
+
+因此不需要也不应该配置任何「健康等待窗口」环境变量；
+`CENKORMES_VERIFY_TIMEOUT` 已随 v2.2.5 移除。
