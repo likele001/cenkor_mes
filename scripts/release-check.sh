@@ -11,37 +11,57 @@
 #   这种事一旦发生，只有翻 GitHub 才发现，所以必须在推 tag 前拦住。
 #
 # 用法：
-#   bash scripts/release-check.sh              # 校验当前 VERSION
-#   bash scripts/release-check.sh --tag v2.2.1 # 校验指定 tag（CI 用）
-#   bash scripts/release-check.sh --quiet      # 只输出错误
+#   bash scripts/release-check.sh                    # 校验当前仓库的 VERSION
+#   bash scripts/release-check.sh --tag v2.2.1       # 同时校验 tag 与 VERSION 一致
+#   bash scripts/release-check.sh --root /path/repo  # 校验指定目录（CI 回填旧版本用）
+#   bash scripts/release-check.sh --quiet            # 只输出错误
+#
+# 关于 --root：
+#   CI 里校验「历史 tag」时必须用这个参数。因为回填旧版本时，checkout 到的是
+#   旧 tag，而旧 tag 里可能还没有本脚本；所以 CI 从主干取脚本、用 --root 指向
+#   目标 tag 的检出目录。脚本自身位置与实际校验目录解耦。
 #
 # 退出码：0 一致；1 不一致或数据缺失。
 # =============================================================
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION_FILE="$ROOT/VERSION"
-CHANGELOG_FILE="$ROOT/backend/CHANGELOG.json"
+# 脚本自身位置推导的默认仓库根（--root 可覆盖）
+SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; DIM='\033[2m'; NC='\033[0m'
 QUIET=0
 TAG_INPUT=""
+ROOT_INPUT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --quiet) QUIET=1 ;;
     --tag) TAG_INPUT="${2:-}"; shift ;;
-    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --root) ROOT_INPUT="${2:-}"; shift ;;
+    -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 1 ;;
   esac
   shift
 done
 
+# ---- 确定校验目标目录 ----
+if [ -n "$ROOT_INPUT" ]; then
+  if ! ROOT="$(cd "$ROOT_INPUT" 2>/dev/null && pwd)"; then
+    echo -e "${RED}✗ --root 指定的目录不存在：$ROOT_INPUT${NC}" >&2
+    exit 1
+  fi
+else
+  ROOT="$SELF_ROOT"
+fi
+
+VERSION_FILE="$ROOT/VERSION"
+CHANGELOG_FILE="$ROOT/backend/CHANGELOG.json"
+
 say()  { [ "$QUIET" = 1 ] || echo "$@"; }
 fail() { echo -e "${RED}✗ $*${NC}" >&2; FAILED=1; }
 FAILED=0
 
-say "仓库: $ROOT"
+say "校验目录: $ROOT"
 
 # ---- 1. VERSION 文件 ----
 if [ ! -f "$VERSION_FILE" ]; then
@@ -100,7 +120,7 @@ PY
         if [ "${DESC_LEN:-0}" -lt 8 ]; then
           fail "CHANGELOG.json 中 $VERSION 的 description 过短（${DESC_LEN} 字），等于没写说明"
         else
-          say "CHANGELOG     : $VERSION（$REL_DATE，说明 ${DESC_LEN} 字）"
+          say "CHANGELOG    : $VERSION（$REL_DATE，说明 ${DESC_LEN} 字）"
         fi ;;
       *)
         fail "CHANGELOG 校验返回未知结果：$RESULT" ;;
