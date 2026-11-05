@@ -39,6 +39,10 @@ BACKUP_DIR = ROOT / "backend/data/backups"
 LOG_DIR = ROOT / "backend/data/upgrade_logs"
 LOCK_FILE = Path("/tmp/cenkormes-upgrade.lock")
 RESTART_CMD = os.environ.get("CENKORMES_RESTART_CMD", "")
+# 升级后要一并重启的 celery / beat 单元名。做成可配置是因为守护脚本里的服务名
+# 是全局的：同机再跑一套预发实例时，两个实例若共用同一组名称，升级预发会连带
+# 重启生产 worker（旧 worker 会继续跑旧代码，且打乱在生产跑的任务）。
+CELERY_UNITS = os.environ.get("CENKORMES_CELERY_UNITS", "cenkormes-celery cenkormes-beat")
 
 BACKEND_DIR = ROOT / "backend"
 ENV_FILE = BACKEND_DIR / ".env"
@@ -885,6 +889,7 @@ PORT='{BACKEND_PORT}'
 PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
+UNITS='{CELERY_UNITS}'
 export H='{HEALTH_URL}'
 ts() {{ date '+%Y-%m-%d %H:%M:%S'; }}
 say() {{ echo "[$(ts)] $*" >> "$LOG"; }}
@@ -893,7 +898,7 @@ say "重启守护脚本启动：旧 pid=${{PID:-无}}，目标版本 $TARGET"
 rm -f '{LOCK_FILE}'
 sleep 2
 
-for u in cenkormes-celery cenkormes-beat; do
+for u in $UNITS; do
   if sudo -n systemctl restart "$u" >/dev/null 2>&1; then
     say "已重启 $u"
   else
