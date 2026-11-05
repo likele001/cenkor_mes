@@ -1,6 +1,12 @@
 # 监听 vX.Y.Z 标签推送，自动在 GitHub 创建对应 Release。
 # 触发方式：scripts/release-all.sh 发版时会打并推送 tag，从而驱动本工作流。
 # Release 说明取自 backend/CHANGELOG.json 中该版本号对应的 description。
+#
+# 2026-11 加固：新增 preflight 闸门。此前 tag 与 CHANGELOG.json 之间没有任何
+# 一致性约束——打了 tag 但忘了补 CHANGELOG 条目时，Release 照样创建成功，
+# 正文退化成 "Release v2.2.1"，而 About 页显示的是新版本号，只有翻 GitHub
+# 才发现。现在闸门先跑 scripts/release-check.sh，任一不一致直接中断，
+# github-release 根本不会执行。
 name: Release
 
 on:
@@ -19,14 +25,37 @@ permissions:
   contents: write
 
 jobs:
-  github-release:
+  # ---------- 1. 闸门：tag / VERSION / CHANGELOG.json 三者必须一致 ----------
+  preflight:
+    name: 版本一致性闸门
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    steps:
+      # 必须显式 checkout 目标 tag：workflow_dispatch 回填历史版本时，
+      # 默认分支的 VERSION 是新版本，不指定 ref 会校验成「不一致」。
+      - name: Checkout 目标 tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: 校验 tag ↔ VERSION ↔ CHANGELOG.json
+        run: bash scripts/release-check.sh --tag "$RELEASE_TAG"
+
+  # ---------- 2. 创建 / 更新 Release ----------
+  github-release:
+    name: 创建 GitHub Release
+    runs-on: ubuntu-latest
+    needs: [preflight]
     env:
       # tag 推送事件取 ref_name；手动触发取输入的 tag
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
-      - name: Checkout
+      # 同上：正文取自该 tag 的 CHANGELOG.json，必须 checkout 到 tag 本身
+      - name: Checkout 目标 tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: 提取本版本 CHANGELOG 说明
         env:
