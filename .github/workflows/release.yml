@@ -200,9 +200,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ env.RELEASE_TAG }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ls -lh pkg
-          gh release upload "$TAG" pkg/* --clobber
+          # 本 job 没 checkout，gh 无法从 .git 推断仓库，必须显式给 --repo
+          gh release upload "$TAG" pkg/* --clobber --repo "$REPO"
           echo "--- 附件清单 ---"
-          gh release view "$TAG" --json assets --jq '.assets[].name'
+          gh release view "$TAG" --json assets --jq '.assets[].name' --repo "$REPO"
