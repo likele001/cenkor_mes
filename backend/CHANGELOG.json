@@ -223,5 +223,10 @@
     "version": "v2.2.7",
     "release_date": "2026-11-06",
     "description": "云存储迁移任务区分「部分失败」不再误报已完成；CI 接入覆盖率门槛（实测 54.5%%，门槛 50%%）；按代码实际状态重写开发路线图"
+  },
+  {
+    "version": "v2.2.8",
+    "release_date": "2026-11-06",
+    "description": "修复 Beat 退出信号因 TTL 过期丢失（后台与升级均无法远程重启 Beat）；升级流程复用 worker_control 优雅重启，不再依赖 sudo"
   }
 ]
