@@ -219,6 +219,8 @@ const groups: Group[] = [
           { path: '/production/inspection-templates', i18nKey: 'menu.inspectionTemplates', permissions: ['report.audit', 'qc.inspect', 'qc.approve'], icon: DocumentChecked },
           { path: '/production/defect-codes', i18nKey: 'menu.defectCodes', permissions: ['report.audit', 'qc.inspect', 'qc.approve'], icon: EditPen },
           { path: '/production/dispositions', i18nKey: 'menu.dispositions', permissions: ['disposition.view', 'disposition.manage', 'disposition.approve'], icon: Stamp },
+          { path: '/production/inspections', i18nKey: 'menu.inspections', permissions: ['inspection.view', 'inspection.manage', 'inspection.audit'], icon: DocumentChecked },
+          { path: '/production/inspection-ledger', i18nKey: 'menu.inspectionLedger', permissions: ['inspection.view', 'inspection.manage', 'inspection.audit'], icon: List },
           { path: '/production/trace', i18nKey: 'menu.trace', permissions: ['trace.query'], icon: Search },
           { path: '/production/trace-tree', i18nKey: 'menu.traceTree', permissions: ['trace.query'], icon: Share },
         ],

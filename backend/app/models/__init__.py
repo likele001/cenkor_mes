@@ -138,6 +138,8 @@ __all__ = [
     "StocktakeItem",
     "Disposition",
     "DispositionItem",
+    "InspectionOrder",
+    "InspectionOrderItem",
     "PurchaseOrder",
     "PurchaseOrderItem",
     "Statement",
@@ -160,6 +162,8 @@ from app.models.warehouse import Warehouse, Stock, StockLog
 from app.models.stocktake import Stocktake, StocktakeItem
 # 不良品处置单：挂在报工的不良量上，只记决定与损失，不碰库存与报工良品数
 from app.models.disposition import Disposition, DispositionItem
+# 检验单：IQC/IPQC/OQC/FAI 四类共用一套结构，明细是模板项的快照
+from app.models.inspection import InspectionOrder, InspectionOrderItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 # finance（客户对账单/总账）为独立业务域，需注册进 metadata
 from app.models.finance import Statement, StatementItem

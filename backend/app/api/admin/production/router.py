@@ -9,6 +9,7 @@ from app.api.admin.production.report_units import router as report_units_router
 from app.api.admin.production.salary_reports import router as salary_reports_router
 from app.api.admin.production.quality import router as quality_router
 from app.api.admin.production.dispositions import router as dispositions_router
+from app.api.admin.production.inspections import router as inspections_router
 from app.api.admin.production.assignments import router as assignments_router
 from app.api.admin.production.tasks import router as tasks_router
 from app.api.admin.production.work_orders import router as work_orders_router
@@ -26,4 +27,5 @@ router.include_router(report_units_router, tags=["admin-production-report-units"
 router.include_router(salary_reports_router, prefix="/reports", tags=["admin-production-reports"])
 router.include_router(quality_router, prefix="", tags=["admin-production-quality"])
 router.include_router(dispositions_router, tags=["admin-production-dispositions"])
+router.include_router(inspections_router, tags=["admin-production-inspections"])
 router.include_router(crm_router, prefix="/crm", tags=["admin-production-crm"])

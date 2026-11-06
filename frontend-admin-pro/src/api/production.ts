@@ -998,6 +998,152 @@ export type DispositionItemIn = {
   remark: string
 }
 
+export type InspectionType = 'iqc' | 'ipqc' | 'oqc' | 'fai'
+
+export type InspectionStatus = 'draft' | 'pending' | 'passed' | 'failed' | 'cancelled'
+
+export type InspectionHandling = 'return' | 'accept' | 'rework' | 'scrap'
+
+export type InspectionItemOut = {
+  id: number
+  seq: number
+  template_item_id: number | null
+  item_name: string
+  item_type: string
+  standard_value: string | null
+  upper_limit: string | null
+  lower_limit: string | null
+  unit: string | null
+  is_required: boolean
+  /** pass / fail / na，空表示未检 */
+  result: string | null
+  measured_value: string | null
+  defect_code_id: number | null
+  defect_code: string | null
+  defect_name: string | null
+  defect_severity: string | null
+  remark: string | null
+}
+
+export type InspectionItemIn = {
+  seq?: number
+  template_item_id?: number
+  item_name?: string
+  item_type?: string
+  result?: string
+  measured_value?: string
+  defect_code_id?: number | null
+  remark?: string
+}
+
+export type InspectionOut = {
+  id: number
+  code: string
+  inspection_type: InspectionType
+  status: InspectionStatus
+  source_type: string
+  source_id: number | null
+  source_code: string | null
+  material_id: number | null
+  sku_id: number | null
+  item_name: string | null
+  batch_no: string | null
+  supplier_id: number | null
+  customer_id: number | null
+  qty: number
+  sample_qty: number
+  accept_qty: number | null
+  reject_qty: number | null
+  template_id: number | null
+  handling: InspectionHandling | null
+  conclusion: string | null
+  inspector_id: number | null
+  inspector_name: string | null
+  inspected_at: string | null
+  created_by: number | null
+  closed_at: string | null
+  remark: string | null
+  created_at: string | null
+  updated_at: string | null
+  item_total: number
+  item_filled: number
+  item_failed: number
+  is_locked: boolean
+  is_closed: boolean
+  items?: InspectionItemOut[]
+}
+
+export type InspectionTemplateOption = {
+  id: number
+  code: string
+  name: string
+  process_id: number | null
+  product_id: number | null
+  item_count: number
+}
+
+export type InspectionSourceOption = {
+  id: number
+  code: string
+  label: string
+  qty?: number
+  item_name?: string | null
+  supplier_name?: string | null
+}
+
+export type InspectionStats = {
+  total: number
+  pending: number
+  passed: number
+  failed: number
+  pass_rate: number | null
+  reject_qty: number
+  by_type: Record<string, { total: number; pending: number; passed: number; failed: number }>
+}
+
+export type LedgerRow = {
+  id: number
+  recorded_at: string | null
+  result: string | null
+  measured_value: string | null
+  remark: string | null
+  item_name: string | null
+  item_type: string | null
+  standard_value: string | null
+  upper_limit: string | null
+  lower_limit: string | null
+  unit: string | null
+  defect_code: string | null
+  defect_name: string | null
+  defect_severity: string | null
+  audit_level: string
+  audit_action: string
+  audit_reason: string | null
+  auditor_id: number
+  unit_id: number
+  unit_seq: number
+  unit_status: string
+  unit_result_type: string | null
+  report_user_id: number
+  task_id: number
+  task_code: string
+  process_id: number | null
+  process_name: string | null
+  work_order_id: number | null
+  sku_id: number | null
+  sku_code: string | null
+  sku_name: string | null
+}
+
+export type LedgerStats = {
+  total: number
+  counted: number
+  failed: number
+  pass_rate: number | null
+  by_severity: Record<string, number>
+  top_processes: Array<{ process_id: number | null; process_name: string; failed: number }>
+}
+
 export const productionApi = {
   // 客户
   listCustomers(params: any) {
@@ -1859,6 +2005,141 @@ export const productionApi = {
   dispositionReportOptions(params: { keyword?: string; limit?: number }) {
     return http.request<{ items: DispositionReportOption[] }>({
       url: '/admin/production/dispositions/report-options',
+      method: 'GET',
+      params,
+    })
+  },
+  // ── 检验单 ──
+  listInspections(params: {
+    inspection_type?: string
+    status?: string
+    source_type?: string
+    supplier_id?: number
+    keyword?: string
+    date_from?: string
+    date_to?: string
+    offset?: number
+    limit?: number
+  }) {
+    return http.request<{ items: InspectionOut[]; total: number }>({
+      url: '/admin/production/inspections',
+      method: 'GET',
+      params,
+    })
+  },
+  getInspection(id: number) {
+    return http.request<InspectionOut>({ url: `/admin/production/inspections/${id}`, method: 'GET' })
+  },
+  createInspection(payload: {
+    inspection_type: InspectionType
+    qty: number
+    sample_qty?: number
+    template_id?: number
+    items?: InspectionItemIn[]
+    source_type?: string
+    source_id?: number
+    material_id?: number
+    sku_id?: number
+    item_name?: string
+    batch_no?: string
+    supplier_id?: number
+    customer_id?: number
+    remark?: string
+  }) {
+    return http.request<InspectionOut>({ url: '/admin/production/inspections', method: 'POST', data: payload })
+  },
+  updateInspection(
+    id: number,
+    payload: {
+      qty?: number
+      sample_qty?: number
+      batch_no?: string
+      item_name?: string
+      material_id?: number
+      sku_id?: number
+      supplier_id?: number
+      customer_id?: number
+      template_id?: number
+      items?: InspectionItemIn[]
+      remark?: string
+    },
+  ) {
+    return http.request<InspectionOut>({ url: `/admin/production/inspections/${id}`, method: 'PUT', data: payload })
+  },
+  deleteInspection(id: number) {
+    return http.request<{ ok: boolean }>({ url: `/admin/production/inspections/${id}`, method: 'DELETE' })
+  },
+  submitInspection(id: number) {
+    return http.request<InspectionOut>({ url: `/admin/production/inspections/${id}/submit`, method: 'POST' })
+  },
+  judgeInspection(
+    id: number,
+    payload: { accept_qty?: number; reject_qty?: number; handling?: string; conclusion?: string },
+  ) {
+    return http.request<InspectionOut>({
+      url: `/admin/production/inspections/${id}/judge`,
+      method: 'POST',
+      data: payload,
+    })
+  },
+  closeInspection(id: number) {
+    return http.request<InspectionOut>({ url: `/admin/production/inspections/${id}/close`, method: 'POST' })
+  },
+  cancelInspection(id: number) {
+    return http.request<InspectionOut>({ url: `/admin/production/inspections/${id}/cancel`, method: 'POST' })
+  },
+  exportInspection(id: number) {
+    return http.downloadBlob({ url: `/admin/production/inspections/${id}/export`, method: 'GET' })
+  },
+  exportInspections(params: Record<string, unknown>) {
+    return http.downloadBlob({ url: '/admin/production/inspections/export', method: 'GET', params })
+  },
+  inspectionStats() {
+    return http.request<InspectionStats>({ url: '/admin/production/inspections/stats', method: 'GET' })
+  },
+  inspectionTemplateOptions(params: { inspection_type?: string; keyword?: string; limit?: number }) {
+    return http.request<InspectionTemplateOption[]>({
+      url: '/admin/production/inspections/template-options',
+      method: 'GET',
+      params,
+    })
+  },
+  inspectionSourceOptions(params: { inspection_type: string; keyword?: string; limit?: number }) {
+    return http.request<InspectionSourceOption[]>({
+      url: '/admin/production/inspections/source-options',
+      method: 'GET',
+      params,
+    })
+  },
+  // ── 检验台账 ──
+  listInspectionLedger(params: {
+    result?: string
+    process_id?: number
+    sku_id?: number
+    defect_code_id?: number
+    auditor_id?: number
+    date_from?: string
+    date_to?: string
+    keyword?: string
+    offset?: number
+    limit?: number
+  }) {
+    return http.request<{ items: LedgerRow[]; total: number }>({
+      url: '/admin/production/inspections/ledger',
+      method: 'GET',
+      params,
+    })
+  },
+  inspectionLedgerStats(params: { date_from?: string; date_to?: string }) {
+    return http.request<LedgerStats>({
+      url: '/admin/production/inspections/ledger/stats',
+      method: 'GET',
+      params,
+    })
+  },
+  exportInspectionLedger(params: Record<string, unknown>) {
+    return http.downloadBlob({
+      url: '/admin/production/inspections/ledger/export',
       method: 'GET',
       params,
     })
