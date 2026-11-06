@@ -862,13 +862,22 @@ def create_lead_activity(
     return item
 
 
-def list_lead_activities(db: Session, tenant_id: int, lead_id: int):
+
+def list_lead_activities(
+    db: Session,
+    tenant_id: int,
+    lead_id: int,
+    offset: int = 0,
+    limit: int = 50,
+):
     if CrmLeadActivity is None:
         return []
     stmt = (
         select(CrmLeadActivity)
         .where(CrmLeadActivity.tenant_id == tenant_id, CrmLeadActivity.lead_id == lead_id)
         .order_by(CrmLeadActivity.id.desc())
+        .offset(max(0, int(offset or 0)))
+        .limit(max(1, int(limit or 50)))
     )
     return db.scalars(stmt).all()
 
@@ -1548,9 +1557,46 @@ def renew_contract(
     return new_contract
 
 
+def terminate_contract(db: Session, contract, user_id: int | None = None, reason: str | None = None):
+    """终止合同：状态置 terminated，未结清付款计划置 cancelled。
+
+    CrmContract 没有终止时间/原因字段，原因追加到 remark，
+    避免为一次状态流转引入表结构变更。
+    """
+    if contract is None:
+        return None
+    contract.status = "terminated"
+    if reason:
+        mark = f"[终止原因] {reason}"
+        contract.remark = f"{contract.remark}\n{mark}" if contract.remark else mark
+    if CrmPaymentPlan is not None:
+        plans = db.scalars(
+            select(CrmPaymentPlan).where(
+                CrmPaymentPlan.tenant_id == contract.tenant_id,
+                CrmPaymentPlan.contract_id == contract.id,
+                CrmPaymentPlan.status.in_(("pending", "partial", "overdue")),
+            )
+        ).all()
+        for p in plans:
+            p.status = "cancelled"
+    db.flush()
+    return contract
+
+
+
 def _calc_payment_status(actual, total, due_date) -> str:
+    """按实收金额与到期日判定付款状态。
+
+    due_date 可能来自 JSON（字符串），这里统一转 date 再比较，
+    否则 `str < date` 会 TypeError。
+    """
     actual = Decimal(str(actual or 0))
     total = Decimal(str(total or 0))
+    if isinstance(due_date, str) and due_date:
+        try:
+            due_date = date.fromisoformat(due_date[:10])
+        except ValueError:
+            due_date = None
     if total <= 0:
         return "pending"
     if actual >= total:
@@ -1637,9 +1683,9 @@ def create_campaign(
     tenant_id: int,
     name: str,
     type: str,
-    start_date: date | None,
-    end_date: date | None,
-    budget: Decimal | None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    budget: Decimal | None = None,
     currency: str = "CNY",
     **kwargs,
 ):
@@ -1736,14 +1782,15 @@ def campaign_add_members(db: Session, tenant_id: int, campaign_id: int, member_r
         return []
     created = []
     for row in member_rows:
+        # CrmCampaignMember 的字段是 status/responded_at/score_delta/is_active/created_at，
+        # 没有 joined_at / remark，传了会 TypeError（加成员必 500）
         member = CrmCampaignMember(
             tenant_id=tenant_id,
             campaign_id=campaign_id,
             member_type=str(row.get("member_type", "lead")),
             member_id=int(row.get("member_id", 0)),
+            status=str(row.get("status") or "invited"),
             score_delta=int(row.get("score_delta", 0) or 0),
-            joined_at=datetime.now(timezone.utc),
-            remark=row.get("remark"),
         )
         db.add(member)
         created.append(member)
@@ -1925,6 +1972,70 @@ def calculate_target_achievement(db: Session, tenant_id: int, target_id: int) ->
         "target": float(target_value),
         "actual": float(actual),
         "achievement_ratio": ratio,
+    }
+
+
+def dashboard_sales_targets(
+    db: Session,
+    tenant_id: int,
+    period_type: str | None = None,
+    owner_user_id: int | None = None,
+) -> dict:
+    """销售目标达成看板。
+
+    逐条复用 calculate_target_achievement，不另写一套算法，
+    保证看板与单条达成率口径一致。
+    """
+    empty = {
+        "items": [],
+        "summary": {"target": 0.0, "actual": 0.0, "achievement_ratio": None, "count": 0},
+    }
+    if CrmSalesTarget is None:
+        return empty
+
+    stmt = select(CrmSalesTarget).where(
+        CrmSalesTarget.tenant_id == tenant_id,
+        CrmSalesTarget.is_active.is_(True),
+    )
+    if period_type:
+        stmt = stmt.where(CrmSalesTarget.period_type == period_type)
+    if owner_user_id is not None:
+        stmt = stmt.where(CrmSalesTarget.owner_user_id == owner_user_id)
+    stmt = stmt.order_by(CrmSalesTarget.period_start.desc(), CrmSalesTarget.id.desc())
+    targets = db.scalars(stmt).all()
+
+    items: list[dict] = []
+    total_target = Decimal("0")
+    total_actual = Decimal("0")
+    for t in targets:
+        ach = calculate_target_achievement(db, tenant_id, t.id)
+        total_target += Decimal(str(ach.get("target") or 0))
+        total_actual += Decimal(str(ach.get("actual") or 0))
+        items.append(
+            {
+                "id": t.id,
+                "period_type": t.period_type,
+                "period_start": str(t.period_start) if t.period_start else None,
+                "period_end": str(t.period_end) if t.period_end else None,
+                "dimension": t.dimension,
+                "metric": t.metric,
+                "currency": t.currency,
+                "owner_user_id": t.owner_user_id,
+                "target": ach.get("target"),
+                "actual": ach.get("actual"),
+                "achievement_ratio": ach.get("achievement_ratio"),
+            }
+        )
+
+    ratio = float(total_actual / total_target) if total_target > 0 else None
+    return {
+        "items": items,
+        "summary": {
+            "target": float(total_target),
+            "actual": float(total_actual),
+            "achievement_ratio": ratio,
+            "count": len(items),
+        },
     }
 
 

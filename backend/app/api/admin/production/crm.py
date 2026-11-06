@@ -1,5 +1,6 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
+import inspect
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -95,6 +96,16 @@ def _call(fn_name: str, default=None, **kwargs):
 
 
 def _payload_dict(payload) -> dict:
+    """把请求体统一转成 dict。
+
+    注意：本模块多数端点声明为 `payload: dict`，FastAPI 直接传原生 dict，
+    而 dict 没有 __dict__，走 vars() 会 TypeError。此前缺这一分支，
+    导致整个 CRM 写接口在真实请求下全部 500（单测直调 crud 时发现不了）。
+    """
+    if payload is None:
+        return {}
+    if isinstance(payload, dict):
+        return dict(payload)
     if hasattr(payload, "model_dump"):
         try:
             return payload.model_dump(exclude_unset=True)
@@ -106,6 +117,91 @@ def _payload_dict(payload) -> dict:
         except Exception:
             pass
     return {k: v for k, v in vars(payload).items() if not k.startswith("_")}
+
+
+
+def _filter_kwargs(fn, data: dict, *, drop: tuple[str, ...] = ()) -> dict:
+    """按 fn 实际签名裁剪关键字参数，并顺带做日期类型转换。
+
+    前端 payload 通常比 crud 签名宽（会多传 grade/status/score 之类），
+    直接 **data 会 TypeError 变 500。这里只保留 fn 认的参数：
+      - fn 带 **kwargs  -> 全量透传，仅剔除 drop 中会与位置参数撞车的键
+      - fn 签名固定     -> 只留签名里出现的键
+    """
+    data = _coerce_dates(fn, data)
+    data = {k: v for k, v in (data or {}).items() if k not in drop}
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return data
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return data
+    allowed = {
+        n
+        for n, p in params.items()
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {k: v for k, v in data.items() if k in allowed}
+
+
+def _customer_crud():
+    """客户 crud 在 app.crud.customer，不在 app.crud.crm。"""
+    from app.crud import customer as _mod
+
+    return _mod
+
+
+def _to_date(value):
+    """ISO 日期字符串 -> date；解析失败原样返回。"""
+    if isinstance(value, str) and value:
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            return value
+    return value
+
+
+def _coerce_dates(fn, data: dict) -> dict:
+    """按目标函数注解，把 payload 里的日期字符串转成 date / datetime。
+
+    JSON 请求体里的日期天然是字符串；crud 内部会做比较或直接写库，
+    不转就会 TypeError 或写入非法值。注解里出现 datetime 优先于 date。
+    """
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return data
+    out = dict(data)
+    for key, val in list(out.items()):
+        if not isinstance(val, str) or not val:
+            continue
+        p = params.get(key)
+        if p is None or p.annotation is inspect.Parameter.empty:
+            continue
+        ann = p.annotation
+        text = ann if isinstance(ann, str) else str(ann)
+        low = text.lower()
+        try:
+            if "datetime" in low:
+                out[key] = datetime.fromisoformat(val)
+            elif "date" in low:
+                out[key] = date.fromisoformat(val[:10])
+        except ValueError:
+            pass
+    return out
+
+
+def _coerce_rows(rows, keys: tuple[str, ...] = ("due_date",)) -> list[dict]:
+    """转换嵌套行里的日期字符串（付款计划 / 报价商品行）。"""
+    fixed: list[dict] = []
+    for r in rows or []:
+        if isinstance(r, dict):
+            r = dict(r)
+            for k in keys:
+                if isinstance(r.get(k), str) and r[k]:
+                    r[k] = _to_date(r[k])
+        fixed.append(r)
+    return fixed
 
 
 def _require_customer_manage_safe(user: User | None, permission_codes: list[str]) -> None:
@@ -635,6 +731,7 @@ def list_leads_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
 @router.post("/leads")
 def create_lead_api(
     payload: dict,
@@ -648,7 +745,7 @@ def create_lead_api(
     data = _payload_dict(payload)
     if data.get("owner_user_id") is None and not crm_has_full_access(user, permission_codes):
         data["owner_user_id"] = user.id
-    lead = fn(db, tenant_id=user.tenant_id, **data)
+    lead = fn(db, tenant_id=user.tenant_id, **_filter_kwargs(fn, data, drop=("tenant_id",)))
     db.commit()
     return ok({"id": getattr(lead, "id", None), "code": getattr(lead, "code", None)})
 
@@ -838,6 +935,7 @@ def list_lead_activities_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
 @router.post("/leads/{lead_id}/activities")
 def create_lead_activity_api(
     lead_id: int,
@@ -854,7 +952,11 @@ def create_lead_activity_api(
     if lead is not None and not can_access_lead(db, user, lead, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该线索")
     data = _payload_dict(payload)
-    item = create_fn(db, tenant_id=user.tenant_id, lead_id=lead_id, created_by=user.id, **data)
+    # lead_id / tenant_id / created_by 由服务端注入，payload 里带了会与位置参数撞车
+    kwargs = _filter_kwargs(
+        create_fn, data, drop=("tenant_id", "lead_id", "created_by")
+    )
+    item = create_fn(db, tenant_id=user.tenant_id, lead_id=lead_id, created_by=user.id, **kwargs)
     db.commit()
     return ok({"id": getattr(item, "id", None)})
 
@@ -909,6 +1011,8 @@ def list_quotations_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
+
 @router.post("/quotations")
 def create_quotation_api(
     payload: dict,
@@ -916,15 +1020,25 @@ def create_quotation_api(
     user: User = Depends(get_current_user),
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
-    fn = getattr(_crm_crud(), "create_quotation", None)
+    fn = getattr(_crm_crud(), "create_quotation_with_items", None)
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
+    # crud 要求 items_data 非空，否则抛 ValueError；前端可能用 items 命名
+    items = data.pop("items", None) or data.pop("items_data", None) or []
+    if not items:
+        raise HTTPException(status_code=400, detail="报价单至少需要一个商品行")
+    items = _coerce_rows(items, keys=("delivery_date",))
     if data.get("owner_user_id") is None and not crm_has_full_access(user, permission_codes):
         data["owner_user_id"] = user.id
-    q = fn(db, tenant_id=user.tenant_id, **data)
+    kwargs = _filter_kwargs(fn, data, drop=("tenant_id",))
+    for req in ("customer_id", "title"):
+        if kwargs.get(req) in (None, ""):
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
+    q = fn(db, tenant_id=user.tenant_id, items_data=items, **kwargs)
     db.commit()
     return ok({"id": getattr(q, "id", None), "code": getattr(q, "code", None)})
+
 
 
 @router.get("/quotations/{quotation_id}")
@@ -945,7 +1059,7 @@ def get_quotation_api(
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权访问该报价单")
     items = []
-    items_fn = getattr(_crm_crud(), "list_quotation_items", None)
+    items_fn = getattr(_crm_crud(), "get_quotation_items", None)
     if callable(items_fn):
         items = items_fn(db, tenant_id=user.tenant_id, quotation_id=quotation_id)
     out = _item_to_dict(q)
@@ -978,6 +1092,7 @@ def update_quotation_api(
     return ok({"id": getattr(q, "id", quotation_id)})
 
 
+
 @router.post("/quotations/{quotation_id}/new-version")
 def new_quotation_version_api(
     quotation_id: int,
@@ -986,7 +1101,7 @@ def new_quotation_version_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_quotation_by_id", None)
-    ver_fn = getattr(_crm_crud(), "new_quotation_version", None)
+    ver_fn = getattr(_crm_crud(), "create_quotation_new_version", None)
     if not callable(get_fn) or not callable(ver_fn):
         _not_implemented()
     q = get_fn(db, tenant_id=user.tenant_id, quotation_id=quotation_id)
@@ -994,13 +1109,19 @@ def new_quotation_version_api(
         raise HTTPException(status_code=404, detail="报价单不存在")
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该报价单")
-    new_q = ver_fn(db, q, tenant_id=user.tenant_id, user_id=user.id)
+    new_q = ver_fn(
+        db,
+        tenant_id=user.tenant_id,
+        quotation_id=quotation_id,
+        user_id=user.id,
+    )
     db.commit()
     return ok({
         "id": getattr(new_q, "id", None),
         "code": getattr(new_q, "code", None),
         "version": getattr(new_q, "version", None),
     })
+
 
 
 @router.post("/quotations/{quotation_id}/send")
@@ -1019,9 +1140,11 @@ def send_quotation_api(
         raise HTTPException(status_code=404, detail="报价单不存在")
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该报价单")
-    send_fn(db, q, user_id=user.id)
+    # crud 签名是 send_quotation(db, quotation)，没有 user_id
+    send_fn(db, q)
     db.commit()
     return ok({"id": quotation_id, "status": "sent"})
+
 
 
 @router.post("/quotations/{quotation_id}/reject")
@@ -1042,7 +1165,8 @@ def reject_quotation_api(
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该报价单")
     data = _payload_dict(payload) if payload else {}
-    rej_fn(db, q, user_id=user.id, **data)
+    # crud 签名是 reject_quotation(db, quotation, reason=None)，没有 user_id
+    rej_fn(db, q, reason=data.get("reason") or data.get("reject_reason"))
     db.commit()
     return ok({"id": quotation_id, "status": "rejected"})
 
@@ -1109,6 +1233,8 @@ def list_contracts_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
+
 @router.post("/contracts")
 def create_contract_api(
     payload: dict,
@@ -1116,15 +1242,24 @@ def create_contract_api(
     user: User = Depends(get_current_user),
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
-    fn = getattr(_crm_crud(), "create_contract", None)
+    fn = getattr(_crm_crud(), "create_contract_with_plan", None)
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
+    plans = data.pop("payment_plans", None) or data.pop("plan_rows", None) or []
+    if not plans:
+        raise HTTPException(status_code=400, detail="合同至少需要一个付款计划")
+    plans = _coerce_rows(plans, keys=("due_date", "actual_date"))
     if data.get("owner_user_id") is None and not crm_has_full_access(user, permission_codes):
         data["owner_user_id"] = user.id
-    c = fn(db, tenant_id=user.tenant_id, **data)
+    kwargs = _filter_kwargs(fn, data, drop=("tenant_id",))
+    for req in ("customer_id", "name"):
+        if kwargs.get(req) in (None, ""):
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
+    c = fn(db, tenant_id=user.tenant_id, plan_rows=plans, **kwargs)
     db.commit()
     return ok({"id": getattr(c, "id", None), "code": getattr(c, "code", None)})
+
 
 
 @router.get("/contracts/{contract_id}")
@@ -1143,7 +1278,7 @@ def get_contract_api(
     if not can_access_contract(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权访问该合同")
     items = []
-    plans_fn = getattr(_crm_crud(), "list_contract_payment_plans", None)
+    plans_fn = getattr(_crm_crud(), "get_payment_plans_by_contract", None)
     if callable(plans_fn):
         items = plans_fn(db, tenant_id=user.tenant_id, contract_id=contract_id)
     out = _item_to_dict(c)
@@ -1174,6 +1309,7 @@ def update_contract_api(
     return ok({"id": getattr(c, "id", contract_id)})
 
 
+
 @router.post("/contracts/{contract_id}/renew")
 def renew_contract_api(
     contract_id: int,
@@ -1192,9 +1328,11 @@ def renew_contract_api(
     if not can_access_contract(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该合同")
     data = _payload_dict(payload) if payload else {}
-    new_c = renew_fn(db, user.tenant_id, c.id, user.id, **data)
+    kwargs = _filter_kwargs(renew_fn, data, drop=("tenant_id", "contract_id", "user_id"))
+    new_c = renew_fn(db, user.tenant_id, contract_id, user.id, **kwargs)
     db.commit()
     return ok({"id": getattr(new_c, "id", None), "code": getattr(new_c, "code", None)})
+
 
 
 @router.post("/contracts/{contract_id}/terminate")
@@ -1215,10 +1353,10 @@ def terminate_contract_api(
     if not can_access_contract(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该合同")
     data = _payload_dict(payload) if payload else {}
-    term_fn(db, c, user_id=user.id, **data)
-    c.status = "terminated"
+    term_fn(db, c, user_id=user.id, reason=data.get("reason") or data.get("terminate_reason"))
     db.commit()
     return ok({"id": contract_id, "status": "terminated"})
+
 
 
 @router.post("/contracts/{contract_id}/payment-plans/{plan_id}/record")
@@ -1231,7 +1369,7 @@ def record_contract_payment_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_contract_by_id", None)
-    rec_fn = getattr(_crm_crud(), "record_contract_payment", None)
+    rec_fn = getattr(_crm_crud(), "update_payment_plan_paid", None)
     if not callable(get_fn) or not callable(rec_fn):
         _not_implemented()
     c = get_fn(db, tenant_id=user.tenant_id, contract_id=contract_id)
@@ -1239,8 +1377,24 @@ def record_contract_payment_api(
         raise HTTPException(status_code=404, detail="合同不存在")
     if not can_access_contract(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该合同")
+    # 付款计划必须属于该合同，避免跨合同改账
+    plans_fn = getattr(_crm_crud(), "get_payment_plans_by_contract", None)
+    if callable(plans_fn):
+        owned = {getattr(p, "id", None) for p in plans_fn(db, tenant_id=user.tenant_id, contract_id=contract_id)}
+        if plan_id not in owned:
+            raise HTTPException(status_code=404, detail="付款计划不存在或不属于该合同")
     data = _payload_dict(payload)
-    rec_fn(db, contract_id=contract_id, plan_id=plan_id, user_id=user.id, **data)
+    amount = data.get("actual_amount", data.get("amount"))
+    if amount in (None, ""):
+        raise HTTPException(status_code=400, detail="缺少实际收款金额 actual_amount")
+    rec_fn(
+        db,
+        tenant_id=user.tenant_id,
+        plan_id=plan_id,
+        actual_amount=amount,
+        actual_date=_to_date(data.get("actual_date")),
+        invoice_no=data.get("invoice_no"),
+    )
     db.commit()
     return ok({"contract_id": contract_id, "plan_id": plan_id, "recorded": True})
 
@@ -1262,6 +1416,7 @@ def list_win_loss_reasons_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
 @router.post("/win-loss-reasons")
 def create_win_loss_reason_api(
     payload: dict,
@@ -1274,7 +1429,7 @@ def create_win_loss_reason_api(
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
-    item = fn(db, tenant_id=user.tenant_id, **data)
+    item = fn(db, tenant_id=user.tenant_id, **_filter_kwargs(fn, data, drop=("tenant_id",)))
     db.commit()
     return ok({"id": getattr(item, "id", None)})
 
@@ -1412,6 +1567,7 @@ def update_campaign_api(
     return ok({"id": campaign_id})
 
 
+
 @router.post("/campaigns/{campaign_id}/members")
 def add_campaign_members_api(
     campaign_id: int,
@@ -1421,7 +1577,7 @@ def add_campaign_members_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_campaign_by_id", None)
-    add_fn = getattr(_crm_crud(), "add_campaign_members", None)
+    add_fn = getattr(_crm_crud(), "campaign_add_members", None)
     if not callable(get_fn) or not callable(add_fn):
         _not_implemented()
     c = get_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id)
@@ -1430,9 +1586,13 @@ def add_campaign_members_api(
     if not can_access_campaign(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该活动")
     data = _payload_dict(payload)
-    add_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id, **data)
+    rows = data.pop("members", None) or data.pop("member_rows", None) or []
+    if not rows:
+        raise HTTPException(status_code=400, detail="缺少成员列表 members")
+    add_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id, member_rows=rows)
     db.commit()
-    return ok({"campaign_id": campaign_id, "added": True})
+    return ok({"campaign_id": campaign_id, "added": len(rows)})
+
 
 
 @router.get("/campaigns/{campaign_id}/members")
@@ -1446,14 +1606,20 @@ def list_campaign_members_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_campaign_by_id", None)
-    list_fn = getattr(_crm_crud(), "list_campaign_members", None)
+    list_fn = getattr(_crm_crud(), "campaign_get_members", None)
     if not callable(list_fn):
         _not_implemented()
     c = get_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id) if callable(get_fn) else None
     if c is not None and not can_access_campaign(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权访问该活动")
-    items = list_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id, member_type=member_type, offset=offset, limit=limit)
-    return ok({"items": [_item_to_dict(x) for x in items]})
+    rows = list_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id) or []
+    # crud 不提供过滤与分页，在应用层实现，保持前端参数语义不变
+    if member_type:
+        rows = [x for x in rows if getattr(x, "member_type", None) == member_type]
+    total = len(rows)
+    rows = rows[offset: offset + limit]
+    return ok({"items": [_item_to_dict(x) for x in rows], "total": total})
+
 
 
 @router.delete("/campaigns/{campaign_id}/members/{member_type}/{member_id}")
@@ -1466,7 +1632,7 @@ def remove_campaign_member_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_campaign_by_id", None)
-    rem_fn = getattr(_crm_crud(), "remove_campaign_member", None)
+    rem_fn = getattr(_crm_crud(), "campaign_remove_member", None)
     if not callable(get_fn) or not callable(rem_fn):
         _not_implemented()
     c = get_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id)
@@ -1479,6 +1645,7 @@ def remove_campaign_member_api(
     return ok({"campaign_id": campaign_id, "member_type": member_type, "member_id": member_id, "removed": True})
 
 
+
 @router.post("/campaigns/{campaign_id}/recalculate-roi")
 def recalculate_campaign_roi_api(
     campaign_id: int,
@@ -1487,7 +1654,7 @@ def recalculate_campaign_roi_api(
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
     get_fn = getattr(_crm_crud(), "get_campaign_by_id", None)
-    roi_fn = getattr(_crm_crud(), "recalculate_campaign_roi", None)
+    roi_fn = getattr(_crm_crud(), "campaign_calculate_roi", None)
     if not callable(get_fn) or not callable(roi_fn):
         _not_implemented()
     c = get_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id)
@@ -1495,7 +1662,7 @@ def recalculate_campaign_roi_api(
         raise HTTPException(status_code=404, detail="活动不存在")
     if not can_access_campaign(db, user, c, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该活动")
-    roi = roi_fn(db, c)
+    roi = roi_fn(db, tenant_id=user.tenant_id, campaign_id=campaign_id)
     db.commit()
     return ok({"campaign_id": campaign_id, "roi": roi})
 
@@ -1530,6 +1697,8 @@ def list_sales_targets_api(
     return ok({"items": [_item_to_dict(x) for x in items]})
 
 
+
+
 @router.post("/sales-targets")
 def create_sales_target_api(
     payload: dict,
@@ -1542,7 +1711,11 @@ def create_sales_target_api(
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
-    item = fn(db, tenant_id=user.tenant_id, **data)
+    # 这些字段 crud 侧无默认值，缺参是参数错误（400），不该冒成 500
+    for req in ("period_type", "period_start", "period_end", "dimension", "metric", "target_value"):
+        if data.get(req) in (None, ""):
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
+    item = fn(db, tenant_id=user.tenant_id, **_filter_kwargs(fn, data, drop=("tenant_id",)))
     db.commit()
     return ok({"id": getattr(item, "id", None)})
 
@@ -1611,6 +1784,7 @@ def deactivate_sales_target_api(
 # Dashboard 看板聚合
 # ============================================================
 
+
 @router.get("/dashboard/sales-targets")
 def crm_dashboard_sales_targets_api(
     period_type: str | None = Query(default=None),
@@ -1623,14 +1797,14 @@ def crm_dashboard_sales_targets_api(
         _not_implemented()
     owner_user_id = user.id if not crm_has_full_access(user, permission_codes) else None
     result = fn(db, tenant_id=user.tenant_id, period_type=period_type, owner_user_id=owner_user_id)
-    if isinstance(result, dict):
-        return ok(result)
-    return ok(_item_to_dict(result) if result is not None else {})
+    return ok(result if isinstance(result, dict) else {})
 
 
 # ============================================================
 # 客户相关（报价 / 合同）
 # ============================================================
+
+
 
 @router.get("/customers/{customer_id}/contracts")
 def list_customer_contracts_api(
@@ -1642,18 +1816,21 @@ def list_customer_contracts_api(
     user: User = Depends(get_current_user),
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
-    cust_fn = getattr(_crm_crud(), "get_customer_by_id", None)
+    cust_fn = getattr(_customer_crud(), "get_customer_by_id", None)
     list_fn = getattr(_crm_crud(), "list_contracts", None)
     if not callable(list_fn):
         _not_implemented()
     if callable(cust_fn):
-        cust = cust_fn(db, tenant_id=user.tenant_id, customer_id=customer_id)
-        if cust is None:
+        cust = cust_fn(db, customer_id=customer_id)
+        # 独立版单租户，Customer 无 tenant_id 字段；只有该字段存在时才比对，
+        # 否则 getattr 恒为 None，会把所有客户判成不存在。
+        cust_tenant = getattr(cust, "tenant_id", None) if cust is not None else None
+        if cust is None or (cust_tenant is not None and cust_tenant != user.tenant_id):
             raise HTTPException(status_code=404, detail="客户不存在")
-        if not can_access_customer(db, user, cust, permission_codes):
-            raise HTTPException(status_code=403, detail="无权访问该客户")
     items = list_fn(db, tenant_id=user.tenant_id, customer_id=customer_id, status=status, offset=offset, limit=limit)
     return ok({"items": [_item_to_dict(x) for x in items]})
+
+
 
 
 @router.get("/customers/{customer_id}/quotations")
@@ -1666,15 +1843,14 @@ def list_customer_quotations_api(
     user: User = Depends(get_current_user),
     permission_codes: list[str] = Depends(get_current_permissions),
 ):
-    cust_fn = getattr(_crm_crud(), "get_customer_by_id", None)
+    cust_fn = getattr(_customer_crud(), "get_customer_by_id", None)
     list_fn = getattr(_crm_crud(), "list_quotations", None)
     if not callable(list_fn):
         _not_implemented()
     if callable(cust_fn):
-        cust = cust_fn(db, tenant_id=user.tenant_id, customer_id=customer_id)
-        if cust is None:
+        cust = cust_fn(db, customer_id=customer_id)
+        cust_tenant = getattr(cust, "tenant_id", None) if cust is not None else None
+        if cust is None or (cust_tenant is not None and cust_tenant != user.tenant_id):
             raise HTTPException(status_code=404, detail="客户不存在")
-        if not can_access_customer(db, user, cust, permission_codes):
-            raise HTTPException(status_code=403, detail="无权访问该客户")
     items = list_fn(db, tenant_id=user.tenant_id, customer_id=customer_id, status=status, offset=offset, limit=limit)
     return ok({"items": [_item_to_dict(x) for x in items]})
