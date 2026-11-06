@@ -8,7 +8,10 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+import os
+import subprocess
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +20,18 @@ import pytest
 from app.services import upgrade_service as us
 
 FAKE_UID = 1000  # 模拟 www：与测试文件属主 root 不同，走 other 权限位
+
+
+@pytest.fixture(autouse=True)
+def _isolate_upgrade_log_dir(tmp_path, monkeypatch):
+    """把 LOG_DIR 指到临时目录，避免磁盘残留影响宽限计算。
+
+    ``_restart_started_at()`` 会读 ``restart_{id}.sh`` 的 mtime 当计时起点。
+    测试机上的 ``backend/data/upgrade_logs`` 可能真留着 id=7 的旧脚本，那样
+    宽限就从「刚刚」算起，本该判 failed 的用例会退化成本「暂缓判定」——
+    测出来的绿色是假的。所有用例统一隔离，别靠单个用例自觉。
+    """
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
 
 
 def _chmod_tree(root: Path, *, dmode: int = 0o777, fmode: int = 0o666) -> None:
@@ -201,22 +216,95 @@ def test_do_upgrade_does_not_reinstall_on_preflight_error(monkeypatch, tmp_path)
     assert reinstalled == []
 
 
-# ── P0：守护窗口 ────────────────────────────────────────────────────────
+# ── P0：守护脚本自验健康、只写终态 ──────────────────────────────────────
 
-def test_restart_script_exits_immediately_without_health_polling():
-    """守护脚本只 kill + 写 pending 后退出；长期轮询会阻塞宝塔自愈。
+def test_restart_script_polls_health_and_writes_terminal_state_only():
+    """守护脚本自己验健康，结果文件**只写终态** ok=1 / ok=0。
 
-    任务 #8 实测：脚本以项目根为 cwd 且存活 420s 时，宝塔把它写进
-    cenkermes.pid 并认为服务仍在运行，8500 停服 7 分钟。
+    为什么不能写中间态：回滚会把代码换回旧版本，重启后是【旧代码】在跑
+    reconcile。v2.2.3 及更早的判定是 ``if ok == "1"`` 否则一律 failed，
+    于是 v2.2.5 写的 ``ok=pending`` 被旧代码判成失败——服务明明健康，任务却
+    记 failed。终态是唯一能跨版本互认的协议。
+
+    为什么现在可以等健康：脚本以 start_new_session + cwd=/tmp 运行，不在项目
+    进程树内，宝塔不会把它当成主进程写进 pid 文件（这一点另有用例锁死，
+    见 test_guard_spawns_outside_project_root）。
     """
     body = us._build_restart_script(
-        job_id=9, target_version="v2.2.5", pid=12345, py=Path("/usr/bin/python3"), custom=""
+        job_id=9, target_version="v2.2.6", pid=12345, py=Path("/usr/bin/python3"), custom=""
     )
-    assert "ok=pending" in body
-    assert "exit 0" in body
-    assert "守护脚本退出" in body
-    for forbidden in ("MAX_WAIT", "DEADLINE", "seq 1 60", "nohup", "setsid"):
+
+    # 自验健康：探测函数 + 截止时间 + 双通道（curl 优先、python 兜底）
+    assert "probe() {" in body
+    assert "DEADLINE" in body
+    assert "curl -fsS" in body
+    assert "urllib.request" in body
+
+    # 只写终态
+    assert 'echo "ok=$OK"' in body
+    assert "ok=pending" not in body
+
+    # 绝不自己拉起进程：手动 nohup 会抢端口、让宝塔自愈报 address already in use
+    for forbidden in ("nohup", "setsid", '"$PY" -m uvicorn'):
         assert forbidden not in body, forbidden
+
+
+def test_restart_script_window_comes_from_constants(monkeypatch):
+    """窗口与轮询间隔由常量注入，不写死在脚本里，便于按现场调整。"""
+    monkeypatch.setattr(us, "RESTART_GRACE_SECONDS", 120)
+    monkeypatch.setattr(us, "RESTART_POLL_INTERVAL", 5)
+
+    body = us._build_restart_script(
+        job_id=1, target_version="v2.0.0", pid=None, py=Path("/p"), custom=""
+    )
+
+    assert "WAIT='120'" in body
+    assert "STEP='5'" in body
+
+
+def test_restart_script_is_valid_bash(tmp_path):
+    """生成的脚本必须能通过 ``bash -n``。
+
+    f-string 里写 bash 时 ``{}`` 容易漏转义，那是运行时才炸的错误，
+    语法检查是成本最低的拦截点。
+    """
+    body = us._build_restart_script(
+        job_id=2, target_version="v2.2.6", pid=1, py=Path("/usr/bin/python3"), custom=""
+    )
+    script = tmp_path / "guard.sh"
+    script.write_text(body, encoding="utf-8")
+
+    res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+
+
+# ── P0：重启宽限的计时起点 ──────────────────────────────────────────────
+
+def test_restart_started_at_prefers_script_mtime(tmp_path, monkeypatch):
+    """宽限从守护脚本 mtime 算起，而不是任务创建时刻。
+
+    否则备份 + 装依赖 + 迁移的耗时会整段吃掉等待窗口（lightmes 上实测到
+    「服务起来 13 秒后任务才判失败」的账实不符）。
+    """
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    script = tmp_path / "restart_7.sh"
+    script.write_text("", encoding="utf-8")
+    stamp = time.time() - 30
+    os.utime(script, (stamp, stamp))
+
+    job = _job(id=7, started_at=datetime.now() - timedelta(seconds=1800))
+    started = us._restart_started_at(job)
+
+    assert started is not None
+    assert 25 < (datetime.now() - started).total_seconds() < 35
+
+
+def test_restart_started_at_falls_back_to_job_started_at(tmp_path, monkeypatch):
+    """脚本文件不存在时回退到 job.started_at，不能因此返回 None 卡死任务。"""
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    stamp = datetime.now() - timedelta(seconds=120)
+
+    assert us._restart_started_at(_job(id=8, started_at=stamp)) == stamp
 
 
 def test_guard_spawns_outside_project_root(monkeypatch, tmp_path):
@@ -258,7 +346,11 @@ def test_reconcile_corrects_guard_timeout_when_service_is_healthy(monkeypatch, t
 
 
 def test_reconcile_resolves_pending_when_service_is_healthy(monkeypatch):
-    """新守护脚本只写 pending，服务恢复后由 reconcile 实测定终态。"""
+    """v2.2.5 旧脚本残留的 ok=pending，reconcile 仍要能实测定终态。
+
+    v2.2.6 起脚本只写终态，但历史任务的结果文件还躺在 /tmp 里；保留这条
+    向后兼容路径，避免升级完重启时把「其实已经成功」的旧任务留在 running。
+    """
     job = _job()
     db = _FakeDB(job)
     monkeypatch.setattr(us, "_read_restart_result", lambda _p: {"ok": "pending", "version": "", "finished_at": "x"})
