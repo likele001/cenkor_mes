@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_permissions, get_current_user, get_db, require_any_permissions
@@ -34,6 +35,30 @@ from app.services.crm_scope import (
     can_access_sales_target,
     crm_has_full_access,
 )
+
+
+def _attach_customer_labels(db: Session, rows: list, key: str = "customer_id") -> list:
+    """列表接口补客户名：核心表只存 customer_id，前端表格需要直接展示名称。"""
+    if not rows:
+        return rows
+    ids = {r.get(key) for r in rows if isinstance(r, dict) and r.get(key)}
+    if not ids:
+        return rows
+    try:
+        from app.models.customer import Customer
+        mapping = {
+            cid: (name, code)
+            for cid, name, code in db.execute(
+                select(Customer.id, Customer.name, Customer.code).where(Customer.id.in_(ids))
+            ).all()
+        }
+    except Exception:
+        return rows
+    for r in rows:
+        cid = r.get(key)
+        if cid in mapping:
+            r["customer_name"], r["customer_code"] = mapping[cid]
+    return rows
 
 
 # --- 防御式辅助：若底层 crud/schemas 尚未实现，则统一返回 501 ---
@@ -1014,7 +1039,8 @@ def list_quotations_api(
         offset=offset,
         limit=limit,
     )
-    return ok({"items": [_item_to_dict(x) for x in items]})
+    rows = _attach_customer_labels(db, [_item_to_dict(x) for x in items])
+    return ok({"items": rows})
 
 
 

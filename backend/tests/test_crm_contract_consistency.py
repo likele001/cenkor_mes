@@ -415,3 +415,56 @@ def test_api_only_references_existing_crud_functions():
 
     missing = sorted(referenced - crud_names)
     assert not missing, f"API 层引用了 crud 中不存在的函数：{missing}"
+
+
+# ── 报价单列表的客户名展示（2026-11-06 实测缺陷）──
+#
+# crm_suite 的报价单列表要显示「客户」列（prop=customer_name），
+# 但 crm_quotations 核心表只存 customer_id，没有 name 列；
+# _item_to_dict() 按表列取值 → 列表里 customer_name 键根本不存在 → 该列永远空白。
+
+def test_quotation_list_includes_customer_name(api, crm_user, crm_customer):
+    h = _auth(crm_user)
+    _expect_ok(
+        api.post(
+            f"{BASE}/quotations",
+            headers=h,
+            json={
+                "customer_id": crm_customer.id,
+                "title": "客户名展示报价",
+                "items": [{"product_name": "测试件", "quantity": 1, "unit_price": 100}],
+            },
+        ),
+        "创建报价单",
+    )
+
+    data = _expect_ok(api.get(f"{BASE}/quotations", headers=h), "报价单列表")
+    rows = data.get("items") or []
+    assert rows, "列表必须能查到刚建的报价单"
+    row = next(r for r in rows if r.get("customer_id") == crm_customer.id)
+    assert row.get("customer_name") == crm_customer.name, "列表必须补出客户名"
+    assert row.get("customer_code") == crm_customer.code, "列表必须补出客户编码"
+
+
+def test_quotation_list_tolerates_missing_customer(api, session, crm_user, single_tenant):
+    """客户被删或脏数据时，补名逻辑要降级为「没有名字」，不能整页 500。"""
+    from app.models.crm import CrmQuotation
+
+    q = CrmQuotation(
+        tenant_id=1,
+        code="Q-ORPHAN-1",
+        title="孤儿客户报价",
+        customer_id=999999,
+        status="draft",
+        subtotal=0,
+        tax_amount=0,
+        total_amount=0,
+        version=1,
+    )
+    session.add(q)
+    session.flush()
+
+    data = _expect_ok(api.get(f"{BASE}/quotations", headers=_auth(crm_user)), "孤儿报价单列表")
+    row = next(r for r in (data.get("items") or []) if r.get("code") == "Q-ORPHAN-1")
+    assert row.get("customer_id") == 999999
+    assert not row.get("customer_name"), "查不到客户时不应编造客户名"
