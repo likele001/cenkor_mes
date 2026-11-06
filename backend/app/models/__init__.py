@@ -134,6 +134,8 @@ __all__ = [
     "Warehouse",
     "Stock",
     "StockLog",
+    "Stocktake",
+    "StocktakeItem",
     "PurchaseOrder",
     "PurchaseOrderItem",
     "Statement",
@@ -152,6 +154,8 @@ from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
 # warehouse_entry / material_issue / supplier_statement 用字符串 relationship 引用了这两个模块的类，
 # 不在这里导入的话，只 import app.models 的脚本（demo_data、alembic、pytest）会 configure_mappers 失败
 from app.models.warehouse import Warehouse, Stock, StockLog
+# 盘点单：确认入账走 adjust_stock，同属库存域，跟着仓库/库存一起注册
+from app.models.stocktake import Stocktake, StocktakeItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 # finance（客户对账单/总账）为独立业务域，需注册进 metadata
 from app.models.finance import Statement, StatementItem

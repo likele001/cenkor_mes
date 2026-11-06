@@ -236,6 +236,7 @@ const groups: Group[] = [
         items: [
           { path: '/warehouse/warehouses', i18nKey: 'menu.warehouses', permissions: ['warehouse.manage', 'warehouse.view'], icon: OfficeBuilding },
           { path: '/warehouse/stocks', i18nKey: 'menu.stocks', permissions: ['warehouse.manage', 'warehouse.view'], icon: Box },
+          { path: '/warehouse/stocktakes', i18nKey: 'menu.stocktakes', permissions: ['warehouse.manage', 'warehouse.view'], icon: DocumentChecked },
           { path: '/warehouse/material-issues', i18nKey: 'menu.materialIssues', permissions: ['warehouse.manage', 'warehouse.view'], icon: Sell },
           { path: '/warehouse/material-returns', i18nKey: 'menu.materialReturns', permissions: ['warehouse.manage', 'warehouse.view'], icon: Share },
           { path: '/warehouse/entries', i18nKey: 'menu.warehouseEntries', permissions: ['warehouse.manage', 'warehouse.view'], icon: Document },

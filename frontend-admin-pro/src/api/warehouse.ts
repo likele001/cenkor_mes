@@ -119,6 +119,54 @@ export type WarehouseEntryOut = {
 
 export type EntryItemIn = { material_id: number; sku_id: number; qty: number }
 
+export type StocktakeStatus = 'draft' | 'counting' | 'confirmed' | 'cancelled'
+
+export type StocktakeItemOut = {
+  id: number
+  sku_id: number
+  sku_code: string | null
+  sku_name: string | null
+  sku_spec: string | null
+  /** 制单那一刻的账面快照，建单后不再变 */
+  book_qty: number
+  /** 实盘数，null = 还没盘 */
+  counted_qty: number | null
+  /** counted_qty - book_qty，管理口径的账实差异 */
+  diff_qty: number | null
+  /** 确认入账时实际写进库存的变动量（按当时的当前账面算，可能不等于 diff_qty） */
+  adjusted_qty: number | null
+  remark: string | null
+}
+
+export type StocktakeOut = {
+  id: number
+  code: string
+  status: StocktakeStatus
+  scope: string
+  warehouse_id: number
+  warehouse_code: string | null
+  warehouse_name: string | null
+  total_items: number
+  counted_items: number
+  diff_items: number
+  counted_at: string | null
+  confirmed_at: string | null
+  confirmed_by: number | null
+  remark: string | null
+  created_by: number | null
+  created_at: string | null
+  items?: StocktakeItemOut[]
+}
+
+export type StocktakeSkuOption = { id: number; code: string; name: string; spec: string | null }
+
+export type StocktakeConfirmOut = {
+  adjusted_lines: number
+  gain_qty: number
+  loss_qty: number
+  stocktake: StocktakeOut
+}
+
 export const warehouseApi = {
   listWarehouses() {
     return http.request<ListResp<WarehouseOut>>({ url: '/admin/warehouse/warehouses', method: 'GET' })
@@ -202,5 +250,40 @@ export const warehouseApi = {
   },
   cancelEntry(id: number) {
     return http.request<WarehouseEntryOut>({ url: `/admin/warehouse/entries/${id}/cancel`, method: 'POST' })
+  },
+  // ── 库存盘点 ──
+  listStocktakes(params: { warehouse_id?: number; status?: string; offset?: number; limit?: number }) {
+    const p: any = { offset: params.offset, limit: params.limit }
+    if (params.warehouse_id) p.warehouse_id = params.warehouse_id
+    if (params.status) p.status = params.status
+    return http.request<ListResp<StocktakeOut> & { total: number }>({ url: '/admin/warehouse/stocktakes', method: 'GET', params: p })
+  },
+  getStocktake(id: number) {
+    return http.request<StocktakeOut>({ url: `/admin/warehouse/stocktakes/${id}`, method: 'GET' })
+  },
+  createStocktake(payload: { code?: string; warehouse_id?: number; item_type?: 'all' | 'product' | 'material'; sku_ids?: number[]; remark?: string }) {
+    return http.request<StocktakeOut>({ url: '/admin/warehouse/stocktakes', method: 'POST', data: payload })
+  },
+  recordStocktakeCounts(id: number, items: { item_id: number; counted_qty: number; remark?: string }[]) {
+    return http.request<StocktakeOut>({ url: `/admin/warehouse/stocktakes/${id}/items`, method: 'PUT', data: { items } })
+  },
+  addStocktakeItem(id: number, payload: { sku_id: number; remark?: string }) {
+    return http.request<StocktakeOut>({ url: `/admin/warehouse/stocktakes/${id}/items`, method: 'POST', data: payload })
+  },
+  removeStocktakeItem(id: number, itemId: number) {
+    return http.request<StocktakeOut>({ url: `/admin/warehouse/stocktakes/${id}/items/${itemId}`, method: 'DELETE' })
+  },
+  confirmStocktake(id: number) {
+    return http.request<StocktakeConfirmOut>({ url: `/admin/warehouse/stocktakes/${id}/confirm`, method: 'POST' })
+  },
+  cancelStocktake(id: number) {
+    return http.request<StocktakeOut>({ url: `/admin/warehouse/stocktakes/${id}/cancel`, method: 'POST' })
+  },
+  exportStocktake(id: number) {
+    return http.downloadBlob({ url: `/admin/warehouse/stocktakes/${id}/export`, method: 'GET' })
+  },
+  /** 盘点选型下拉：只需要仓储权限，不要求 sku.manage */
+  stocktakeSkuOptions(keyword?: string) {
+    return http.request<ListResp<StocktakeSkuOption>>({ url: '/admin/warehouse/stocktake-sku-options', method: 'GET', params: { keyword } })
   },
 }

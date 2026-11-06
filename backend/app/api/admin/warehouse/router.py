@@ -2,18 +2,20 @@
 # SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_any_permissions, require_permissions
 from app.core.response import ok
 from app.crud.warehouse import create_warehouse, list_warehouses, list_stocks, adjust_stock, list_stock_logs
+from app.models.sku import Sku
 from app.models.user import User
 from app.models.warehouse import Warehouse
 from app.services.code_generator import BizType, resolve_code
 from app.api.admin.warehouse.shipments import router as shipments_router
 from app.api.admin.warehouse.material_issues import router as material_issues_router
 from app.api.admin.warehouse.warehouse_entries import router as warehouse_entries_router
+from app.api.admin.warehouse.stocktakes import router as stocktakes_router
 from app.tasks._sync_excel import make_excel_response
 
 
@@ -33,6 +35,7 @@ router = APIRouter(
 router.include_router(shipments_router)
 router.include_router(material_issues_router)
 router.include_router(warehouse_entries_router)
+router.include_router(stocktakes_router)
 
 
 @router.get("/warehouses")
@@ -198,5 +201,32 @@ def list_logs_api(
                 "created_at": l.created_at,
             }
             for l in items
+        ]
+    })
+
+
+@router.get("/stocktake-sku-options")
+def stocktake_sku_options_api(
+    keyword: str | None = Query(default=None),
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """盘点选型下拉。
+
+    为什么不复用 `/admin/master/skus`：那个接口挂的是 `sku.manage`，
+    仓管通常没有主数据维护权限，但盘点就是要他选型号。这里只读几个字段，
+    沿用仓储模块自身的 warehouse.view/manage 鉴权即可。
+    """
+    stmt = select(Sku).where(Sku.is_active.is_(True))
+    kw = (keyword or "").strip()
+    if kw:
+        like = f"%{kw}%"
+        stmt = stmt.where(or_(Sku.code.like(like), Sku.name.like(like)))
+    rows = db.scalars(stmt.order_by(Sku.id).limit(limit)).all()
+    return ok({
+        "items": [
+            {"id": s.id, "code": s.code, "name": s.name, "spec": s.spec}
+            for s in rows
         ]
     })
