@@ -2,6 +2,7 @@
 # cenkormes 一键发布：版本号递增 → 追加开发日志到 backend/CHANGELOG.json → 提交并推送
 # 用法:
 #   bash scripts/release-all.sh "更新说明"
+#   bash scripts/release-all.sh --note-file NOTES.md            # 从文件读多段说明（口径变更用）
 #   VERSION_BUMP=minor bash scripts/release-all.sh "更新说明"   # minor 递增: v1.0.0 → v1.1.0
 #   VERSION_BUMP=major bash scripts/release-all.sh "更新说明"   # major 递增: v1.0.0 → v2.0.0
 #   bash scripts/release-all.sh --dry-run "更新说明"            # 试跑，不写文件、不提交、不推送
@@ -15,6 +16,11 @@
 #   - 发布同时会打并推送附注 tag（vX.Y.Z）；.github/workflows/release.yml 监听该 tag
 #     自动在 GitHub 创建对应 Release（说明取 CHANGELOG.json 中该版本的描述）。
 #   - 本脚本不导出社区版/专业版（cenkormes 为单仓，无 lightmes 那套双仓拆分）。
+#   - 【升级影响】说明里一旦出现金额/税率/折扣/汇率等字样，release-check.sh 会要求
+#     同时出现「升级影响」表态（写「无影响」也算）。一句话挤不下的，用 --note-file
+#     传一段完整说明——它会原样成为 Release 正文，段落和换行都保留。
+#     为什么要卡这一道：v2.2.16 改了报价单税额口径，正文却写成普通 bug 修复，
+#     客户升级后新旧口径并存，会被误认成「升级把数据搞乱了」。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,19 +29,39 @@ CHANGELOG_FILE="$ROOT/backend/CHANGELOG.json"
 
 DRY_RUN=0
 NO_PUSH=0
+NOTE_FILE=""
+NOTE_TEXT=""
 COMMITS=()
 
-for arg in "$@"; do
-  case "$arg" in
-    --dry-run)  DRY_RUN=1 ;;
-    --no-push)  NO_PUSH=1 ;;
-    *)          COMMITS+=("$arg") ;;
+# --note-file 是「带参数」的选项，必须用 shift 遍历；原来的 for arg 形式
+# 会把文件名当成一句说明收进 COMMITS。
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)   DRY_RUN=1 ;;
+    --no-push)   NO_PUSH=1 ;;
+    --note-file) NOTE_FILE="${2:-}"; shift ;;
+    *)           COMMITS+=("$1") ;;
   esac
+  shift
 done
 
-if [[ ${#COMMITS[@]} -eq 0 ]]; then
+if [[ -n "$NOTE_FILE" ]]; then
+  if [[ ! -f "$NOTE_FILE" ]]; then
+    echo "✗ --note-file 指定的文件不存在：$NOTE_FILE" >&2
+    exit 1
+  fi
+  NOTE_TEXT="$(cat "$NOTE_FILE")"
+  # 只有空白（含仅有换行）视为空，避免把空文件发成一条空说明
+  if [[ -z "${NOTE_TEXT//[[:space:]]/}" ]]; then
+    echo "✗ --note-file 指定的文件内容为空：$NOTE_FILE" >&2
+    exit 1
+  fi
+fi
+
+if [[ ${#COMMITS[@]} -eq 0 && -z "$NOTE_FILE" ]]; then
   echo "用法: bash scripts/release-all.sh \"更新说明\""
   echo "示例: bash scripts/release-all.sh \"修复报工审核逻辑\""
+  echo "长说明: bash scripts/release-all.sh --note-file NOTES.md"
   echo "试跑: bash scripts/release-all.sh --dry-run \"更新说明\""
   echo "不推送: bash scripts/release-all.sh --no-push \"更新说明\""
   exit 1
@@ -72,10 +98,16 @@ else
 fi
 
 # ---- 追加开发日志到 CHANGELOG.json ----
-CHANGE_DESC="${COMMITS[0]}"
-for ((i = 1; i < ${#COMMITS[@]}; i++)); do
-  CHANGE_DESC="${CHANGE_DESC}；${COMMITS[$i]}"
-done
+# --note-file 优先：文件内容原样入库（保留换行与段落），Release 正文即所见。
+# 位置参数只是「一句话说明」的快捷方式，多个参数用「；」连接。
+if [[ -n "$NOTE_TEXT" ]]; then
+  CHANGE_DESC="$NOTE_TEXT"
+else
+  CHANGE_DESC="${COMMITS[0]}"
+  for ((i = 1; i < ${#COMMITS[@]}; i++)); do
+    CHANGE_DESC="${CHANGE_DESC}；${COMMITS[$i]}"
+  done
+fi
 TODAY="$(date +%Y-%m-%d)"
 echo "==> 开发日志: [$NEW_VER] $CHANGE_DESC"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -118,9 +150,13 @@ fi
 # 失败就中止——此时还没打 tag、没推送，修好重跑即可。
 if [[ "$DRY_RUN" -eq 0 ]]; then
   echo "==> 版本一致性校验"
-  if ! bash "$ROOT/scripts/release-check.sh" --tag "$NEW_VER"; then
+  # --impact：本地发版是人工写说明的唯一入口，必须卡住「涉及金额却没说影响」。
+  # CI 那边只在推 tag 时同样打开；回填历史版本时不打开（旧描述没有这个标记）。
+  if ! bash "$ROOT/scripts/release-check.sh" --tag "$NEW_VER" --impact; then
     echo "✗ 版本一致性校验未通过，已中止（未打 tag、未推送）" >&2
     echo "  VERSION 已写入 $NEW_VER，修复后重新执行本脚本即可" >&2
+    echo "  若说明涉及金额/税率/折扣等口径，须在说明中写明「升级影响」；" >&2
+    echo "  一句话写不清就用: bash scripts/release-all.sh --note-file NOTES.md" >&2
     exit 1
   fi
 fi

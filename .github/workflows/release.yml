@@ -18,6 +18,13 @@
 # 后台按 Releases API 找版本 → 下载包 → 校验 SHA256 → 覆盖。客户机不需要
 # git、不需要 SSH key、也不需要 node（包内已带预构建 dist）。
 # 没有附件时，客户点「立即升级」只会得到「该版本没有产物包」。
+#
+# 2026-11 加固三：preflight 增加「升级影响」校验（推 tag 时生效，回填时跳过）。
+# 起因是 v2.2.16 把报价单税额从单据级改成按行税率合计——这是金额口径变更，
+# 但 Release 正文写成「含税总额偏高」的普通 bug 修复，只字未提「历史单据不会
+# 自动重算」。客户升级后新旧口径并存、对账对不上，第一反应是「升级搞乱了数据」。
+# 现在只要说明里出现金额/税率/折扣/汇率等字样，就必须同时出现「升级影响」表态
+# （写「无影响」也算通过）。不判结论对错，只强制表态。
 name: Release
 
 on:
@@ -61,7 +68,13 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: 校验 tag ↔ VERSION ↔ CHANGELOG.json
-        run: bash tooling/scripts/release-check.sh --root target --tag "$RELEASE_TAG"
+        env:
+          # 推 tag（真实发版）→ 连带校验「升级影响」是否已声明；
+          # workflow_dispatch（回填历史版本）→ 不校验。理由：历史版本的描述
+          # 必然没有这个标记，强校验会让每一条回填都失败，把补救通道堵死。
+          # ${VAR:+--impact} 的写法保证变量为空时不产生一个空参数。
+          IMPACT_FLAG: ${{ github.event_name == 'push' && '1' || '' }}
+        run: bash tooling/scripts/release-check.sh --root target --tag "$RELEASE_TAG" ${IMPACT_FLAG:+--impact}
 
   # ---------- 2. 创建 / 更新 Release ----------
   github-release:
