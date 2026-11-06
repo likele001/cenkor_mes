@@ -132,9 +132,18 @@ class DatabaseScheduler(Scheduler):
             except SystemExit:
                 raise
             except Exception:
-                pass
+                # 这里曾经是静默 pass：Redis 不通时控制信号彻底失效，而日志里
+                # 一条线索都没有。2026-11-06 排查「后台点重启 Beat 没反应」
+                # 时，信号明明写在 Redis 里却始终不被消费，就是这段把异常吃掉了。
+                # 降级为告警（不抛，避免一个坏 tick 拖垮整个调度循环）。
+                logger.warning("检查 Redis 控制信号失败", exc_info=True)
 
-        return super().tick()
+        # beat 主循环照本函数的返回值 sleep，期间不再进入 tick。直接返回父类结果时，
+        # 间隔取决于「距下一个任务的秒数」，最长 max_interval（默认 300s）——而退出
+        # 信号 TTL 只有 120s。于是信号要么等 5 分钟才被看到，要么直接过期丢失，
+        # 表现就是 Beat 永不重启。压到 RELOAD_CHECK_INTERVAL 以内，代价仅是每 10s
+        # 空转一次 tick（纯内存操作，无 IO）。
+        return min(super().tick(), float(RELOAD_CHECK_INTERVAL))
 
     def close(self):
         """释放数据库引擎"""
