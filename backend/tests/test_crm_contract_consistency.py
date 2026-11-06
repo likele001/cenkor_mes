@@ -419,9 +419,9 @@ def test_api_only_references_existing_crud_functions():
 
 # ── 报价单列表的客户名展示（2026-11-06 实测缺陷）──
 #
-# crm_suite 的报价单列表要显示「客户」列（prop=customer_name），
-# 但 crm_quotations 核心表只存 customer_id，没有 name 列；
-# _item_to_dict() 按表列取值 → 列表里 customer_name 键根本不存在 → 该列永远空白。
+# 后台列表页要展示「客户」名称，但 crm_quotations 核心表只存 customer_id、
+# 没有客户名列；_item_to_dict() 按表列取值 → 返回体里 customer_name 键
+# 根本不存在 → 该列永远空白。
 
 def test_quotation_list_includes_customer_name(api, crm_user, crm_customer):
     h = _auth(crm_user)
