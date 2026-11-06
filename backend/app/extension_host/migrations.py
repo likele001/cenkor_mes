@@ -25,7 +25,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .registry import update_registry, write_health
+from .registry import load_registry, update_registry, write_health
 from .state import StateStore, runtime
 
 logger = logging.getLogger("uvicorn.error")
@@ -274,6 +274,30 @@ def _apply_python(key: str, ext_path: Path, db: Session, records: list[dict]) ->
     return applied_names
 
 
+def clear_broken_status(key: str) -> bool:
+    """迁移成功后清掉上次失败遗留的 ``broken`` 标记，返回是否发生了恢复。
+
+    为什么需要：失败分支会写 ``status="broken"``，但成功分支原先只刷新 health，
+    不碰 status。于是「迁移修好了」之后 registry 仍显示 broken——健康检查是 ok、
+    状态却是坏，运维看到的是一份自相矛盾的告警，只能去点「修复」才恢复。
+
+    只处理 ``broken``：``uninstalled_keep``（保留数据卸载）与
+    ``rollback_blocked``（回滚受阻）是另外的语义，不能被一次成功的迁移顺手覆盖。
+
+    失败也不抛：状态恢复属于附属动作，不该把一次成功的迁移判成失败。
+    """
+    try:
+        entry = (load_registry() or {}).get(key) or {}
+        if entry.get("status") != "broken":
+            return False
+        update_registry(key, status="installed_enabled")
+    except Exception as e:  # noqa: BLE001 - 附属动作失败不影响迁移结论
+        logger.warning("[extension] %s 恢复 registry 状态失败: %s", key, e)
+        return False
+    logger.info("[extension] %s 迁移成功，broken 标记已恢复为 installed_enabled", key)
+    return True
+
+
 def apply_for_key(key: str, ext_path: Path, db: Session, *, applied: dict, schema: dict) -> dict:
     """执行单个扩展的迁移（调用方负责提交/回滚与状态落盘）。"""
     sql_count = _apply_sql_legacy(key, ext_path, db, applied)
@@ -315,6 +339,7 @@ def run_migrations(
             try:
                 results[key] = apply_for_key(key, Path(info["path"]), db, applied=applied, schema=schema)
                 write_health(key, True, [], migrations="ok")
+                clear_broken_status(key)
             except Exception as e:  # noqa: BLE001 - 单扩展失败不阻塞其他扩展
                 db.rollback()
                 message = str(e) or e.__class__.__name__
