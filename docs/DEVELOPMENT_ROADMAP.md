@@ -15,13 +15,13 @@
 |---|---|---|
 | 云存储 | `crypto.py` / `factory.py` / 3 个云驱动（阿里 OSS、腾讯 COS、七牛 Kodo）/ 配置 API / 前端配置页 / 迁移任务与测试，全部在位 | **CS-1~CS-6 完成** |
 | 历史附件迁移 | `services/cloud_storage_migration.py`（快照 id、sha256 校验、逐条提交）+ 15 项测试；v2.2.6 起结果区分 `done` / `partial` / `failed` | 完成 |
-| 测试规模 | 后端 **55** 个测试文件、**597** 项用例；含核心闭环（`test_core_flow`、`test_api_integration_core_flow`、`test_closedloop_p4_salary`）与安全权限（5 个文件） | 已从原「13 文件」翻倍 |
+| 测试规模 | 后端 **56** 个测试文件、**624** 项用例；含核心闭环（`test_core_flow`、`test_api_integration_core_flow`、`test_closedloop_p4_salary`）与安全权限（5 个文件） | 已从原「13 文件」翻倍 |
 | CI 门禁 | `.github/workflows/ci.yml`：后端 pytest + 双前端 `vue-tsc -b && vite build` | 完成 |
 | 迁移链 | alembic **15** 个版本，CI 有 `test_alembic_chain_complete.py` 校验线性与 head | 完成 |
 | 可观测性 | `core/observability.py`：request_id 日志中间件 + 慢查询日志（阈值 `DB_SLOW_QUERY_MS`，默认 800ms，`<=0` 关闭） | 完成（除 `/metrics`） |
 | 索引 | **268** 个单列索引 + 关键复合索引（审批记录、订阅等） | 完成 |
-| 业务缓存 | Redis 仅用于登录限流 / 验证码 / 推送监控；**public-config、字典、看板聚合未缓存** | **剩余** |
-| 覆盖率门槛 | 无 `pytest-cov` 依赖、无覆盖率阈值 | **剩余** |
+| 业务缓存 | `core/business_cache.py`：版本化 key + Session 级 commit 失效；public-config、字典、看板 11 个聚合已接入（v2.2.10） | 完成 |
+| 覆盖率门槛 | CI `ci.yml` 已带 `--cov-fail-under=50`（v2.2.7 起） | 完成 |
 | 前端分包 | `vite.config.ts` 有 `manualChunks`；`element-plus` 779kB（gzip 248kB）仍偏大 | 完成，有优化空间 |
 
 ---
@@ -63,13 +63,13 @@ CS-6 的补充改动（v2.2.6）：迁移结果原本 `done > 0` 就判 `done`�
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| **QA-1** | 统一 fixtures + `pytest-cov` 覆盖率门槛（核心域 ≥60%） | **剩余**：fixtures 有（`conftest.py`），覆盖率工具与门槛未接 |
+| **QA-1** | 统一 fixtures + `pytest-cov` 覆盖率门槛 | 完成（v2.2.7）：CI `--cov=app --cov-fail-under=50`，当前 54.75% |
 | **QA-2** | 核心闭环集成测试：订单→工单→派工→报工→审核→算薪 | 完成（3 个闭环测试文件） |
 | **QA-3** | 安全/RBAC 回归：越权、`require_permissions`、JWT、上传 MIME/XSS | 完成（5 个安全/权限测试文件） |
 | **QA-4** | Alembic 规范化 + `upgrade/downgrade` CI 校验 | 完成（15 个版本 + 线性校验） |
 | **QA-5** | CI 门禁：pytest + 前端类型检查与构建 | 完成 |
 
-**剩余只需 QA-1**：接入 `pytest-cov`，在 CI 输出覆盖率并对核心域设阈值。
+**QA-1 已交付（v2.2.7）**：CI 输出覆盖率并设 50% 门槛；当前 624 项用例、覆盖率 54.75%。
 不建议一上来就卡全仓 60%——先把核心域（upgrade / storage / salary / order）
 卡住，避免为了达标去写无意义测试。
 
@@ -81,27 +81,26 @@ CS-6 的补充改动（v2.2.6）：迁移结果原本 `done > 0` 就判 `done`�
 |---|---|---|
 | **PERF-1** | 结构化请求日志 + SQLAlchemy 慢查询（阈值可配） | 完成；**`/metrics` 未做**（无 prometheus 依赖） |
 | **PERF-2** | 热点表索引审计 + 列表强制分页 + N+1 排查 | 完成（268 单列索引 + 关键复合索引） |
-| **PERF-3** | Redis 缓存：`public-config`、字典、看板聚合 + 失效策略 | **剩余**：Redis 只用在限流/验证码/推送监控 |
+| **PERF-3** | Redis 缓存：`public-config`、字典、看板聚合 + 失效策略 | 完成（v2.2.10）：版本化 key + commit 后按 namespace 失效，Redis 故障降级回源 |
 | **PERF-4** | 前端路由级分包 + 体积预算 | 完成（`manualChunks`）；element-plus 仍是最大块 |
 
 ### 关于剩余的判断
 
 - **`/metrics`**：只有接入监控系统（Prometheus/Grafana）才有意义。单机部署场景下
   `journalctl` + 慢查询日志已经够用，加 `/metrics` 属于「装了没人看」。**建议按需再加。**
-- **PERF-3 业务缓存**：这是三项里唯一有明确收益的。但缓存的难点不在加，而在
-  **失效策略**——public-config、字典、看板聚合各有不同的失效触发点，做不干净会
-  引入「改了配置不生效」这类更难排查的问题。动手前必须先定失效矩阵。
+- **PERF-3 业务缓存（v2.2.10 已交付）**：失效策略按「版本化 key + Session 级事件」
+  实现，矩阵见 `core/business_cache.py` 模块 docstring：public-config / 字典 /
+  看板三个 namespace，各自 INCR 版本号失效，Redis 不可用时全量降级回源。
+  看板按最终一致设计（60s TTL 兜底）。
 
 ---
 
 ## 4. 当前建议排期
 
-原排期（第 1~4 周完成全部）已经跑完，实际完成度约 **85%**。剩余部分：
+原排期（第 1~4 周完成全部）已经跑完，实际完成度约 **95%**（QA-1、PERF-3 于 v2.2.7 / v2.2.10 补齐）。剩余部分：
 
 | 优先级 | 事项 | 预估 | 说明 |
 |---|---|---|---|
-| P1 | **QA-1 覆盖率门槛** | 0.5d | 工程量小、长期收益大，先把核心域卡住 |
-| P2 | **PERF-3 业务缓存** | 1.5d | 需要先出失效矩阵，不能直接上 |
 | P3 | PERF-1 `/metrics` | 0.5d | 等有监控系统再补 |
 | P3 | 前端 element-plus 按需引入 | 1d | 779kB 可显著压缩，但要防白屏回归 |
 

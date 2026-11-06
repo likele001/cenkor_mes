@@ -233,5 +233,10 @@
     "version": "v2.2.9",
     "release_date": "2026-11-06",
     "description": "修复扩展迁移成功后 broken 状态不恢复（health=ok 但 status 仍显示损坏）；补 qcode 保留字回归测试"
+  },
+  {
+    "version": "v2.2.10",
+    "release_date": "2026-11-06",
+    "description": "PERF-3 业务读缓存：public-config、字典、经营看板 11 个聚合接入 Redis；版本化 key + Session 级 commit 后按 namespace 主动失效，Redis 故障自动降级回源；只缓存 JSON 原生类型，响应结构零变化；补 15 项单测"
   }
 ]

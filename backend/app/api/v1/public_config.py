@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.business_cache import NS_PUBLIC_CONFIG, TTL_PUBLIC_CONFIG, cached
 from app.core.deps import get_db
 from app.core.response import ok
 from app.crud.attachment import get_attachment_by_id
@@ -20,14 +21,23 @@ router = APIRouter()
 
 @router.get("")
 def public_config_api(db: Session = Depends(get_db)):
-    info = get_company_info(db)
-    return ok({
-        "company_name": info["name"],
-        "logo_url": info["logo_url"],
-        "login_captcha_enabled": is_login_captcha_enabled(db),
-        "session_expire_minutes": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        "remember_me_expire_minutes": int(settings.REMEMBER_ME_EXPIRE_MINUTES),
-    })
+    """免登录公开配置：只缓存 JSON data 部分。
+
+    /public-config/logo 是文件/重定向响应且已有 HTTP Cache-Control，不在缓存范围。
+    配置项指纹进 key：改了环境变量重启后自动换 key，不会读到旧值。
+    """
+    def _load() -> dict:
+        info = get_company_info(db)
+        return {
+            "company_name": info["name"],
+            "logo_url": info["logo_url"],
+            "login_captcha_enabled": is_login_captcha_enabled(db),
+            "session_expire_minutes": int(settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            "remember_me_expire_minutes": int(settings.REMEMBER_ME_EXPIRE_MINUTES),
+        }
+
+    cfg_fp = f"{settings.ACCESS_TOKEN_EXPIRE_MINUTES}-{settings.REMEMBER_ME_EXPIRE_MINUTES}"
+    return ok(cached(NS_PUBLIC_CONFIG, (cfg_fp,), TTL_PUBLIC_CONFIG, _load))
 
 
 @router.get("/logo")

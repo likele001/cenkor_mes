@@ -27,6 +27,9 @@ from app.models.base import Base
 from app.models.user import User
 # 导入即注册 Session 级监听：看板相关表 commit 后推 WebSocket 刷新
 from app.services import dashboard_events as _dashboard_events  # noqa: F401
+# 导入即注册 Session 级监听：业务读缓存按 namespace 在 commit 后失效；
+# Redis 不可用时自动降级回源，不影响任何业务事务。
+from app.core import business_cache as _business_cache  # noqa: F401
 
 
 app = FastAPI(title=settings.APP_NAME)

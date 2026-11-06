@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_permissions
+from app.core.business_cache import NS_DICTIONARY, TTL_DICTIONARY, cached
 from app.core.response import ok
 from app.crud.dictionary import (
     create_dict_item,
@@ -22,8 +23,11 @@ router = APIRouter(dependencies=[Depends(require_permissions(["dict.manage"]))])
 
 @router.get("/types")
 def list_types_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    items = list_dict_types(db)
-    return ok({"items": [{"id": t.id, "code": t.code, "name": t.name, "is_active": t.is_active} for t in items]})
+    def _load() -> dict:
+        items = list_dict_types(db)
+        return {"items": [{"id": t.id, "code": t.code, "name": t.name, "is_active": t.is_active} for t in items]}
+
+    return ok(cached(NS_DICTIONARY, ("types", user.tenant_id), TTL_DICTIONARY, _load))
 
 
 @router.post("/types")
@@ -35,8 +39,11 @@ def create_type_api(body: DictTypeCreateIn, db: Session = Depends(get_db), user:
 
 @router.get("/types/{dict_type_id}/items")
 def list_items_api(dict_type_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    items = list_dict_items(db, dict_type_id=dict_type_id)
-    return ok({"items": [{"id": i.id, "label": i.label, "value": i.value, "sort_order": i.sort_order, "is_active": i.is_active} for i in items]})
+    def _load() -> dict:
+        items = list_dict_items(db, dict_type_id=dict_type_id)
+        return {"items": [{"id": i.id, "label": i.label, "value": i.value, "sort_order": i.sort_order, "is_active": i.is_active} for i in items]}
+
+    return ok(cached(NS_DICTIONARY, ("items", dict_type_id, user.tenant_id), TTL_DICTIONARY, _load))
 
 
 @router.post("/types/{dict_type_id}/items")
