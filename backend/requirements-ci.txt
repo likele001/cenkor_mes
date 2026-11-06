@@ -26,6 +26,9 @@ oss2>=2.18.0
 cos-python-sdk-v5>=1.9.30
 qiniu>=7.12.0
 pytest>=8.0.0
+# 覆盖率门槛（QA-1）：CI 用 --cov-fail-under 防倒退，只在 CI 装，不进生产镜像。
+# 本地想跑覆盖率时：pip install pytest-cov（本机 venv 实测 7.1.0 可用）。
+pytest-cov>=7.0.0
 # 迁移链/健康检查测试需要：alembic 跑 `python -m alembic upgrade head` 并 import alembic.config；
 # openai 是 app.services.ai.client 的硬依赖（from openai import OpenAI），
 # test_all_intra_app_imports_resolve 静态体检会真实 import 它。pin 到本地 venv 实测版本。

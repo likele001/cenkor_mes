@@ -45,8 +45,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-ci.txt
 
-      - name: 运行测试套件
-        run: python -m pytest tests -q
+      - name: 运行测试套件（带覆盖率门槛）
+        # 门槛的作用是「防倒退」，不是质量目标。
+        # 2026-11-06 实测全仓 55%（28250 行，597 项用例），门槛设 50% 留 5% 缓冲，
+        # 避免正常的小改动就红。要提升覆盖率请单独排期补测试，不要靠调低这个数过关。
+        # term-missing 会列出未覆盖行，短板一眼可见。
+        run: |
+          python -m pytest tests -q \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=50
 
   frontend:
     name: 前端构建 (${{ matrix.app }})
