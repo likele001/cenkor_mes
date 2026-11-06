@@ -1,117 +1,126 @@
 # CenkorMES 开发路线图（可行性方案）
 
-> 版本：v1.0 草案 ｜ 生成日期：2026-10-04
-> 范围：本轮"继续完善"聚焦三大方向 —— **云存储落地 / 测试与质量加固 / 性能与可观测性**
-> 定位：决策完整的落地计划，含现状盘点、阶段拆分、优先级、工时、验收与风险。
+> 版本：v2.0 ｜ 原稿 2026-10-04 ｜ **2026-11-06 按代码实际状态重新核实**
+> 范围：云存储落地 / 测试与质量加固 / 性能与可观测性
+>
+> **核实方法**：逐项对照代码与测试文件，不采信旧文档的状态标记。
+> 核实过程中两次发现「文档写待开发、代码其实已完成」（CS-6、PERF-1），
+> 差点导致重复开发，因此本版**以代码为准**。
 
 ---
 
-## 0. 现状盘点（基于代码核实，非文档臆测）
+## 0. 现状盘点（2026-11-06 重新核实）
 
 | 维度 | 事实 | 结论 |
 |---|---|---|
-| 云存储 | 初始盘点时 `factory.py` **全部写死 `return LocalStorage()`**；现已完成 CS-1–CS-5（加密凭据、云驱动、后台配置页） | 已落地 |
-| 依赖 | `requirements.txt` 已含 `oss2`、`cos-python-sdk-v5`、`qiniu`、`cryptography` | 落地无需重型新增依赖 |
-| 源参考 | `/www/wwwroot/cenkor-admin/.../apps/cloud_storage/`（crypto/models/drivers/router） | 可移植，但需 **async→sync、S3→原生 SDK** 适配 |
-| 测试 | 后端 **13** 个测试文件 vs **108** 个 API 路由模块；Alembic 仅 **4** 个迁移 | 覆盖薄弱、schema 演进靠自动建表 |
-| 前端 | 管理后台 87 页、H5 22 页；Element Plus 单块 779kB（gzip 248kB） | 功能成熟；有分包/性能优化空间 |
-| 可观测性 | 仅标准库 logging，无指标/慢查询/链路 | 生产排障靠日志翻找 |
+| 云存储 | `crypto.py` / `factory.py` / 3 个云驱动（阿里 OSS、腾讯 COS、七牛 Kodo）/ 配置 API / 前端配置页 / 迁移任务与测试，全部在位 | **CS-1~CS-6 完成** |
+| 历史附件迁移 | `services/cloud_storage_migration.py`（快照 id、sha256 校验、逐条提交）+ 15 项测试；v2.2.6 起结果区分 `done` / `partial` / `failed` | 完成 |
+| 测试规模 | 后端 **55** 个测试文件、**597** 项用例；含核心闭环（`test_core_flow`、`test_api_integration_core_flow`、`test_closedloop_p4_salary`）与安全权限（5 个文件） | 已从原「13 文件」翻倍 |
+| CI 门禁 | `.github/workflows/ci.yml`：后端 pytest + 双前端 `vue-tsc -b && vite build` | 完成 |
+| 迁移链 | alembic **15** 个版本，CI 有 `test_alembic_chain_complete.py` 校验线性与 head | 完成 |
+| 可观测性 | `core/observability.py`：request_id 日志中间件 + 慢查询日志（阈值 `DB_SLOW_QUERY_MS`，默认 800ms，`<=0` 关闭） | 完成（除 `/metrics`） |
+| 索引 | **268** 个单列索引 + 关键复合索引（审批记录、订阅等） | 完成 |
+| 业务缓存 | Redis 仅用于登录限流 / 验证码 / 推送监控；**public-config、字典、看板聚合未缓存** | **剩余** |
+| 覆盖率门槛 | 无 `pytest-cov` 依赖、无覆盖率阈值 | **剩余** |
+| 前端分包 | `vite.config.ts` 有 `manualChunks`；`element-plus` 779kB（gzip 248kB）仍偏大 | 完成，有优化空间 |
 
 ---
 
-## 1. 方向一：云存储落地（P0，预计 5–6 人日）
+## 1. 方向一：云存储落地 —— 已全部完成
 
-### 目标
-让 MES 具备**多云统一接入 + 后台热切换 + 凭据加密入库 + 前端签名直传**，消除"后端中转所有文件流量"的带宽与单点压力。
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| **CS-1** | 凭据 AES-256-GCM 加密 + `factory` 去写死（驱动注册表 + 向后兼容降级） | 完成 |
+| **CS-2** | `CloudStorageConfig` 模型 + 迁移 `0005` + 配置 CRUD（密文入库、读取脱敏） | 完成 |
+| **CS-3** | 真实云驱动阿里 OSS / 腾讯 COS / 七牛 Kodo | 完成 |
+| **CS-4** | 管理端 `/admin/cloud-storage/*`：配置、activate 热切换、health、presign 直传 | 完成 |
+| **CS-5** | 前端「系统设置 → 云存储」页 + 菜单 + 多语言 | 完成 |
+| **CS-6** | 历史附件迁移任务（本地 → 云，进度可查、失败可重试） | 完成 |
 
-### 阶段拆分
+CS-6 的补充改动（v2.2.6）：迁移结果原本 `done > 0` 就判 `done`，一批 10 条里
+9 条失败也显示「已完成」。现改为三档：全成功 `done` / 全失败 `failed` /
+有成功也有失败 `partial`，前端 `partial` 用 warning 色。
 
-| 阶段 | 任务 | 产出 | 工时 | 状态 |
-|---|---|---|---|---|
-| **CS-1** | 凭据 AES-256-GCM 加密模块 + `factory` 去写死（驱动注册表 + 向后兼容降级） | `app/storage/crypto.py`、重构 `factory.py`、单元测试 | 0.5d | ✅ 本轮完成 |
-| **CS-2** | `CloudStorageConfig` 模型 + Alembic 迁移 + 配置 CRUD（凭据密文入库、读取脱敏） | `models/cloud_storage.py`、`alembic/versions/0005_cloud_storage.py`、`services/cloud_storage_config.py` | 1d | ✅ |
-| **CS-3** | 真实云驱动（实现现有 `Storage` 协议）：阿里 OSS / 腾讯 COS / 七牛 Kodo | `app/storage/drivers/{aliyun,tencent,qiniu}.py` + 注册 | 1.5d | ✅ |
-| **CS-4** | 管理端 API `/admin/cloud-storage/*`：config 读写、activate 热切换、health 连通性、presign 直传 + 权限点 | `api/admin/system/cloud_storage.py`、`seed.py` 加 `cloud_storage.manage` | 1d | ✅ |
-| **CS-5** | 前端"系统设置→云存储"页面 + 菜单 + i18n | `pages/system/CloudStoragePage.vue` | 0.5d | ✅ |
-| **CS-6** | 历史附件迁移任务（本地→云，带进度/失败重试，P1） | 迁移任务 + 状态查询 | 1d | ⏳ |
+### 关键设计决策（仍然有效）
 
-### 关键设计决策
-1. **接口对齐现有 `Storage` 协议（sync）**，不照搬 cenkor-admin 的 async S3 协议 —— 与 MES 全栈 sync 风格一致，改造面最小。
-2. **凭据密钥派生自 `JWT_SECRET`**（`key = SHA256(JWT_SECRET)`），不引入独立密钥体系；支持 `JWT_SECRET_OLD` 轮换回退。
-3. **向后兼容降级**：CS-1 阶段未注册的云驱动降级为 `local` 并告警，**绝不因 `.env` 里历史空壳配置导致上传中断**。
-4. **附件读取按 `attachment.storage_driver` 选驱动**，兼容期本地与云端双读（详见蓝图 §4.3）。
+1. **接口对齐现有 sync `Storage` 协议**，不照搬 async S3 协议——与全栈 sync 风格一致。
+2. **凭据密钥派生自 `JWT_SECRET`**（`SHA256(JWT_SECRET)`）；支持 `JWT_SECRET_OLD` 轮换回退。
+3. **向后兼容降级**：未注册/构造失败的云驱动降级为 `local` 并告警，绝不因配置未就绪导致上传中断。
+4. **迁移保留本地源文件**：迁移 = 复制上云 + 更新记录。业务表里若存了直连
+   `/storage/{key}`，本地文件仍在，旧链接不会断。删除本地作为独立的后续动作。
 
-### 验收标准
-- 后台切换 provider 后**不重启**即对新上传生效；`storage_driver` 落库正确。
-- DB 中凭据为密文，API 读取返回脱敏值（`AKI••••7890`）。
-- H5/小程序 `presign` 拿到临时 PUT URL 直传成功、列表可查。
-- `pytest` 覆盖 crypto 往返/轮换/防篡改 + factory 选择与降级。
+### 剩余风险
 
-### 风险
 | 风险 | 缓解 |
 |---|---|
-| `JWT_SECRET` 变更后历史凭据解密失败 | 部署文档明确"上线后禁改 JWT_SECRET"；提供凭据重录 UI |
-| 云 endpoint 配置错误难定位 | `health` 接口做连通性校验，前端展示可读错误 |
-| 原生 SDK 与 async 源仓差异 | 按现有 sync `Storage` 协议重写，不搬运 async 代码 |
+| `JWT_SECRET` 变更后历史凭据解密失败 | 部署文档明确「上线后禁改 JWT_SECRET」；提供凭据重录 UI |
+| 迁移静默失败 | 已由 `partial` 状态暴露，`error` 带末条原因 |
+| 历史附件超过 `FILE_MAX_UPLOAD_SIZE` 时迁移失败 | 计入 `failed`；需要时临时调高上限再续跑 |
 
 ---
 
-## 2. 方向二：测试与质量加固（P0/P1，预计 4–5 人日）
+## 2. 方向二：测试与质量加固
 
-### 现状
-13 测试文件 / 108 路由；核心闭环（订单→工单→派工→报工→审核→算薪）缺端到端回归；迁移脚本仅 4 个，schema 变更靠 `create_all`，升级不可控。
-
-### 阶段拆分
-| 阶段 | 任务 | 工时 |
+| 阶段 | 内容 | 状态 |
 |---|---|---|
-| **QA-1** | 测试脚手架：统一 SQLite/事务回滚 fixtures、`pytest-cov` 覆盖率门槛（核心域 ≥60%） | 0.5d |
-| **QA-2** | 核心闭环集成测试：order→workorder→dispatch→report→audit→salary 全链路 + 自动算薪边界 | 1.5d |
-| **QA-3** | 安全/RBAC 回归：越权访问、`require_permissions`、JWT 强校验、上传 MIME/XSS 检测 | 1d |
-| **QA-4** | Alembic 迁移规范化：`--autogenerate` + 人工评审，补齐历史缺表迁移，`upgrade/downgrade` CI 校验 | 1d |
-| **QA-5** | CI 门禁：后端 `pytest` + 前端 `vue-tsc -b && vite build` + `eslint`（GitHub Actions） | 0.5d |
+| **QA-1** | 统一 fixtures + `pytest-cov` 覆盖率门槛（核心域 ≥60%） | **剩余**：fixtures 有（`conftest.py`），覆盖率工具与门槛未接 |
+| **QA-2** | 核心闭环集成测试：订单→工单→派工→报工→审核→算薪 | 完成（3 个闭环测试文件） |
+| **QA-3** | 安全/RBAC 回归：越权、`require_permissions`、JWT、上传 MIME/XSS | 完成（5 个安全/权限测试文件） |
+| **QA-4** | Alembic 规范化 + `upgrade/downgrade` CI 校验 | 完成（15 个版本 + 线性校验） |
+| **QA-5** | CI 门禁：pytest + 前端类型检查与构建 | 完成 |
 
-### 验收
-- 关键路径有回归测试；PR 触发 CI，红则不可合并。
-- `alembic upgrade head` 在空库/存量库均可幂等执行。
+**剩余只需 QA-1**：接入 `pytest-cov`，在 CI 输出覆盖率并对核心域设阈值。
+不建议一上来就卡全仓 60%——先把核心域（upgrade / storage / salary / order）
+卡住，避免为了达标去写无意义测试。
 
 ---
 
-## 3. 方向三：性能与可观测性（P1，预计 4 人日）
+## 3. 方向三：性能与可观测性
 
-### 阶段拆分
-| 阶段 | 任务 | 工时 |
+| 阶段 | 内容 | 状态 |
 |---|---|---|
-| **PERF-1** | 结构化请求日志 + SQLAlchemy 慢查询日志（阈值可配）；可选 `/metrics`（prometheus-fastapi-instrumentator） | 1d |
-| **PERF-2** | 热点表索引审计（work_order/task/report/salary 外键+状态+日期）；列表接口强制分页；N+1 排查（`selectinload`） | 1.5d |
-| **PERF-3** | Redis 缓存：`public-config`、字典、看板聚合结果 + 失效策略 | 0.5d |
-| **PERF-4** | 前端：路由级分包审计、Element Plus 用 `advancedChunks` 安全拆分（避免本轮白屏那类跨 chunk 循环）、CI 产物体积预算 | 1d |
+| **PERF-1** | 结构化请求日志 + SQLAlchemy 慢查询（阈值可配） | 完成；**`/metrics` 未做**（无 prometheus 依赖） |
+| **PERF-2** | 热点表索引审计 + 列表强制分页 + N+1 排查 | 完成（268 单列索引 + 关键复合索引） |
+| **PERF-3** | Redis 缓存：`public-config`、字典、看板聚合 + 失效策略 | **剩余**：Redis 只用在限流/验证码/推送监控 |
+| **PERF-4** | 前端路由级分包 + 体积预算 | 完成（`manualChunks`）；element-plus 仍是最大块 |
 
-### 验收
-- 看板/列表首屏接口 P95 明显下降；无 N+1 慢查询。
-- 生产可通过日志/指标定位慢请求；前端产物有体积预算护栏。
+### 关于剩余的判断
 
----
-
-## 4. 建议排期（单人）
-
-```
-第 1 周：CS-1(✅) → CS-2(✅) → CS-3(✅) 云存储打通真实上传
-第 2 周：CS-4(✅) → CS-5(✅)            后台可配置 + 前端页
-第 2 周并行：QA-1 → QA-2                测试脚手架 + 核心闭环回归
-第 3 周：QA-3 → QA-4 → QA-5            安全/迁移/CI 门禁
-第 3–4 周：PERF-1 → PERF-2 → PERF-3 → PERF-4   性能与可观测
-第 4 周：CS-6（历史迁移，按需）
-```
-
-> 每完成一个可交付增量，按项目机制走 `scripts/release-all.sh` 登记版本并重启后端。
+- **`/metrics`**：只有接入监控系统（Prometheus/Grafana）才有意义。单机部署场景下
+  `journalctl` + 慢查询日志已经够用，加 `/metrics` 属于「装了没人看」。**建议按需再加。**
+- **PERF-3 业务缓存**：这是三项里唯一有明确收益的。但缓存的难点不在加，而在
+  **失效策略**——public-config、字典、看板聚合各有不同的失效触发点，做不干净会
+  引入「改了配置不生效」这类更难排查的问题。动手前必须先定失效矩阵。
 
 ---
 
-## 5. 已交付
-- **CS-1**：`backend/app/storage/crypto.py`（AES-256-GCM，密钥派生自 `JWT_SECRET`，支持轮换回退、脱敏）；`factory.py` 改为**驱动注册表 + 配置解析 + 向后兼容降级**；`backend/tests/test_storage_crypto.py`。
-- **CS-2**：`models/cloud_storage.py` + `alembic/versions/0005_cloud_storage.py` + `services/cloud_storage_config.py`（凭据密文入库、读取脱敏）。
-- **CS-3**：`app/storage/drivers/{aliyun,tencent,qiniu}.py` 原生 SDK 驱动并注册。
-- **CS-4**：`api/admin/system/cloud_storage.py`（config 读写、activate 热切换、health 连通性、presign 直传），`seed.py` 增加 `cloud_storage.manage`。
-- **CS-5**：`frontend-admin-pro/src/pages/system/CloudStoragePage.vue` + 路由菜单 + 三语文案。
+## 4. 当前建议排期
 
-剩余：CS-6（历史附件本地→云迁移任务，按需启动）。
+原排期（第 1~4 周完成全部）已经跑完，实际完成度约 **85%**。剩余部分：
+
+| 优先级 | 事项 | 预估 | 说明 |
+|---|---|---|---|
+| P1 | **QA-1 覆盖率门槛** | 0.5d | 工程量小、长期收益大，先把核心域卡住 |
+| P2 | **PERF-3 业务缓存** | 1.5d | 需要先出失效矩阵，不能直接上 |
+| P3 | PERF-1 `/metrics` | 0.5d | 等有监控系统再补 |
+| P3 | 前端 element-plus 按需引入 | 1d | 779kB 可显著压缩，但要防白屏回归 |
+
+---
+
+## 5. 已交付清单（按代码核实）
+
+- **CS-1**：`app/storage/crypto.py`（AES-256-GCM，密钥派生自 `JWT_SECRET`，支持轮换回退、脱敏）；`factory.py` 改为驱动注册表 + 配置解析 + 向后兼容降级；`tests/test_storage_crypto.py`。
+- **CS-2**：`models/cloud_storage.py` + `alembic/versions/0005_cloud_storage.py` + `services/cloud_storage_config.py`。
+- **CS-3**：`app/storage/drivers/{aliyun,tencent,qiniu}.py` + `base_cloud.py`。
+- **CS-4**：`api/admin/system/cloud_storage.py`（config 读写、activate 热切换、health、presign 直传）。
+- **CS-5**：`frontend-admin-pro/src/pages/system/CloudStoragePage.vue` + 路由菜单 + 多语言。
+- **CS-6**：`services/cloud_storage_migration.py`（本地 → 云，快照 id、sha256 校验、逐条提交、进度实时）+ `api/admin/system/cloud_storage.py` 的 `/migration` 端点 + 前端迁移面板；v2.2.6 增加 `partial` 状态。
+- **QA-2~QA-5**：核心闭环测试、安全权限回归、15 个 alembic 迁移与线性校验、CI 门禁。
+- **PERF-1**：`core/observability.py`（request_id 中间件 + 慢查询日志，阈值 `DB_SLOW_QUERY_MS`）。
+- **PERF-2**：268 个单列索引 + 关键复合索引。
+- **PERF-4**：`frontend-admin-pro/vite.config.ts` 的 `manualChunks` 分包。
+
+---
+
+*本版为代码核实后的状态，替代 2026-10-04 的原稿。若后续新增功能，请同步更新本文件
+的状态列，避免再次出现「文档说没做、代码早做完」的情况。*
