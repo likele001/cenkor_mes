@@ -238,5 +238,10 @@
     "version": "v2.2.10",
     "release_date": "2026-11-06",
     "description": "PERF-3 业务读缓存：public-config、字典、经营看板 11 个聚合接入 Redis；版本化 key + Session 级 commit 后按 namespace 主动失效，Redis 故障自动降级回源；只缓存 JSON 原生类型，响应结构零变化；补 15 项单测"
+  },
+  {
+    "version": "v2.2.11",
+    "release_date": "2026-11-06",
+    "description": "补齐独立版登录验证码开关：新增 /admin/system/login-captcha 读写 platform_settings，系统设置页提供开关并复用操作日志与 setting.manage 权限；管理端登录页恢复按 public-config 显隐、接口失败静默隐藏。写接口经 ORM commit 触发 public-config 缓存失效，H5 端无需改动。合并 v2.2.10 之后的系统版本页同日多版本排序修复。"
   }
 ]

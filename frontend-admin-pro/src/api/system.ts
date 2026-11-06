@@ -237,6 +237,12 @@ export const systemApi = {
     return http.request<void>({ url: `/admin/system/departments/${id}`, method: 'DELETE' })
   },
 
+  getLoginCaptchaSettings() {
+    return http.request<{ enabled: boolean }>({ url: '/admin/system/login-captcha', method: 'GET' })
+  },
+  saveLoginCaptchaSettings(data: { enabled: boolean }) {
+    return http.request<{ enabled: boolean }>({ url: '/admin/system/login-captcha', method: 'PUT', data })
+  },
   getReportMediaSettings() {
     return http.request<{
       max_video_seconds: number

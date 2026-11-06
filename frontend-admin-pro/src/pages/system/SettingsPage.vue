@@ -49,6 +49,21 @@
       </el-form>
     </el-card>
 
+    <el-card class="mb-4" v-loading="captchaLoading">
+      <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.loginCaptcha') }}</div>
+      <div class="text-xs text-zinc-500 mb-4">{{ t('system.settings.loginCaptchaDesc') }}</div>
+      <el-form label-width="140px" class="max-w-xl">
+        <el-form-item :label="t('system.settings.loginCaptcha')">
+          <el-switch v-model="captchaForm.enabled" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="captchaSaving" @click="saveLoginCaptchaSettings">
+            {{ t('system.settings.save') }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-card class="mb-4" v-loading="modeLoading">
       <div class="text-[16px] font-semibold mb-1">{{ t('system.settings.reportMode') }}</div>
       <div class="text-xs text-zinc-500 mb-4">
@@ -243,6 +258,10 @@ const wxSecretPlaceholder = computed(() =>
   wxForm.app_secret_configured ? t('system.settings.leaveEmptyNoChangeKey') : '从微信公众平台复制 AppSecret',
 )
 
+const captchaLoading = ref(false)
+const captchaSaving = ref(false)
+const captchaForm = reactive({ enabled: false })
+
 const mediaLoading = ref(false)
 const mediaSaving = ref(false)
 const mediaForm = reactive({
@@ -412,6 +431,29 @@ async function saveModeSettings() {
   }
 }
 
+async function loadLoginCaptchaSettings() {
+  captchaLoading.value = true
+  try {
+    const cfg = await systemApi.getLoginCaptchaSettings()
+    captchaForm.enabled = Boolean(cfg.enabled)
+  } finally {
+    captchaLoading.value = false
+  }
+}
+
+async function saveLoginCaptchaSettings() {
+  captchaSaving.value = true
+  try {
+    const cfg = await systemApi.saveLoginCaptchaSettings({ enabled: captchaForm.enabled })
+    captchaForm.enabled = Boolean(cfg.enabled)
+    ElMessage.success(t('system.settings.loginCaptchaSaved'))
+    // public-config 由写接口的 ORM commit 触发缓存失效，这里强制刷新一次本地状态
+    await appConfig.load(true)
+  } finally {
+    captchaSaving.value = false
+  }
+}
+
 async function loadMediaSettings() {
   mediaLoading.value = true
   try {
@@ -464,6 +506,7 @@ async function saveWxSettings() {
 }
 
 onMounted(() => {
+  loadLoginCaptchaSettings()
   loadCompanyInfo()
   loadModeSettings()
   loadWxSettings()

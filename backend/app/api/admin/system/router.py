@@ -13,6 +13,7 @@ from app.api.admin.system.print_templates import router as print_templates_route
 from app.api.admin.system.skills import router as skills_router
 from app.api.admin.system.roles import router as roles_router
 from app.api.admin.system.settings import router as settings_router
+from app.api.admin.system.login_captcha import router as login_captcha_router
 from app.api.admin.system.report_media import router as report_media_router
 from app.api.admin.system.report_mode import router as report_mode_router
 from app.api.admin.system.wechat_miniapp import router as wechat_miniapp_router
@@ -49,3 +50,4 @@ router.include_router(cloud_storage_router, prefix="/cloud-storage", tags=["admi
 router.include_router(operation_logs_router, prefix="/operation-logs", tags=["admin-system-operation-logs"])
 router.include_router(version_router, tags=["admin-system-version"])
 router.include_router(upgrade_router, prefix="/upgrade", tags=["admin-system-upgrade"])
+router.include_router(login_captcha_router, prefix="/login-captcha", tags=["admin-system-login-captcha"])
