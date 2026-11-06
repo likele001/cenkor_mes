@@ -47,6 +47,7 @@ class BizType:
     FIXED_ASSET = "fixed_asset"
     ASSET_CHECK = "asset_check"
     STOCKTAKE = "stocktake"
+    DISPOSITION = "disposition"
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ _RULES: dict[str, _Rule] = {
     BizType.FIXED_ASSET: _Rule("FA"),
     BizType.ASSET_CHECK: _Rule("AC"),
     BizType.STOCKTAKE: _Rule("PD"),
+    BizType.DISPOSITION: _Rule("CZ"),
 }
 
 

@@ -905,6 +905,99 @@ export type UserOut = {
   department: { id: number; code: string; name: string } | null
 }
 
+export type DispositionMethod = 'rework' | 'scrap' | 'concede' | 'return_process'
+
+export type DispositionStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'closed' | 'cancelled'
+
+export type DispositionItemOut = {
+  id: number
+  method: DispositionMethod
+  qty: number
+  defect_code_id: number | null
+  defect_code: string | null
+  defect_name: string | null
+  target_process_id: number | null
+  target_process_name: string | null
+  /** 闭环时登记的实际执行数量，未闭环为 null */
+  done_qty: number | null
+  cost_amount: number
+  remark: string | null
+}
+
+export type DispositionOut = {
+  id: number
+  code: string
+  status: DispositionStatus
+  /** 挂靠的报工单：一条报工的不良量可以拆成多张处置单，但不能超量 */
+  report_id: number
+  task_id: number
+  work_order_id: number | null
+  sku_id: number | null
+  sku_code: string | null
+  sku_name: string | null
+  process_id: number | null
+  process_name: string | null
+  task_code: string | null
+  /** 制单时该报工的不良量快照 */
+  bad_qty: number
+  /** 本单处置数量合计 */
+  total_qty: number
+  /** 报废损失合计（只算报废行，手工填） */
+  scrap_cost: number
+  reason: string | null
+  remark: string | null
+  submitted_at: string | null
+  submitted_by: number | null
+  approved_at: string | null
+  approved_by: number | null
+  reject_reason: string | null
+  closed_at: string | null
+  closed_by: number | null
+  close_note: string | null
+  created_by: number | null
+  created_at: string | null
+  updated_at: string | null
+  items?: DispositionItemOut[]
+}
+
+export type DispositionReportOption = {
+  report_id: number
+  report_status: string
+  task_id: number
+  task_code: string
+  process_id: number | null
+  process_name: string | null
+  work_order_id: number | null
+  order_code: string | null
+  sku_id: number | null
+  sku_code: string | null
+  sku_name: string | null
+  good_qty: number
+  bad_qty: number
+  /** 已被其他处置单占用的数量 */
+  used_qty: number
+  /** 还能处置多少 */
+  remaining_qty: number
+  created_at: string | null
+}
+
+export type DispositionStats = {
+  by_status: Record<string, number>
+  by_method: Record<string, { qty: number; cost: number; lines: number }>
+  top_defects: Array<{ code: string; name: string; qty: number }>
+  total_qty: number
+  scrap_cost: number
+}
+
+export type DispositionItemIn = {
+  method: DispositionMethod
+  qty: number
+  defect_code_id: number | null
+  target_process_id: number | null
+  cost_amount: number
+  remark: string
+}
+
 export const productionApi = {
   // 客户
   listCustomers(params: any) {
@@ -1699,5 +1792,75 @@ export const productionApi = {
   },
   listCustomerQuotations(customerId: number) {
     return http.request<{ items: QuotationOut[] }>({ url: `/admin/production/crm/customers/${customerId}/quotations`, method: 'GET' })
+  },
+  // ── 不良品处置 ──
+  listDispositions(params: {
+    status?: string
+    method?: string
+    report_id?: number
+    task_id?: number
+    sku_id?: number
+    keyword?: string
+    offset?: number
+    limit?: number
+  }) {
+    return http.request<{ items: DispositionOut[]; total: number }>({
+      url: '/admin/production/dispositions',
+      method: 'GET',
+      params,
+    })
+  },
+  getDisposition(id: number) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}`, method: 'GET' })
+  },
+  createDisposition(payload: {
+    code?: string
+    report_id: number
+    items: DispositionItemIn[]
+    reason?: string | null
+    remark?: string | null
+  }) {
+    return http.request<DispositionOut>({ url: '/admin/production/dispositions', method: 'POST', data: payload })
+  },
+  updateDisposition(
+    id: number,
+    payload: { items?: DispositionItemIn[]; reason?: string; remark?: string },
+  ) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}`, method: 'PUT', data: payload })
+  },
+  deleteDisposition(id: number) {
+    return http.request<{ ok: boolean }>({ url: `/admin/production/dispositions/${id}`, method: 'DELETE' })
+  },
+  submitDisposition(id: number) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}/submit`, method: 'POST' })
+  },
+  approveDisposition(id: number) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}/approve`, method: 'POST' })
+  },
+  rejectDisposition(id: number, reason: string) {
+    return http.request<DispositionOut>({
+      url: `/admin/production/dispositions/${id}/reject`,
+      method: 'POST',
+      data: { reason },
+    })
+  },
+  closeDisposition(id: number, payload: { items?: Array<{ item_id: number; done_qty: number; remark?: string }>; note?: string }) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}/close`, method: 'POST', data: payload })
+  },
+  cancelDisposition(id: number) {
+    return http.request<DispositionOut>({ url: `/admin/production/dispositions/${id}/cancel`, method: 'POST' })
+  },
+  exportDisposition(id: number) {
+    return http.downloadBlob({ url: `/admin/production/dispositions/${id}/export`, method: 'GET' })
+  },
+  dispositionStats() {
+    return http.request<DispositionStats>({ url: '/admin/production/dispositions/stats', method: 'GET' })
+  },
+  dispositionReportOptions(params: { keyword?: string; limit?: number }) {
+    return http.request<{ items: DispositionReportOption[] }>({
+      url: '/admin/production/dispositions/report-options',
+      method: 'GET',
+      params,
+    })
   },
 }

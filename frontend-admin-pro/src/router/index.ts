@@ -136,6 +136,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: () => i18n.global.t('menu.defectCodes'), permissions: ['report.audit', 'qc.inspect', 'qc.approve'] },
       },
       {
+        path: 'production/dispositions',
+        name: 'production-dispositions',
+        component: () => import('@/pages/production/DispositionsPage.vue'),
+        meta: { title: () => i18n.global.t('menu.dispositions'), permissions: ['disposition.view', 'disposition.manage', 'disposition.approve'] },
+      },
+      {
         path: 'production/report-units',
         name: 'production-report-units',
         component: () => import('@/pages/production/ReportUnitsPage.vue'),

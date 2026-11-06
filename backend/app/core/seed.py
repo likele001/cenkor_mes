@@ -58,6 +58,9 @@ DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("qc.approve", "质检审批"),
     ("customer.view", "客户查看"),
     ("equipment.view", "设备查看"),
+    ("disposition.view", "不良处置查看"),
+    ("disposition.manage", "不良处置登记"),
+    ("disposition.approve", "不良处置审批"),
 ]
 
 DEFAULT_ROLES: list[tuple[str, str]] = [
@@ -70,10 +73,11 @@ DEFAULT_ROLES: list[tuple[str, str]] = [
 
 ROLE_PERMISSION_PRESETS: dict[str, set[str]] = {
     "admin": {code for code, _ in DEFAULT_PERMISSIONS},
-    "qc": {"report.audit", "trace.query", "salary.view", "attachment.view"},
+    "qc": {"report.audit", "trace.query", "salary.view", "attachment.view",
+           "disposition.view", "disposition.manage", "disposition.approve"},
     "leader": {"dispatch.manage", "report.audit", "report.submit", "salary.view", "dashboard.view", "report.view",
                "order.manage", "plan.manage", "work.manage", "task.manage", "notification.view", "attendance.manage",
-               "attachment.view"},
+               "attachment.view", "disposition.view", "disposition.manage"},
     "employee": {"report.submit", "salary.view", "notification.view"},
     "customer": {"notification.view"},
 }

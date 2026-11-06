@@ -136,6 +136,8 @@ __all__ = [
     "StockLog",
     "Stocktake",
     "StocktakeItem",
+    "Disposition",
+    "DispositionItem",
     "PurchaseOrder",
     "PurchaseOrderItem",
     "Statement",
@@ -156,6 +158,8 @@ from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
 from app.models.warehouse import Warehouse, Stock, StockLog
 # 盘点单：确认入账走 adjust_stock，同属库存域，跟着仓库/库存一起注册
 from app.models.stocktake import Stocktake, StocktakeItem
+# 不良品处置单：挂在报工的不良量上，只记决定与损失，不碰库存与报工良品数
+from app.models.disposition import Disposition, DispositionItem
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 # finance（客户对账单/总账）为独立业务域，需注册进 metadata
 from app.models.finance import Statement, StatementItem
