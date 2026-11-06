@@ -428,6 +428,7 @@ def handler(event):
 
 - **样例包**：`backend/extensions_samples/hook_demo/`——`register_events` 订阅 `report.submitted`（写自有表 `ext_hook_demo_report_log`）+ `report.submitting`（演示「有不良品必须填备注」否决）。照抄即可起步。
 - **测试**：`backend/tests/test_extension_events.py`（总线语义 15 例）+ `test_extension_event_hooks.py`（端点级拦截/通知/样例 6 例）。均走 SQLite 夹具，不碰生产库。
+- **商业扩展的测试放哪**（重要）：本仓库是 **public**，只承载宿主/框架层测试与 `extensions_samples/` 脚手架样例。**商业扩展（如 `qcode`）自身的测试必须放在私有仓库 `mes-extensions/<key>/tests/`，不得进本仓库任何目录**，包括 `backend/tests/`——扩展源码虽被 `.gitignore` 挡住，但测试文件写进未忽略目录同样会带出表结构、字段名等商业设计。`.gitignore` 已加 `backend/tests/test_qcode_*.py`、`backend/tests/test_ext_*.py` 三条闸门兜底。
 - **生效**：改完由运维**自行重启 cenkormes API**；扩展侧无需任何动作。
 
 ## 十一、全生命周期（插拔闭环 v2，2026-10-22）

@@ -150,6 +150,14 @@ tmp/
 .center-staging
 # 扩展宿主运行时目录(本地安装的扩展包、授权快照、迁移指纹等运行期产物，勿入库)
 backend/extensions/
+# 商业扩展隔离：backend/extensions/ 是运行期安装的商业扩展（上面已忽略）。商业扩展的
+# 源码与测试统一由**私有仓库** mes-extensions 管理；本仓库（公开）只保留
+# backend/extensions_samples/ 这套脚手架样例。以下规则防止扩展测试经未忽略目录
+# （如 backend/tests/）混进公开仓库——2026-11-06 曾发生 test_qcode_reserved_word.py
+# 带出 qcode 表结构（表名/列名/类名），已从历史移除并重发 v2.2.9。
+backend/tests/test_qcode_*.py
+backend/tests/test_ext_*.py
+backend/tests/*_ext_*.py
 # 备份/临时副本(含带时间戳的 .bak-*)
 *.bak-*
 dist.bak*/
@@ -158,3 +166,5 @@ dist.__bak/
 .dist-build-*/
 refcopy
 docs/pending/process-manufacturing-product-plan.md
+# 发版清单（release-all.sh 生成的文件列表快照，属临时产物）
+.release-manifest.txt
