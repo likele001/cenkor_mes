@@ -61,6 +61,11 @@ RESTART_CMD = os.environ.get("CENKORMES_RESTART_CMD", "")
 # 升级后要一并重启的 celery / beat 单元名。做成可配置是因为守护脚本里的服务名
 # 是全局的：同机再跑一套预发实例时，两个实例若共用同一组名称，升级预发会连带
 # 重启生产 worker（旧 worker 会继续跑旧代码，且打乱在生产跑的任务）。
+#
+# 2026-11-06 起这里只是**兜底**：主路径改为走 app/services/worker_control 的优雅
+# 重启（Redis 信号通道，不需要 systemctl 写权限，也不用 sudo/polkit）。只有当优雅
+# 重启失败时，守护脚本才回退到 `systemctl restart $UNITS`，那才需要 www 的 sudo
+# 白名单（/etc/sudoers.d/cenkormes-services）。
 CELERY_UNITS = os.environ.get("CENKORMES_CELERY_UNITS", "cenkormes-celery cenkormes-beat")
 
 BACKEND_DIR = ROOT / "backend"
@@ -1708,12 +1713,24 @@ def _listener_pid(port: int = BACKEND_PORT) -> int | None:
     return None
 
 
-def _build_restart_script(job_id: int, target_version: str, pid: int | None, py: Path, custom: str) -> str:
+def _build_restart_script(
+    job_id: int,
+    target_version: str,
+    pid: int | None,
+    py: Path,
+    custom: str,
+    units: str = "",
+) -> str:
     """生成重启守护脚本正文（独立会话执行：杀进程 → 重启 → 自验健康 → 落终态）。
 
     脚本**只写终态** ``ok=1`` / ``ok=0``。原因见文件顶部 RESTART_GRACE_SECONDS
     上方注释：回滚后是旧代码读这个结果文件，旧代码只认 ``ok=1``，中间态会被
     判成失败。
+
+    Args:
+        units: 优雅重启失败时才去 ``systemctl restart`` 的兜底单元名（空格分隔）。
+            传空串表示 worker/beat 已由 ``_restart_workers_gracefully`` 换好代码，
+            脚本不再重复重启——重复重启会打断刚起来的 worker。
     """
     log = _log_path(job_id)
     result = _restart_result_path(job_id)
@@ -1727,7 +1744,7 @@ PORT='{BACKEND_PORT}'
 PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
-UNITS='{CELERY_UNITS}'
+UNITS='{units}'
 WAIT='{RESTART_GRACE_SECONDS}'
 STEP='{RESTART_POLL_INTERVAL}'
 export H='{HEALTH_URL}'
@@ -1739,6 +1756,11 @@ say "本脚本 kill 后自验 /api/health，只写终态（ok=1 / ok=0）"
 rm -f '{LOCK_FILE}'
 sleep 2
 
+# UNITS 为空 = worker/beat 已在上游用 Redis 信号优雅重启过，这里不再重复重启
+# （重复 restart 会打断刚起来的 worker，把启动中的任务丢掉）。
+if [ -z "$UNITS" ]; then
+  say "worker/beat 已优雅重启，跳过 systemctl（无需 sudo）"
+fi
 for u in $UNITS; do
   if sudo -n systemctl restart "$u" >/dev/null 2>&1; then
     say "已重启 $u"
@@ -1817,12 +1839,55 @@ if [ "$OK" = "1" ]; then exit 0; else exit 1; fi
 """
 
 
+def _restart_workers_gracefully(job_id: int) -> bool:
+    """升级/回滚重启前，先把 worker 与 beat 换到新代码。
+
+    走项目自带的 Redis 信号通道（``app/services/worker_control``）：worker 收到
+    shutdown 广播后跑完在飞任务退出，beat 收到退出信号后自行退出，两者都由
+    systemd（Restart=always）拉起新进程。**全程不需要 systemctl 写权限，也不依赖
+    sudo / polkit** —— 后台「定时任务」页那两个重启按钮走的就是这条路。
+
+    必须在杀主进程之前调用：此刻本进程还活着、broker 可达，信号才发得出去。
+
+    Returns:
+        True 表示 worker 与 beat 都已完成重启；False 表示至少一个失败，
+        调用方应退回 ``systemctl restart`` 兜底（需要 sudo 白名单）。
+    """
+    try:
+        from app.services import worker_control
+    except Exception as exc:  # noqa: BLE001 - 缺依赖不该阻断升级主流程
+        _log(job_id, f"[警告] 加载 worker_control 失败，退回 systemctl 兜底：{exc}")
+        return False
+
+    all_ok = True
+    for label, fn in (
+        ("Worker", worker_control.request_worker_restart),
+        ("Beat", worker_control.request_beat_restart),
+    ):
+        try:
+            res = fn()
+        except Exception as exc:  # noqa: BLE001
+            _log(job_id, f"[警告] {label} 优雅重启异常：{exc}；退回 systemctl 兜底")
+            all_ok = False
+            continue
+        if res.get("ok"):
+            _log(job_id, f"{label} 已优雅重启（Redis 信号通道，未使用 sudo）")
+        else:
+            _log(job_id, f"[警告] {label} 优雅重启失败：{res.get('error') or res}")
+            all_ok = False
+    return all_ok
+
+
 def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
     """写并启动重启守护脚本（独立会话，不会被本进程退出牵连）。
 
-    脚本负责：清理升级锁 → 重启 celery → 执行自定义重启命令或杀掉旧后端（交给
-    宝塔面板「项目守护进程」拉起）→ 轮询 /api/health 直到版本匹配 → 结果落盘。
+    负责：先优雅重启 worker/beat 换上新代码 → 生成守护脚本（清理升级锁 → 执行
+    自定义重启命令或杀掉旧后端 → 轮询 /api/health 直到版本匹配 → 结果落盘）。
     因为重启必然杀掉本进程，任务最终状态由 reconcile_restarts() 依据结果文件回写。
+
+    注意：脚本杀掉主进程之后**靠谁拉起取决于部署形态**。2026-11-06 实测这台服务器
+    的宝塔没有 Python 项目守护（kill 后无人接管，停机 344 秒），裸装环境则靠
+    systemd 的 Restart=always。见任务 #394。
     """
     pid = _listener_pid()
     py = _venv_python()
@@ -1831,6 +1896,10 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
     script = LOG_DIR / f"restart_{job_id}.sh"
     custom = RESTART_CMD.strip()
     custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
+
+    # 先换 worker/beat 的代码，再动主进程。顺序不能反：主进程一死，Redis 信号
+    # 就没人发了，只能退回需要 sudo 的 systemctl。
+    units = "" if _restart_workers_gracefully(job_id) else CELERY_UNITS
 
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -1841,7 +1910,7 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
         _log(job_id, f"准备重启脚本失败：{exc}")
         return False
 
-    body = _build_restart_script(job_id, target_version, pid, py, custom)
+    body = _build_restart_script(job_id, target_version, pid, py, custom, units)
 
     try:
         script.write_text(body, encoding="utf-8")
@@ -1852,7 +1921,8 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
 
     _log(
         job_id,
-        f"启动重启守护脚本 {script}（{'自定义命令' if custom else '杀进程 + 面板守护拉起'}模式）",
+        f"启动重启守护脚本 {script}（{'自定义命令' if custom else '杀进程 + 面板守护拉起'}模式，"
+        f"{'worker/beat 已优雅重启，脚本不再碰' if not units else 'worker/beat 走 systemctl 兜底'}）",
     )
     try:
         with open(log, "a", encoding="utf-8") as out:
