@@ -2257,6 +2257,7 @@ skuBatch: {
           pending: '排队中',
           running: '迁移中',
           done: '已完成',
+          partial: '部分失败',
           failed: '失败',
         },
       },

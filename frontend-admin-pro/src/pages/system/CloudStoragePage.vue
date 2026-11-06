@@ -364,6 +364,9 @@ const migrationPercent = computed(() => {
 const migrationStatusType = computed<'success' | 'danger' | 'warning' | 'info'>(() => {
   const s = migrationJob.value?.status
   if (s === 'done') return 'success'
+  // partial = 有成功也有失败。刻意用 warning 而不是 success，
+  // 否则看板上一片绿色，运维不会去查那几条失败。
+  if (s === 'partial') return 'warning'
   if (s === 'failed') return 'danger'
   if (s === 'running') return 'warning'
   return 'info'
@@ -371,6 +374,7 @@ const migrationStatusType = computed<'success' | 'danger' | 'warning' | 'info'>(
 const migrationProgressStatus = computed<'success' | 'exception' | 'warning' | ''>(() => {
   const s = migrationJob.value?.status
   if (s === 'done') return 'success'
+  if (s === 'partial') return 'warning'
   if (s === 'failed') return 'exception'
   return ''
 })

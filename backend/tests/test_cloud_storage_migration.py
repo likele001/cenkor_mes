@@ -219,6 +219,102 @@ def test_run_migration_marks_failed_on_degrade(session, test_user, tmp_path, mon
     assert att_fresh.storage_driver == "local"
 
 
+def test_run_migration_marks_partial_when_some_fail(session, test_user, tmp_path, monkeypatch):
+    """有成功也有失败 → partial，不能被 "done" 掩盖。
+
+    原实现是 `done > 0` 就判 done：一批 10 条里 9 条失败也显示「已完成」，
+    运维扫一眼看板就以为迁干净了。迁移属于数据操作，静默吞掉失败不可接受。
+    """
+    att_ok, src, _content = _make_local_attachment(session, test_user, tmp_path)
+    # 第二条：记录在库但源文件已丢失，必然迁移失败
+    att_bad = Attachment(
+        uploader_id=test_user.id,
+        storage_driver="local",
+        storage_key="2026/01/01/missing.txt",
+        original_filename="missing.txt",
+        content_type="text/plain",
+        size=5,
+        sha256="0" * 64,
+    )
+    session.add(att_bad)
+    session.commit()
+
+    cfg_svc.update_credentials(session, "aliyun", CREDS, user_id=test_user.id)
+    session.commit()
+    job = mig.create_migration_job(session, target="aliyun", source="local")
+
+    cloud = FakeCloud(driver="aliyun")
+    monkeypatch.setattr(mig, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        mig, "build_storage", lambda driver=None, cfg=None, db=None: cloud if driver == "aliyun" else src
+    )
+
+    job_id, ok_id, bad_id = job.id, att_ok.id, att_bad.id
+    mig.run_migration(job_id)
+
+    job_fresh = session.get(CloudStorageMigrationJob, job_id)
+    assert job_fresh.status == "partial"
+    assert job_fresh.done == 1 and job_fresh.failed == 1
+    assert job_fresh.error and "失败" in job_fresh.error
+    # 成功的那条已切到云端，失败的那条保持原样（不能因为同批有成功就被顺手改掉）
+    assert session.get(Attachment, ok_id).storage_driver == "aliyun"
+    assert session.get(Attachment, bad_id).storage_driver == "local"
+
+
+def test_run_migration_all_items_failed_marks_failed(session, test_user, tmp_path, monkeypatch):
+    """全部逐条失败 → failed。锁死 done==0 这个分支，避免以后误改成 done。"""
+    att_bad = Attachment(
+        uploader_id=test_user.id,
+        storage_driver="local",
+        storage_key="2026/01/01/missing2.txt",
+        original_filename="missing2.txt",
+        content_type="text/plain",
+        size=5,
+        sha256="0" * 64,
+    )
+    session.add(att_bad)
+    session.commit()
+
+    cfg_svc.update_credentials(session, "aliyun", CREDS, user_id=test_user.id)
+    session.commit()
+    job = mig.create_migration_job(session, target="aliyun", source="local")
+
+    cloud = FakeCloud(driver="aliyun")
+    src = LocalStorage(root=tmp_path / "empty-src")
+    monkeypatch.setattr(mig, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        mig, "build_storage", lambda driver=None, cfg=None, db=None: cloud if driver == "aliyun" else src
+    )
+
+    job_id = job.id
+    mig.run_migration(job_id)
+
+    job_fresh = session.get(CloudStorageMigrationJob, job_id)
+    assert job_fresh.status == "failed"
+    assert job_fresh.done == 0 and job_fresh.failed == 1
+
+
+def test_run_migration_with_no_local_attachments_is_done(session, test_user, tmp_path, monkeypatch):
+    """没有待迁移附件时应判 done（幂等的「无事可做」），不能判 failed 让用户以为出错。"""
+    cfg_svc.update_credentials(session, "aliyun", CREDS, user_id=test_user.id)
+    session.commit()
+    job = mig.create_migration_job(session, target="aliyun", source="local")
+
+    cloud = FakeCloud(driver="aliyun")
+    src = LocalStorage(root=tmp_path / "empty-src")
+    monkeypatch.setattr(mig, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        mig, "build_storage", lambda driver=None, cfg=None, db=None: cloud if driver == "aliyun" else src
+    )
+
+    job_id = job.id
+    mig.run_migration(job_id)
+
+    job_fresh = session.get(CloudStorageMigrationJob, job_id)
+    assert job_fresh.status == "done"
+    assert job_fresh.total == 0
+
+
 # ── API 端点 ──
 
 def test_api_migration_latest_none(session, test_user):
