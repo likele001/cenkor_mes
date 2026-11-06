@@ -362,6 +362,23 @@ def test_win_loss_reason_create(api, crm_user):
     )
 
 
+# ── 空 body：必须是业务参数错误，绝不能 500/501 ──
+
+@pytest.mark.parametrize(
+    "path",
+    ["/quotations", "/contracts", "/sales-targets", "/leads", "/win-loss-reasons", "/campaigns"],
+)
+def test_empty_payload_never_returns_500_or_501(api, crm_user, path):
+    """缺必填参数应给 400 业务提示。
+
+    crud 侧这些参数没有默认值，若 API 层不前置校验就 TypeError -> 500，
+    这正是 `_payload_dict` 修好后暴露出来的下一层问题。
+    """
+    body = api.post(f"{BASE}{path}", headers=_auth(crm_user), json={}).json()
+    assert body.get("code") not in BAD_CODES, f"{path} 空 body 返回 {body.get('code')}: {body}"
+    assert body.get("code") != 200, f"{path} 空 body 不应成功"
+
+
 # ── 静态闸门：防止再次出现「API 取不存在的 crud 函数」 ──
 
 def test_api_only_references_existing_crud_functions():

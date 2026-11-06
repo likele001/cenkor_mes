@@ -743,6 +743,9 @@ def create_lead_api(
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
+    # contact_name 在 crud 侧无默认值，缺参会 TypeError 变 500
+    if not str(data.get("contact_name") or "").strip():
+        raise HTTPException(status_code=400, detail="缺少必填字段 contact_name")
     if data.get("owner_user_id") is None and not crm_has_full_access(user, permission_codes):
         data["owner_user_id"] = user.id
     lead = fn(db, tenant_id=user.tenant_id, **_filter_kwargs(fn, data, drop=("tenant_id",)))
@@ -952,6 +955,9 @@ def create_lead_activity_api(
     if lead is not None and not can_access_lead(db, user, lead, permission_codes):
         raise HTTPException(status_code=403, detail="无权操作该线索")
     data = _payload_dict(payload)
+    for req in ("action_type", "content"):
+        if not str(data.get(req) or "").strip():
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
     # lead_id / tenant_id / created_by 由服务端注入，payload 里带了会与位置参数撞车
     kwargs = _filter_kwargs(
         create_fn, data, drop=("tenant_id", "lead_id", "created_by")
@@ -1429,6 +1435,9 @@ def create_win_loss_reason_api(
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
+    for req in ("type", "category", "code", "name"):
+        if not str(data.get(req) or "").strip():
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
     item = fn(db, tenant_id=user.tenant_id, **_filter_kwargs(fn, data, drop=("tenant_id",)))
     db.commit()
     return ok({"id": getattr(item, "id", None)})
@@ -1519,6 +1528,10 @@ def create_campaign_api(
     if not callable(fn):
         _not_implemented()
     data = _payload_dict(payload)
+    # name / type 在 crud 侧无默认值，缺参会 TypeError 变 500
+    for req in ("name", "type"):
+        if not str(data.get(req) or "").strip():
+            raise HTTPException(status_code=400, detail=f"缺少必填字段 {req}")
     if data.get("owner_user_id") is None and not crm_has_full_access(user, permission_codes):
         data["owner_user_id"] = user.id
     item = fn(db, tenant_id=user.tenant_id, **data)
