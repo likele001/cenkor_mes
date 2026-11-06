@@ -77,23 +77,31 @@ docker compose down                 # 停止（保留数据卷）
 docker compose down -v              # 停止并清空数据卷（谨慎）
 ```
 
-### 1.5 离线安装包（内网 / 无外网部署）
+### 1.5 离线部署包（内网 / 无外网部署）
 
-在能联网且已成功 `docker compose build` 的机器上生成一次离线包：
-
-```bash
-bash docker/scripts/export-images.sh             # 导出全部镜像（含 MySQL/Redis）到 dist-images/
-```
-
-目标机（无外网）导入并启动：
+在已成功 `docker compose build` 的构建机上制作**自包含**离线包：
 
 ```bash
-docker load < dist-images/cenkormes_images_*.tar.gz
-docker compose up -d                             # 无需再联网拉取 / 构建
+bash scripts/make-offline-bundle.sh              # 输出到 ./dist-offline
+bash scripts/make-offline-bundle.sh /data/pkg    # 或指定输出目录
 ```
 
-> 离线包内含 `cenkormes-backend` / `cenkormes-web-admin` / `cenkormes-web-h5` 及
-> `mysql:8.0` / `redis:7-alpine`，覆盖全栈所需镜像。
+产物 `cenkormes-offline-vX.Y.Z-<时间戳>.tar.gz` 内含镜像、compose 文件、`.env` 模板、
+`VERSION` 与 `MANIFEST.txt`、安装脚本和自检脚本，客户机不用再自己凑文件：
+
+```bash
+sha256sum -c cenkormes-offline-vX.Y.Z-*.tar.gz.sha256   # 先校验传输完整性
+tar xzf cenkormes-offline-vX.Y.Z-*.tar.gz
+cd cenkormes-offline-vX.Y.Z-*
+bash install.sh                                          # 一条命令装完
+```
+
+`install.sh` 依次完成：检查 Docker → 导入镜像 → 生成 `.env`（**自动填 48 字节随机
+JWT_SECRET**，避免装完就是弱口令）→ `compose up -d` → 轮询健康 → 跑部署自检。
+宿主机 8000 被占用时用 `APP_PORT=18000 bash install.sh` 换端口。
+
+> 只要镜像、不需要安装流程时，仍可单独用 `bash docker/scripts/export-images.sh`。
+> 但它只导出镜像 tar，配套文件得自己准备——现场很容易漏 `.env` 或用错版本 compose，不推荐。
 
 ### 1.6 多架构构建（linux/amd64 + linux/arm64）
 
@@ -148,6 +156,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 # 生产（建议由 Nginx 反向代理）
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
+> 生产**不要**就这样裸跑：进程退出后没人拉起，在线升级也没有可依赖的自愈机制。
+> 用 §2.5 的 systemd 单元托管。
 
 首次启动自动建表 + 创建默认管理员。注入演示数据（可选）：
 
@@ -214,6 +225,52 @@ systemctl enable --now cenkormes-celery cenkormes-beat
 - Docker 部署若没有 systemd 单元，Beat 卡会显示「未安装」，请把两个进程作为独立服务/容器常驻。
 
 ---
+
+### 2.5 用 systemd 托管后端（生产推荐）
+
+仓库自带主服务单元 `scripts/systemd/cenkormes.service`，与已有的
+`cenkormes-celery.service` / `cenkormes-beat.service` 口径一致：
+
+```bash
+cp scripts/systemd/cenkormes.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now cenkormes
+systemctl status cenkormes
+```
+
+安装前按现场改三处：`WorkingDirectory`、`ExecStart`、`User`；`ExecStart` 里的
+`--port` 必须与 `backend/.env` 的 `APP_PORT` 一致。
+
+> **不要给这个单元加 `PrivateTmp=true` 或 `ProtectSystem=strict`。**
+> 在线升级把重启结论写在 `/tmp/cenkormes-upgrade-restart-{job}.json`，服务重启后
+> 由新进程读回这份文件来判定升级结果。`PrivateTmp` 会给每次启动一个私有 `/tmp`，
+> 重启后**读不到上一轮写的结果文件**，升级任务会一直挂在 `running` 直到超时。
+> 这属于「看起来更安全、实际把功能搞坏」的典型配置。
+
+`Restart=always` + `RestartSec=5` 就是自愈：升级链路 kill 掉旧进程后，systemd 在
+5 秒内拉起新进程，不需要任何人工干预。
+
+### 2.6 部署后自检
+
+任何部署方式（Docker / 裸装 / 宝塔）完成后都跑一次：
+
+```bash
+bash scripts/post-deploy-check.sh
+```
+
+五项检查：服务健康与版本一致性、数据库迁移是否到 head、上传目录可写、
+celery/beat 是否运行、关键配置（`.env` / `JWT_SECRET` / `APP_ENV`）。
+
+输出分 `PASS` / `WARN` / `SKIP` / `FAIL`，**只有 FAIL 让退出码变 1**。容器里没有
+systemctl 时 celery 检查自动 SKIP，不用手工加参数。
+
+解读要点：
+
+- `WARN` 不阻塞部署，但上线前应逐条确认。典型场景是 `APP_ENV=dev`（后端不会校验
+  JWT 密钥强度，异常详情也可能回显给前端）或密钥长度不足 32 位（改 prod 后会直接
+  拒绝启动）。
+- `FAIL 版本不一致` 几乎一定是后端没重启，新代码还没加载。
+- `FAIL 迁移未到 head` 说明该跑 `alembic upgrade head` 了。
 
 ## 3. 一条开发命令（本地）
 
@@ -456,6 +513,8 @@ bash scripts/upgrade.sh --git                  # 开发机：改回 git fetch/ch
 - `node_modules/`、`.git/`
 
 > 脚本**不会重启任何服务**。跑完后需**手动重启后端**（uvicorn / celery）才生效。
+> 重启完跑一次 `bash scripts/post-deploy-check.sh` 确认闭环：版本是否真的换了、
+> 迁移是否到 head、celery 有没有跟着重启，一次全告诉你。
 
 ### 8.3 手动升级步骤（务必按此顺序）
 
