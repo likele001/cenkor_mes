@@ -67,15 +67,25 @@ BACKEND_DIR = ROOT / "backend"
 ENV_FILE = BACKEND_DIR / ".env"
 HEALTH_URL = os.environ.get("CENKORMES_HEALTH_URL", "http://127.0.0.1:8500/api/health")
 BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
-# 2026-11-05 任务 #8 实测推翻了「宝塔自愈要 3m36s」的旧判断：守护脚本是
-# 从 uvicorn 内部 spawn 的子进程且 cwd 指在项目根，宝塔会把它记进
-# /www/server/python_project/vhost/pids/cenkermes.pid；只要脚本还活着，
-# 面板就认为服务在跑、不会拉起 uvicorn。把健康窗口从 180s 加到 420s 反而
-# 让 8500 多停了 2 分钟。因此守护脚本 kill 完立即退出，健康判定改由服务
-# 恢复后的 reconcile_jobs() 实测 /api/health 完成，不再轮询等待。
-# startup 钩子比 uvicorn 开始 accept 连接更早，此时 /api/health 必然探不通。
-# 这段时间内保留 running/restart 等下一次 reconcile，超时才判死，避免误判 + 卡死。
+# 2026-11-05 任务 #8 实测：守护脚本若以项目根为 cwd 长期存活，会被宝塔写进
+# /www/server/python_project/vhost/pids/cenkermes.pid；只要脚本还活着，面板就
+# 认为服务在跑、不拉起 uvicorn（当时把窗口从 180s 加到 420s，反而多停 2 分钟）。
+# 但这个结论只对「脚本留在项目进程树里」成立，别因此得出「脚本不能等健康」。
+#
+# v2.2.6 的判定：脚本照旧自己等健康，但必须满足两个前置条件，缺一不可——
+#   1) start_new_session=True + cwd=/tmp：脚本脱离项目进程树，宝塔看不到它；
+#   2) 只落终态（ok=1 / ok=0），绝不写中间态。
+#
+# 第 2 条是被真机打出来的：回滚会把代码换回旧版本，重启后是【旧代码】在跑
+# reconcile。v2.2.3 及更早的判定是 `if data["ok"] == "1"` 否则一律 failed，
+# 于是 v2.2.5 写的 `ok=pending` 被旧代码判成失败——服务健康、任务记 failed。
+# 任何「中间态约定」在版本错配下都会失效，只有终态能跨版本互认。
+#
+# 恢复后的 reconcile 仍然会实测复核（防御旧脚本残留的结果文件），但不是第一道闸门。
 RESTART_GRACE_SECONDS = 600
+# 守护脚本自验健康的轮询间隔。3s 与 lightmes v2.0.5 一致：服务起来后最多 3s
+# 就能探到，够快；又不会把健康端点打成噪音。
+RESTART_POLL_INTERVAL = 3
 RESTART_RESULT_DIR = Path("/tmp")
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+$")
@@ -1662,6 +1672,27 @@ def _restart_result_path(job_id: int) -> Path:
     return RESTART_RESULT_DIR / f"cenkormes-upgrade-restart-{job_id}.json"
 
 
+def _restart_started_at(job) -> datetime | None:
+    """重启阶段的计时起点：优先取守护脚本的 mtime。
+
+    不直接用 ``job.started_at``：那是任务创建时刻，备份 + 装依赖 + 迁移的
+    耗时会整段吃掉等待窗口，导致重启还没等够就被判死（lightmes 上实测到过
+    「服务 21:59:41 起来、任务 21:59:54 判失败」只差 13 秒的账实不符）。
+    脚本文件是「即将重启」那一刻写下的，更接近真实起点。
+
+    Args:
+        job: 升级任务。
+
+    Returns:
+        计时起点；脚本文件不存在时回退到 ``job.started_at``。
+    """
+    script = LOG_DIR / f"restart_{job.id}.sh"
+    try:
+        return datetime.fromtimestamp(script.stat().st_mtime)
+    except OSError:
+        return job.started_at
+
+
 def _listener_pid(port: int = BACKEND_PORT) -> int | None:
     """监听指定端口的进程 pid。本服务以 www 用户运行，能看自己的进程即可。"""
     try:
@@ -1678,7 +1709,12 @@ def _listener_pid(port: int = BACKEND_PORT) -> int | None:
 
 
 def _build_restart_script(job_id: int, target_version: str, pid: int | None, py: Path, custom: str) -> str:
-    """生成重启守护脚本正文（独立会话执行，负责杀进程/重启/校验/落盘）。"""
+    """生成重启守护脚本正文（独立会话执行：杀进程 → 重启 → 自验健康 → 落终态）。
+
+    脚本**只写终态** ``ok=1`` / ``ok=0``。原因见文件顶部 RESTART_GRACE_SECONDS
+    上方注释：回滚后是旧代码读这个结果文件，旧代码只认 ``ok=1``，中间态会被
+    判成失败。
+    """
     log = _log_path(job_id)
     result = _restart_result_path(job_id)
     custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
@@ -1692,12 +1728,14 @@ PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
 UNITS='{CELERY_UNITS}'
+WAIT='{RESTART_GRACE_SECONDS}'
+STEP='{RESTART_POLL_INTERVAL}'
 export H='{HEALTH_URL}'
 ts() {{ date '+%Y-%m-%d %H:%M:%S'; }}
 say() {{ echo "[$(ts)] $*" >> "$LOG"; }}
 
 say "重启守护脚本启动：旧 pid=${{PID:-无}}，目标版本 $TARGET"
-say "本脚本只 kill + 释放端口，随即退出；健康判定由服务恢复后的 reconcile 实测"
+say "本脚本 kill 后自验 /api/health，只写终态（ok=1 / ok=0）"
 rm -f '{LOCK_FILE}'
 sleep 2
 
@@ -1733,17 +1771,49 @@ else
   say "端口 $PORT 未监听，交由面板守护进程拉起"
 fi
 
-# 绝不在这里轮询等待：脚本作为宝塔按 cwd / 进程树追踪到的子进程，只要存活
-# 就会被写进项目 pid 文件，面板据此认为服务仍在运行而不触发自愈拉起 uvicorn
-# （任务 #8 实测 8500 停服 7 分钟）。kill 完立即退出，让面板尽快接管端口；
-# 服务恢复后 reconcile_jobs() 会实测 /api/health 判定成功或失败。
-say "旧进程已退出、端口已释放；守护脚本退出，健康判定交由 reconcile 实测"
+say "旧进程已处理完；端口 $(ss -lnt 2>/dev/null | grep -q ":$PORT " && echo 仍占用 || echo 已释放)"
+
+# ── 自己验健康，只落终态 ───────────────────────────────────────────────
+# 为什么不写中间态交给上层：回滚会把代码换回旧版本，重启后是【旧代码】在跑
+# reconcile。v2.2.3 及更早只看 ok == "1"，其余一律 failed —— 于是「服务明明
+# 健康、任务却记失败」。脚本只在拿到确定结论时落盘，绝不写 pending 这类
+# 需要上层二次解释的值。
+# 本脚本以 start_new_session + cwd=/tmp 运行，不在项目进程树内，因此「等健康」
+# 不会挡住宝塔自愈（lightmes v2.0.5 同款结构实测回滚停机仅 12.7s）。
+probe() {{
+  # curl 优先（轻量、不启解释器）；curl 缺失或响应不可解析时退化到 venv python
+  local v
+  v=$(curl -fsS --max-time 3 "$H" 2>/dev/null | "$PY" -c 'import json,sys;print(json.load(sys.stdin).get("data",{{}}).get("version",""))' 2>/dev/null)
+  if [ -n "$v" ]; then echo "$v"; return 0; fi
+  "$PY" -c 'import json,os,urllib.request;print(json.load(urllib.request.urlopen(os.environ["H"], timeout=3)).get("data",{{}}).get("version",""))' 2>/dev/null
+}}
+
+OK=0
+ACTUAL=''
+START=$(date +%s)
+DEADLINE=$((START + WAIT))
+while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+  ACTUAL=$(probe)
+  if [ "$ACTUAL" = "$TARGET" ]; then OK=1; break; fi
+  sleep "$STEP"
+done
+WAITED=$(( $(date +%s) - START ))
+
+if [ "$OK" = "1" ]; then
+  say "健康校验通过：实测版本 $ACTUAL，等待 ${{WAITED}}s"
+else
+  say "[错误] 等满 ${{WAIT}}s 仍未探到目标版本 $TARGET（最后实测：${{ACTUAL:-无响应}}）"
+fi
+
 {{
-  echo "ok=pending"
-  echo "version="
+  echo "ok=$OK"
+  echo "target=$TARGET"
+  echo "version=$ACTUAL"
+  echo "waited=$WAITED"
   echo "finished_at=$(ts)"
 }} > "$RESULT"
-exit 0
+
+if [ "$OK" = "1" ]; then exit 0; else exit 1; fi
 """
 
 
@@ -1831,10 +1901,14 @@ def _reconcile_restart_jobs(db) -> None:
     ).scalars().all()
     for job in rows:
         data = _read_restart_result(_restart_result_path(job.id))
+        # 计时起点取守护脚本 mtime，不取任务创建时刻：否则备份 + 装依赖 + 迁移的
+        # 耗时会吃掉等待窗口，任务在重启还没等够时就被判死。
+        started = _restart_started_at(job)
         if data is None:
-            # 重启阶段最多几分钟；超过 15 分钟仍无结果，视为守护脚本异常，置失败解锁
-            started = job.started_at
-            if started and (datetime.now() - started).total_seconds() > 900:
+            # 结果文件都没落盘：脚本可能没起来或中途被杀。给足宽限再判死。
+            if started and (
+                datetime.now() - started
+            ).total_seconds() > RESTART_GRACE_SECONDS + 300:
                 job.status = "failed"
                 job.stage = "done"
                 job.error = "重启阶段超时（未收到守护脚本结果），请检查后端是否已启动，必要时执行回滚"
@@ -1854,9 +1928,10 @@ def _reconcile_restart_jobs(db) -> None:
             job.error = None
             _log(job.id, f"守护脚本回报：健康校验通过，当前版本 {actual}")
         else:
-            # 守护脚本的窗口可能不够（面板自愈偶发 >3min），结果文件是在它放弃的
-            # 那一刻写的；这里通常更晚（新进程 startup 钩子），实测一次再说。
-            # 只在版本精确匹配时纠正，避免把「服务起来了但代码没换」误判为成功。
+            # ok=0（脚本等满窗口放弃）或旧脚本残留的中间态（v2.2.5 的 pending）。
+            # 脚本放弃那一刻写的结果，本函数通常更晚才跑到（新进程 startup 钩子），
+            # 所以再实测一次；但只在版本精确匹配时纠正，避免把「服务起来了但代码
+            # 没换」误判为成功。
             live = _probe_health()
             live_version = (live or {}).get("version")
             if live_version == job.to_version:
@@ -1865,11 +1940,11 @@ def _reconcile_restart_jobs(db) -> None:
                 job.error = None
                 _log(
                     job.id,
-                    f"守护脚本未做健康判定（回报 {data.get('ok') or 'unknown'}），"
-                    f"复核 /api/health 实测 {live_version}，判定为成功",
+                    f"守护脚本回报 {data.get('ok') or 'unknown'}，复核 /api/health "
+                    f"实测 {live_version}，与目标版本一致，判定为成功",
                 )
-            elif live is None and job.started_at and (
-                datetime.now() - job.started_at
+            elif live is None and started and (
+                datetime.now() - started
             ).total_seconds() < RESTART_GRACE_SECONDS:
                 # 常见于服务刚被面板拉起、startup 钩子先跑完但端口还没对外服务。
                 # 保留 running/restart，等任务列表接口或后续 reconcile 再判定。
