@@ -228,5 +228,10 @@
     "version": "v2.2.8",
     "release_date": "2026-11-06",
     "description": "修复 Beat 退出信号因 TTL 过期丢失（后台与升级均无法远程重启 Beat）；升级流程复用 worker_control 优雅重启，不再依赖 sudo"
+  },
+  {
+    "version": "v2.2.9",
+    "release_date": "2026-11-06",
+    "description": "修复扩展迁移成功后 broken 状态不恢复（health=ok 但 status 仍显示损坏）；补 qcode 保留字回归测试"
   }
 ]
