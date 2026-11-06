@@ -253,5 +253,10 @@
     "version": "v2.2.13",
     "release_date": "2026-11-06",
     "description": "补齐 CRM 写端点的必填参数校验：线索创建（contact_name）、线索跟进（action_type/content）、胜负原因（type/category/code/name）、市场活动（name/type）在 crud 侧均无默认值，缺参时此前以 TypeError 冒成 500，现统一返回 400 业务提示。新增 6 项空 body 参数化回归，守住「缺参数不是服务器错误」这条线。"
+  },
+  {
+    "version": "v2.2.14",
+    "release_date": "2026-11-06",
+    "description": "修复升级任务被误判为失败：服务已恢复到目标版本，任务却永久挂在 failed，诱导用户去点回滚。reconcile 新增复核步骤——对「重启阶段探不到健康」而被判死的任务，若本地 VERSION 已等于目标版本且 /api/health 实测健康、版本一致，改判为 success（回滚任务改判 rolled_back），原判原因保留在 error 字段供审计。仅复核 24 小时内、stage=done、原因属重启类的任务，非重启类失败（如依赖安装失败）不受影响。实测场景：2026-11-06 一次同版本升级停机 684 秒后服务自行恢复，reconcile 恰在端口刚绑定瞬间探测，拿到无响应即判死。新增 10 项单测。"
   }
 ]

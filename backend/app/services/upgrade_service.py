@@ -43,7 +43,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -2140,12 +2140,76 @@ def _reap_zombie_jobs(db) -> None:
     _release_stale_lock()
 
 
+REVIVE_WINDOW_HOURS = int(os.environ.get("CENKORMES_REVIVE_WINDOW_HOURS", "24"))
+# 「重启阶段探不到健康」的两类判死原因：脚本等满窗口放弃，或结果文件始终没落盘。
+_REVIVE_ERROR_MARKERS = ("重启后健康校验失败", "重启阶段超时")
+
+
+def _revive_false_restart_failures(db) -> None:
+    """把「重启瞬间探不到健康而被判死」的任务改回成功。
+
+    背景（2026-11-06 实测，一次同版本升级停机 684 秒）：升级流程 kill 后，
+    守护脚本会等 RESTART_GRACE_SECONDS=600 秒。这段窗口里脚本还活着，且命令
+    行带项目绝对路径，会被面板按路径匹配误认成本项目进程写进 pidfile，真正的
+    服务因此迟迟不被拉起；等脚本放弃、写 ok=0 退出，reconcile 往往正好在服务
+    刚绑住端口那一瞬去探 /api/health，拿到「无响应」就判 failed。而
+    ``_reconcile_restart_jobs()`` 只扫 ``status == "running"`` 的任务，一旦落成
+    failed 就再也不会被复查 —— 服务明明已恢复到目标版本，界面却挂着「升级
+    失败」，反过来诱导用户去点回滚。
+
+    三条同时成立才改判，避免把真实失败洗白：
+      1. 任务终态 failed，且原因属于「重启阶段探不到健康」两类之一；
+      2. 本地 VERSION 已等于任务的目标版本（代码确实换过去了）；
+      3. 实测 /api/health 健康，且回报版本与目标版本一致。
+
+    已知局限：同版本升级（from_version == to_version）时条件 2 天然成立，
+    此时靠条件 1 把范围收窄到「重启类失败」—— 代码没换成功会在更早阶段失败，
+    走不到这里。
+
+    幂等：改判后 status 不再是 failed，重复调用不会命中。
+    """
+    cutoff = datetime.now() - timedelta(hours=REVIVE_WINDOW_HOURS)
+    rows = db.execute(
+        select(UpgradeJob).where(
+            UpgradeJob.status == "failed",
+            UpgradeJob.stage == "done",
+            UpgradeJob.finished_at.is_not(None),
+            UpgradeJob.finished_at >= cutoff,
+        )
+    ).scalars().all()
+    for job in rows:
+        reason = job.error or ""
+        if not any(marker in reason for marker in _REVIVE_ERROR_MARKERS):
+            continue
+        target = job.to_version
+        if not target or read_local_version() != target:
+            continue
+        live = _probe_health()
+        live_version = (live or {}).get("version")
+        if not live or live.get("status") != "ok" or live_version != target:
+            continue
+        job.status = "rolled_back" if job.action == "rollback" else "success"
+        # 原判原因保留在 error 里，便于事后审计「为什么曾经判过失败」
+        job.error = (
+            f"[已复核] 原判失败：{reason}；"
+            f"{datetime.now():%Y-%m-%d %H:%M:%S} 复核 /api/health 实测 {live_version}，"
+            f"与目标一致，改判为成功"
+        )
+        db.add(job)
+        db.commit()
+        _log(
+            job.id,
+            f"误判复核：实际运行 {live_version} 与目标一致，任务由 failed 改判为 {job.status}",
+        )
+
+
 def reconcile_jobs(db) -> None:
-    """任务状态自愈入口：重启阶段收尾 + 僵尸任务收尸。
+    """任务状态自愈入口：重启阶段收尾 + 误判复核 + 僵尸任务收尸。
 
     幂等，任务接口、详情接口与服务启动钩子都可以反复调用。
     """
     _reconcile_restart_jobs(db)
+    _revive_false_restart_failures(db)
     _reap_zombie_jobs(db)
 
 
