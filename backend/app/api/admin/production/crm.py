@@ -1119,6 +1119,12 @@ def update_quotation_api(
     if not can_access_quotation(db, user, q, permission_codes):
         raise HTTPException(status_code=403, detail="无权修改该报价单")
     data = _payload_dict(payload)
+    # 与创建接口对齐：前端可能用 items 命名，crud 参数名是 items_data；
+    # 明细里的日期是 ISO 字符串，需按注解转成 date，否则写库报类型错。
+    items = data.pop("items", None) or data.pop("items_data", None)
+    if items is not None:
+        data["items_data"] = _coerce_rows(items, keys=("delivery_date",))
+    data = _filter_kwargs(upd_fn, data, drop=("tenant_id",))
     q = upd_fn(db, q, **data)
     db.commit()
     return ok({"id": getattr(q, "id", quotation_id)})

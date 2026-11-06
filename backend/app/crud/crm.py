@@ -1,7 +1,7 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -962,6 +962,59 @@ def _score_to_grade(score) -> str:
 # ============================
 # Quotation (报价单)
 # ============================
+def _dec(value) -> Decimal:
+    """把任意输入（None / str / float / Decimal）安全转成 Decimal。"""
+    if value is None:
+        return Decimal("0")
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
+
+
+def _compute_quotation_amounts(
+    items_data: list[dict] | None,
+    header_discount_rate=Decimal("0"),
+    header_tax_rate=Decimal("0"),
+) -> tuple[Decimal, Decimal, Decimal]:
+    """报价单金额核算的**唯一实现**（创建与更新共用，避免两条路径算出两个结果）。
+
+    口径（2026-11-06 修订：行税率参与合计）：
+      小计      = Σ 数量 × 单价                        —— 行折扣前的合计，表头展示用
+      行净额    = 数量 × 单价 × (1 − 行折扣率)
+      单据折扣  = (小计 − Σ行折扣额) × 单据折扣率
+      折后净额  = 小计 − Σ行折扣额 − 单据折扣
+      行税额    = 行净额 × (1 − 单据折扣率) × 行税率
+      税额      = Σ 行税额
+      含税合计  = 折后净额 + 税额
+
+    行税率未填（None/0）时回退单据级税率，因此「只填单据税率」的旧用法结果不变。
+    旧实现用单据级税率一刀切算税额，混合税率单据会多算税；同时旧实现算净额时
+    漏掉了行折扣，导致表头合计与明细行合计对不上，此处一并修正。
+
+    返回：(小计, 税额, 含税合计)
+    """
+    hdr_disc = _dec(header_discount_rate)
+    hdr_tax = _dec(header_tax_rate)
+    subtotal = Decimal("0")
+    line_net_total = Decimal("0")
+    tax_total = Decimal("0")
+    for it in items_data or []:
+        qty = _dec(it.get("quantity"))
+        price = _dec(it.get("unit_price"))
+        disc = _dec(it.get("discount_rate"))
+        gross = qty * price
+        line_net = gross * (Decimal("1") - disc)
+        subtotal += gross
+        line_net_total += line_net
+        line_tax_rate = _dec(it.get("tax_rate"))
+        if line_tax_rate <= 0:
+            line_tax_rate = hdr_tax
+        tax_total += line_net * (Decimal("1") - hdr_disc) * line_tax_rate
+    net = line_net_total * (Decimal("1") - hdr_disc)
+    return subtotal, tax_total, net + tax_total
+
+
 def create_quotation_with_items(
     db: Session,
     tenant_id: int,
@@ -985,17 +1038,9 @@ def create_quotation_with_items(
     if not items_data:
         raise ValueError("报价单至少需要一个商品行")
 
-    subtotal = Decimal("0")
-    for it in items_data:
-        qty = Decimal(str(it.get("quantity", 0)))
-        price = Decimal(str(it.get("unit_price", 0)))
-        line_amount = qty * price
-        subtotal += line_amount
-
-    discount_amount = subtotal * (Decimal(str(discount_rate)) or Decimal("0"))
-    net = subtotal - discount_amount
-    tax_amount = net * (Decimal(str(tax_rate)) or Decimal("0"))
-    total_amount = net + tax_amount
+    subtotal, tax_amount, total_amount = _compute_quotation_amounts(
+        items_data, discount_rate, tax_rate
+    )
 
     quotation = CrmQuotation(
         tenant_id=tenant_id,
@@ -1113,14 +1158,12 @@ def update_quotation(db: Session, quotation, items_data: list[dict] | None = Non
                 CrmQuotationItem.quotation_id == quotation.id,
             )
         )
-        subtotal = Decimal("0")
         for it in items_data:
-            qty = Decimal(str(it.get("quantity", 0)))
-            price = Decimal(str(it.get("unit_price", 0)))
-            disc = Decimal(str(it.get("discount_rate", 0) or 0))
-            tr = Decimal(str(it.get("tax_rate", 0) or 0))
+            qty = _dec(it.get("quantity"))
+            price = _dec(it.get("unit_price"))
+            disc = _dec(it.get("discount_rate"))
+            tr = _dec(it.get("tax_rate"))
             amount = qty * price * (Decimal("1") - disc)
-            subtotal += qty * price
             db.add(
                 CrmQuotationItem(
                     tenant_id=quotation.tenant_id,
@@ -1138,12 +1181,14 @@ def update_quotation(db: Session, quotation, items_data: list[dict] | None = Non
                     remark=it.get("remark"),
                 )
             )
-        discount_amount = subtotal * (Decimal(str(getattr(quotation, "discount_rate", 0))) or Decimal("0"))
-        net = subtotal - discount_amount
-        tax_amount = net * (Decimal(str(getattr(quotation, "tax_rate", 0))) or Decimal("0"))
+        subtotal, tax_amount, total_amount = _compute_quotation_amounts(
+            items_data,
+            getattr(quotation, "discount_rate", 0),
+            getattr(quotation, "tax_rate", 0),
+        )
         quotation.subtotal = subtotal
         quotation.tax_amount = tax_amount
-        quotation.total_amount = net + tax_amount
+        quotation.total_amount = total_amount
     db.flush()
     return quotation
 

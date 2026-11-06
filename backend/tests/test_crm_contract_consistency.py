@@ -468,3 +468,53 @@ def test_quotation_list_tolerates_missing_customer(api, session, crm_user, singl
     row = next(r for r in (data.get("items") or []) if r.get("code") == "Q-ORPHAN-1")
     assert row.get("customer_id") == 999999
     assert not row.get("customer_name"), "查不到客户时不应编造客户名"
+
+
+# ── 报价单更新：带 items 要能重算金额（2026-11-06 补）──
+#
+# 旧实现是 upd_fn(db, q, **data) 直接把前端 payload 展开：
+# 前端若用 items 命名，与 crud 的 items_data 参数名不匹配 → TypeError → 500，
+# 于是也无法通过接口触发金额重算。现与创建接口对齐（兼容 items / items_data，
+# 并按注解把 delivery_date 的 ISO 字符串转成 date）。
+
+def test_quotation_update_accepts_items_and_recomputes(api, crm_user, crm_customer):
+    h = _auth(crm_user)
+    created = _expect_ok(
+        api.post(
+            f"{BASE}/quotations",
+            headers=h,
+            json={
+                "customer_id": crm_customer.id,
+                "title": "更新重算报价",
+                "tax_rate": 0.13,
+                "items": [
+                    {"product_name": "原始行", "quantity": 1, "unit_price": 1000, "tax_rate": 0.13},
+                ],
+            },
+        ),
+        "创建报价单",
+    )
+    qid = created["id"]
+
+    _expect_ok(
+        api.put(
+            f"{BASE}/quotations/{qid}",
+            headers=h,
+            json={
+                "items": [
+                    {
+                        "product_name": "改造行",
+                        "quantity": 1,
+                        "unit_price": 1000,
+                        "tax_rate": 0.06,
+                        "delivery_date": "2027-01-01",
+                    },
+                ]
+            },
+        ),
+        "更新报价单（带 items）",
+    )
+
+    detail = _expect_ok(api.get(f"{BASE}/quotations/{qid}", headers=h), "报价单详情")
+    assert float(detail.get("tax_amount") or 0) == 60.0, "13% 改 6% 后税额必须重算为 60"
+    assert float(detail.get("total_amount") or 0) == 1060.0
