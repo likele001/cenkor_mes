@@ -49,7 +49,11 @@ class CloudStorageMigrationJob(Base):
     done: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending", server_default="pending", comment="pending/running/done/failed"
+        String(20),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+        comment="pending/running/done/partial/failed；partial = 有成功也有失败",
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

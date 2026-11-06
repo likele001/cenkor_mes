@@ -165,7 +165,15 @@ def run_migration(job_id: int) -> None:
             job.done, job.failed = done, failed
             db.commit()  # 每条提交：进度即时可见，失败项不阻断整体
 
-        job.status = "done" if (done > 0 or not ids) else "failed"
+        # 状态必须能区分「全成功」与「部分失败」。
+        # 原实现是 `done > 0` 就判 done，于是一批 10 条里 9 条失败也显示「已完成」，
+        # 运维扫一眼看板就以为迁移干净了。迁移属于数据操作，静默吞掉失败是不可接受的。
+        if not ids or failed == 0:
+            job.status = "done"
+        elif done == 0:
+            job.status = "failed"
+        else:
+            job.status = "partial"
         if last_err and failed:
             job.error = f"{failed} 条失败，末条原因：{last_err}"
         job.finished_at = datetime.now()
