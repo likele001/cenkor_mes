@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db
 from app.core.response import ok
-from app.crud.system_version import get_latest_version, list_versions
+from app.crud.system_version import get_current_version, list_versions
 from app.models.user import User
 from app.schemas.system_version import SystemVersionOut
 
@@ -19,8 +19,8 @@ def get_version_info(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """获取当前系统版本信息。"""
-    latest = get_latest_version(db)
+    """获取当前系统版本信息（以运行的 VERSION 文件为准）。"""
+    latest = get_current_version(db)
     info = None
     if latest:
         info = SystemVersionOut.model_validate(latest).model_dump()
