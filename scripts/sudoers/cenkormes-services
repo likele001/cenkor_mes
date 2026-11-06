@@ -1,0 +1,26 @@
+# CenkorMES 在线升级：worker/beat 的 systemctl 兜底授权
+#
+# ⚠️ 主路径已经不需要这个文件。升级/回滚时 upgrade_service 会先调
+#    app/services/worker_control 的 request_worker_restart / request_beat_restart，
+#    走 Redis 信号通道让进程自行退出、再由 systemd（Restart=always）拉起新代码。
+#    全程不需要 systemctl 写权限，也不依赖 sudo / polkit —— 后台「定时任务」页
+#    那两个重启按钮走的正是这条路（见 worker_control.py 模块 docstring）。
+#
+# 保留本文件是为了兜底：worker 不在线、broker 不可达等异常下优雅重启会失败，
+# 此时守护脚本回退到 `systemctl restart $UNITS`，那一步需要这份授权。
+#
+# 为什么值得留着——2026-11-06 真机实测的教训：授权缺失时升级日志里只会出现一行
+# 「cenkormes-celery 未能自动重启（需给 www 用户 sudo 白名单）」，很容易被忽略，
+# 而 celery 就这样连续跑了 23 小时旧代码（代码已覆盖成新版本，worker 内存里仍是
+# 旧模块）。MES 的工资计算、通知推送会继续按旧逻辑执行。
+#
+# 约束（刻意写窄，不给 shell、不给通配 unit、不给 start/stop/enable）：
+#   - 只有这两条 systemctl restart，参数必须完全一致；
+#   - 目标固定为 root，NOPASSWD 便于无人值守执行；
+#   - 用 `sudo -n` 才生效，避免任务线程在无 tty 时卡在密码提示上；
+#   - Defaults:www !requiretty 已在 /etc/sudoers.d/lightmes-services 设置，
+#     此处不重复声明，避免 sudo 报 duplicate Defaults 警告。
+#
+# 改动此文件后必须执行：visudo -cf /etc/sudoers.d/cenkormes-services
+
+www ALL=(root) NOPASSWD: /usr/bin/systemctl restart cenkormes-celery, /usr/bin/systemctl restart cenkormes-beat

@@ -315,6 +315,8 @@ def test_guard_spawns_outside_project_root(monkeypatch, tmp_path):
     monkeypatch.setattr(us, "_venv_python", lambda: Path("/usr/bin/python3"))
     monkeypatch.setattr(us, "_log", lambda *a, **k: None)
     monkeypatch.setattr(us, "RESTART_CMD", "")
+    # 不碰真实 Redis：优雅重启另有专项用例覆盖
+    monkeypatch.setattr(us, "_restart_workers_gracefully", lambda _jid: False)
 
     class _FakePopen:
         def __init__(self, args, **kwargs):
@@ -326,6 +328,115 @@ def test_guard_spawns_outside_project_root(monkeypatch, tmp_path):
 
     assert captured["cwd"] == "/tmp"
     assert captured["start_new_session"] is True
+
+
+# ── worker/beat 换代码：优先优雅重启，systemctl 只做兜底 ─────────────────
+#
+# 背景（2026-11-06 真机验证）：升级日志里一直有「celery 未能自动重启（需给 www
+# 用户 sudo 白名单）」的警告，实测 celery 连续跑 23 小时没换代码。而项目自带的
+# worker_control 早就实现了 Redis 信号通道，后台「定时任务」页那两个重启按钮走
+# 的就是它——不需要 sudo、不需要 polkit，还不会打断在飞任务。升级流程原先自己
+# 另写了一套 systemctl，属于两套机制并存，现在统一到优雅重启，systemctl 只兜底。
+
+
+def test_graceful_restart_calls_worker_control(monkeypatch):
+    """优雅重启走 worker_control 的 Redis 信号通道，按 worker → beat 顺序。"""
+    from app.services import worker_control
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        worker_control,
+        "request_worker_restart",
+        lambda: calls.append("worker") or {"ok": True},
+    )
+    monkeypatch.setattr(
+        worker_control,
+        "request_beat_restart",
+        lambda: calls.append("beat") or {"ok": True},
+    )
+
+    assert us._restart_workers_gracefully(1) is True
+    assert calls == ["worker", "beat"]
+
+
+def test_graceful_restart_reports_failure(monkeypatch):
+    """任一组件失败都要返回 False，让调用方退回 systemctl 兜底。"""
+    from app.services import worker_control
+
+    monkeypatch.setattr(worker_control, "request_worker_restart", lambda: {"ok": True})
+    monkeypatch.setattr(
+        worker_control,
+        "request_beat_restart",
+        lambda: {"ok": False, "error": "beat 未运行"},
+    )
+
+    assert us._restart_workers_gracefully(1) is False
+
+
+def test_graceful_restart_isolates_component_exception(monkeypatch):
+    """单个组件抛异常不能阻断升级主流程，其余组件照常尝试。"""
+    from app.services import worker_control
+
+    def _boom():
+        raise RuntimeError("broker 掉线")
+
+    calls: list[str] = []
+    monkeypatch.setattr(worker_control, "request_worker_restart", _boom)
+    monkeypatch.setattr(
+        worker_control,
+        "request_beat_restart",
+        lambda: calls.append("beat") or {"ok": True},
+    )
+
+    assert us._restart_workers_gracefully(1) is False
+    assert calls == ["beat"], "worker 抛异常后 beat 仍应被尝试"
+
+
+def test_guard_skips_systemctl_when_graceful_restart_succeeds(monkeypatch, tmp_path):
+    """优雅重启成功 → 脚本里 UNITS 留空，不重复 systemctl restart。
+
+    重复 restart 会打断刚起来的 worker，把正在跑的任务丢掉。
+    """
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(us, "_listener_pid", lambda: 12345)
+    monkeypatch.setattr(us, "_venv_python", lambda: Path("/usr/bin/python3"))
+    monkeypatch.setattr(us, "_log", lambda *a, **k: None)
+    monkeypatch.setattr(us, "RESTART_CMD", "")
+    monkeypatch.setattr(us, "_restart_workers_gracefully", lambda _jid: True)
+
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            pass
+
+    monkeypatch.setattr(us.subprocess, "Popen", _FakePopen)
+    us._spawn_restart_guard(1, "v2.2.8")
+
+    body = (tmp_path / "restart_1.sh").read_text(encoding="utf-8")
+    assert "UNITS=''" in body
+    assert "跳过 systemctl" in body
+
+
+def test_guard_falls_back_to_units_when_graceful_restart_fails(monkeypatch, tmp_path):
+    """优雅重启失败 → 脚本仍带 CELERY_UNITS，走 systemctl 兜底（需要 sudo 白名单）。"""
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(us, "_listener_pid", lambda: 12345)
+    monkeypatch.setattr(us, "_venv_python", lambda: Path("/usr/bin/python3"))
+    monkeypatch.setattr(us, "_log", lambda *a, **k: None)
+    monkeypatch.setattr(us, "RESTART_CMD", "")
+    monkeypatch.setattr(us, "_restart_workers_gracefully", lambda _jid: False)
+    monkeypatch.setattr(us, "CELERY_UNITS", "cenkormes-celery cenkormes-beat")
+
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            pass
+
+    monkeypatch.setattr(us.subprocess, "Popen", _FakePopen)
+    us._spawn_restart_guard(1, "v2.2.8")
+
+    body = (tmp_path / "restart_1.sh").read_text(encoding="utf-8")
+    assert "UNITS='cenkormes-celery cenkormes-beat'" in body
+    # 兜底路径必须真的带上单元名，不能留空——留空等于既不优雅重启也不 systemctl
+    assert "UNITS=''" not in body
 
 
 # ── P0：reconcile 实测复核 ──────────────────────────────────────────────
