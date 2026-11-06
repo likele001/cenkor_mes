@@ -1,0 +1,64 @@
+# CenkorMES 主服务（后端 API）systemd 单元
+#
+# 适用场景：客户本地裸装（已有 MySQL / Redis，不走 Docker）。
+# 若用 docker compose 部署，不需要本文件——compose 自己托管 backend 容器。
+#
+# 安装：
+#   cp scripts/systemd/cenkormes.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now cenkormes
+#
+# 装完先跑一次部署自检：
+#   bash scripts/post-deploy-check.sh
+#
+# ⚠ 安装前必须按现场改这三处：WorkingDirectory / ExecStart / User
+#   以及 ExecStart 里的 --port，必须与 backend/.env 的 APP_PORT 一致。
+#
+# ── 为什么不开 PrivateTmp / ProtectSystem ────────────────────────────────
+# 在线升级把重启结论写进 /tmp/cenkormes-upgrade-restart-{job}.json，服务重启后
+# 由新进程读回这份文件来判定升级结果。PrivateTmp 会给每次启动一个私有 /tmp，
+# 重启后**读不到上一轮写的结果文件**，升级任务会永远停在 running 直到超时。
+# ProtectSystem=strict 同理会挡住升级写入项目目录。
+# 这两项属于「看起来更安全、实际上把功能搞坏」的典型，别顺手加。
+
+[Unit]
+Description=CenkorMES Backend API
+Documentation=https://github.com/likele001/cenkor_mes
+After=network-online.target
+Wants=network-online.target
+# 若 MySQL / Redis 也在本机，可取消下面两行注释让启动顺序更稳
+# After=mysqld.service redis.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/cenkormes/backend
+Environment=PYTHONPATH=/www/wwwroot/cenkormes/backend
+Environment=PYTHONUNBUFFERED=1
+Environment=APP_ENV=prod
+# 单 worker 是刻意选择：SQLAlchemy 是 sync 会话，多 worker 会放大连接数且
+# 让「升级后重启」的 pid 识别变复杂。并发压力交给 Nginx 前置 + 队列异步化。
+# 端口必须与 backend/.env 的 APP_PORT 一致。
+ExecStart=/www/server/pyporject_evn/cenkormes/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8500 \
+    --proxy-headers \
+    --forwarded-allow-ips=127.0.0.1
+
+# 升级链路会用 kill -TERM 停旧进程，靠这里拉起新进程。
+# 这就是「自愈」：等价于宝塔的项目守护，RestartSec 决定停服时长的下限。
+Restart=always
+RestartSec=5
+# uvicorn 收到 SIGTERM 会拒绝新连接并等在途请求结束，留 30s 足够
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# 只做不会影响功能的最小加固
+NoNewPrivileges=true
+# 日志同时进 journald 与文件：journalctl -u cenkormes -f 看实时
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
