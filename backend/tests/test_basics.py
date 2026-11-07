@@ -291,8 +291,10 @@ def test_downtime_duration_computed_and_bounds(session, equipment):
         "equipment_id": equipment.id, "started_at": start.isoformat(),
     })
     assert o3.status == "open" and o3.duration_minutes is None
-    c.close_downtime(session, o3)
-    assert o3.status == "closed" and o3.duration_minutes > 0
+    # 显式传 ended_at：UTC runner 的 datetime.now() 可能早于上面硬编码的 08:00，
+    # 走 close_downtime 默认的 _now() 会算出负时长并抛 BasicStateError（CI 红叉根因）。
+    c.close_downtime(session, o3, ended_at=(start + timedelta(minutes=30)).isoformat())
+    assert o3.status == "closed" and o3.duration_minutes == 30
 
 
 # ── 供应商评分 ──
