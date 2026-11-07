@@ -225,7 +225,9 @@ def save_groups(
     if len({g["code"] for g in items}) != len(items):
         raise HTTPException(status_code=400, detail="群组编码重复")
     saved = save_feishu_settings(db, {"groups": items})
-    return ok({"items": [_normalize_group(g) for g in (saved.get("groups") or [])]})
+    out = [_normalize_group(g) for g in (saved.get("groups") or [])]
+    db.commit()
+    return ok({"items": out})
 
 
 @router.get("/rules")
@@ -346,6 +348,7 @@ def save_alert_recipients(
     rule["targets"] = others + [f"user:{uid}" for uid in ids]
     rules[ALERT_EVENT_CODE] = rule
     save_feishu_settings(db, {"rules": rules})
+    db.commit()
     return ok({"user_ids": ids})
 
 
@@ -363,6 +366,7 @@ def all_bindable_users(db: Session = Depends(get_db), user: User = Depends(get_c
 @router.post("/run-migration")
 def migrate(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     raw = run_migration(db)
+    db.commit()  # 迁移内部同样只有 flush，不提交等于白跑
     results = raw.get("result") or {}
     migrated = sum(1 for v in results.values() if str(v).startswith(("migrated", "patched")))
     return ok({

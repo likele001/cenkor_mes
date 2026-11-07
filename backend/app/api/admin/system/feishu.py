@@ -142,7 +142,10 @@ def write_settings(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return ok(save_feishu_settings(db, payload.model_dump()))
+    saved = save_feishu_settings(db, payload.model_dump())
+    # flush 不等于落盘：get_db() 只 close 不 commit，少了这行就是「保存成功、刷新还原」
+    db.commit()
+    return ok(saved)
 
 
 @router.post("/feishu/test-connection")
@@ -293,6 +296,7 @@ def retry_push_log(
     row.retry_count = (row.retry_count or 0) + 1
     db.flush()
     enqueue_feishu_push(db, row.id)
+    db.commit()
     return ok({"id": row.id, "status": row.status})
 
 
@@ -330,7 +334,9 @@ def update_user_binding(
     target.feishu_user_id = (payload.feishu_user_id or "").strip() or None
     target.feishu_bound_at = datetime.utcnow() if open_id else None
     db.flush()
-    return ok(_user_out(target))
+    out = _user_out(target)  # 先序列化再提交，避开 expire_on_commit
+    db.commit()
+    return ok(out)
 
 
 @router.post("/feishu/user-bindings/batch-match-mobile")
@@ -365,6 +371,7 @@ def batch_match_mobile(
                 u.feishu_bound_at = datetime.utcnow()
                 matched += 1
     db.flush()
+    db.commit()
     return ok({"matched": matched, "total": len(mobiles), "refreshed": refresh_all})
 
 
@@ -399,14 +406,16 @@ def update_department_binding(
     dept.feishu_open_department_id = (payload.feishu_open_department_id or "").strip() or None
     dept.feishu_chat_group_code = (payload.feishu_chat_group_code or "").strip() or None
     db.flush()
-    return ok({
+    out = {
         "id": dept.id,
         "code": dept.code,
         "name": dept.name,
         "parent_id": dept.parent_id,
         "feishu_open_department_id": dept.feishu_open_department_id,
         "feishu_chat_group_code": dept.feishu_chat_group_code,
-    })
+    }
+    db.commit()
+    return ok(out)
 
 
 def _describe_targets(db: Session, cfg: dict, targets: list[dict]) -> list[dict]:
