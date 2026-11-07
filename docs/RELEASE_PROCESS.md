@@ -261,7 +261,8 @@ find "$ROOTDIR" \( -name ".env" -o -name ".env.*" \) -delete
 | `CENKORMES_REPO` | `likele001/cenkor_mes` | 私有化部署指向自己的仓库 / 私有镜像 |
 | `CENKORMES_GITHUB_API` | `https://api.github.com` | 内网镜像或 GitHub Enterprise |
 | `CENKORMES_ALLOW_UNVERIFIED` | 空 | `1` 才允许装无摘要的包（不建议） |
-| `CENKORMES_RESTART_CMD` | 空 | 自定义重启命令；不配则杀监听进程等面板守护拉起 |
+| `CENKORMES_RESTART_CMD` | 空 | 自定义重启命令（整段接管重启）；不配则杀监听进程，再由 `CENKORMES_START_CMD` 拉起 |
+| `CENKORMES_START_CMD` | 空 | 杀掉旧进程后主动拉起后端的命令（如 `sudo -n /usr/local/bin/btpy-project-start cenkermes`）；不配则等服务管理器巡检，宝塔约 120s。详见 DEPLOYMENT.md 8.5.1 |
 | `CENKORMES_CELERY_UNITS` | `cenkormes-celery cenkormes-beat` | 升级后一并重启的 worker 单元名 |
 | `CENKORMES_HEALTH_URL` | `http://127.0.0.1:8500/api/health` | 升级后健康检查地址 |
 | `CENKORMES_RELEASE_CACHE_TTL` | `300` | Releases 列表缓存秒数（匿名 API 每小时只有 60 次） |

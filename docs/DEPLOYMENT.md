@@ -572,11 +572,53 @@ Docker 部署则：`docker compose pull`（或 `docker compose build`）→ 进 
 | `CENKORMES_REPO` | `likele001/cenkor_mes` | 私有化部署指向自己的仓库 |
 | `CENKORMES_GITHUB_API` | `https://api.github.com` | 内网镜像或 GitHub Enterprise |
 | `CENKORMES_ALLOW_UNVERIFIED` | 空 | 设 `1` 才允许安装无摘要的包（不建议） |
-| `CENKORMES_RESTART_CMD` | 空 | 自定义重启命令；不配则杀监听进程等面板守护拉起 |
+| `CENKORMES_RESTART_CMD` | 空 | 自定义重启命令（整段接管重启）；不配则杀监听进程，再由下面的 `CENKORMES_START_CMD` 拉起 |
+| `CENKORMES_START_CMD` | 空 | 杀掉旧进程后**主动拉起**后端的命令；不配则等服务管理器自己巡检（宝塔默认 120s） |
 | `CENKORMES_CELERY_UNITS` | `cenkormes-celery cenkormes-beat` | 升级后要重启的 worker 单元名 |
 
 > 若服务器完全无外网，请用 8.2/8.3 的离线方式：把包下载到内网后手动覆盖安装。
 > 后台按钮在没有外网时只会提示「无法检查更新」。
+
+#### 8.5.1 把升级停机从「两分钟」压到「十秒」（宝塔现网做法）
+
+后台升级会 kill 掉 8500 上的 uvicorn，再由服务管理器把新进程拉起来。宝塔的
+Python 项目管理器是**定时巡检**（默认 120s 一轮），所以不配任何东西时，停机
+时间 ≈ 一个巡检周期；配好 `CENKORMES_START_CMD` 后由升级脚本在 kill 完立刻
+调面板自己的启动入口，实测 **kill → 恢复 9 秒左右**。
+
+三个动作都在服务器上做，只做一次（不进产物包，升级不会覆盖）：
+
+```bash
+# 1) 放一个 root 属主的启动封装：只允许启动白名单里的项目，其它参数一律拒绝
+install -o root -g root -m 755 btpy-project-start /usr/local/bin/btpy-project-start
+
+# 2) 给 www 一条固定的 sudo 白名单，只授权「启动 cenkermes 项目」这一件事
+echo 'www ALL=(root) NOPASSWD: /usr/local/bin/btpy-project-start cenkermes' \
+  >> /etc/sudoers.d/cenkormes-services
+visudo -c
+
+# 3) 告诉升级脚本杀完用什么拉起（进程环境变量或 backend/.env 都认）
+echo 'CENKORMES_START_CMD="sudo -n /usr/local/bin/btpy-project-start cenkermes"' \
+  >> backend/.env
+```
+
+为什么必须走面板入口、而不是在应用里自己 `nohup uvicorn`：手起的进程会抢 8500
+端口，面板自愈随后反复 `address already in use`；pidfile 也不归面板管，后台的
+启动/停止/日志全部失准。封装内部调的是面板 `ServiceManager.start_project()`，
+进程身份、日志、pidfile 都和手点「启动」完全一致，且被拉起的进程仍是 `www`，
+升级流程拿不到额外权限。
+
+没配这一步也能用，只是停机时间退回一个巡检周期：
+
+**v2.2.20 修掉了一个会让停机变成 11 分钟的真 bug**：守护脚本是从 uvicorn 里
+spawn 的，会原样继承启动脚本 `export` 的 `BT_PYTHON_SERVICE_SID`；而宝塔判断
+「项目是否在跑」就是扫 `/proc/<pid>/environ` 找这个变量。于是脚本等健康的那
+600 秒里，面板每一轮都认为服务还活着，一次都没拉起 uvicorn。现在启动守护脚本
+前会把这个变量摘掉（`_guard_env()`），脚本一退出面板下一轮就能接手。
+
+宝塔侧还有一个可调项：`/www/server/panel/data/daemon_time.pl`（单位秒，默认
+120）。它是**整台机器**共用，改小会让面板巡检所有 Python 项目更频繁，一般
+不建议动——用 `CENKORMES_START_CMD` 更精准。
 
 ## 9. 前端产物属主（在线升级前置条件）
 
@@ -601,11 +643,16 @@ v2.2.4 起，`_apply_package()` 在写第一个文件之前会对整批目标路
 不通过就抛 `PreflightError` 并**直接中止、不回灌**——避免在属主异常时留下
 半新半旧的代码。报错信息会列出前 5 个问题路径并给出 `chown` 命令。
 
-**v2.2.5 重启判定重构（重要）**：守护脚本**只做 kill + 释放端口，写完
-`ok=pending` 立即退出**，不再轮询 `/api/health`，且以 `/tmp` 为 cwd 启动。
-原因：脚本从 uvicorn 内部 spawn、cwd 在项目根时，宝塔 Python 项目管理器会把
-它写进 `cenkermes.pid`；只要脚本还活着，面板就认为服务在运行而不触发自愈。
-任务 #8 实测把健康窗口从 180s 加到 420s 后，8500 端口整整停了 7 分钟。
+**重启判定现状（v2.2.20）**：守护脚本以独立会话 + `/tmp` 为 cwd 启动，
+**自己轮询 `/api/health` 直到版本匹配**，结果文件只写终态 `ok=1` / `ok=0`，
+绝不写 `pending` 这类需要上层二次解释的中间态（回滚后是旧代码在读这个文件，
+旧代码只认终态）。
+
+为什么不能「只 kill 就退出」（v2.2.5 曾这么改过）：面板把「脚本还活着」当成
+「项目在跑」，脚本退出前它不会拉起 uvicorn——窗口从 180s 加到 420s，8500 反而
+停了 7 分钟。真正的解法不是缩窗口，而是让脚本**不像**项目主进程：独立会话、
+`cwd=/tmp`、并抹掉 `BT_PYTHON_SERVICE_SID`（v2.2.20，见 8.5.1；漏掉最后一项
+时脚本活满 600s，面板就当项目一直在跑，实测停机 11 分钟）。
 
 最终状态由服务被面板拉起后判定：
 
