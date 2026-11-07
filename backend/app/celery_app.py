@@ -4,7 +4,7 @@ import logging
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_process_init
+from celery.signals import worker_init, worker_process_init
 from kombu import Queue
 
 from app.core.config import settings
@@ -30,13 +30,19 @@ celery.conf.update(
 celery.autodiscover_tasks(["app"])
 
 
+@worker_init.connect
 @worker_process_init.connect
 def _import_extension_modules_in_worker(**kwargs):
-    """Worker 子进程启动时 import 已装扩展模块，使扩展的 @shared_task 注册到本进程。
+    """Worker 主进程与子进程启动时 import 已装扩展模块，注册扩展 @shared_task。
 
     worker 只通过 ``celery -A app.celery_app`` 启动，不会 import app.main；
-    不加这一步，扩展声明的 celery 任务（如 stock_safety.scan）在 worker 端
-    永远是「未注册任务」，beat 投递后无人消费。
+    不加这一步，扩展声明的 celery 任务在 worker 端永远是「未注册任务」。
+
+    为什么主进程也要挂：prefork 下由 MainProcess 从 broker 取消息并查
+    app.tasks 注册表，只有 worker_process_init（子进程）导入时，@shared_task
+    会注册在子进程各自的 app 实例上，主进程查不到，报
+    "Received unregistered task of type 'qcode.inspection_scan'"。
+    因此 worker_init（主进程）与 worker_process_init（子进程）都要导入。
     """
     try:
         from app.extension_host import import_extension_modules
