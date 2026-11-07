@@ -1,6 +1,12 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
-"""质量检测 API：质检模板 + 缺陷代码管理"""
+"""质量检测 API：质检模板 + 缺陷代码管理
+
+写端点必须显式 db.commit()：get_db() 只 yield + close（autocommit=False），
+crud/quality.py 全程只 flush；少了 commit 的表现是「返回 200 且回显 id，
+但请求结束即回滚、表行数不变」，非常容易被当成成功。新增写端点请一并补
+commit 和「写后立刻查库」回归用例。
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -61,7 +67,9 @@ def get_template_api(template_id: int, db: Session = Depends(get_db), user: User
 @router.post("/inspection-templates", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def create_template_api(payload: TemplateIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     t = create_template(db, payload.model_dump())
-    return ok(_tmpl_out(t))
+    out = _tmpl_out(t)          # 先序列化，避开 expire_on_commit 后的属性重载
+    db.commit()
+    return ok(out)
 
 
 @router.put("/inspection-templates/{template_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
@@ -70,7 +78,9 @@ def update_template_api(template_id: int, payload: TemplateIn,
     t = update_template(db, template_id, payload.model_dump())
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")
-    return ok(_tmpl_out(t))
+    out = _tmpl_out(t)
+    db.commit()
+    return ok(out)
 
 
 @router.delete("/inspection-templates/{template_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
@@ -78,6 +88,7 @@ def delete_template_api(template_id: int, db: Session = Depends(get_db), user: U
     ok_ = delete_template(db, template_id)
     if not ok_:
         raise HTTPException(status_code=404, detail="模板不存在")
+    db.commit()
     return ok({"deleted": True})
 
 
@@ -157,7 +168,9 @@ def export_defect_codes_api(
 def create_defect_code_api(payload: DefectCodeCreateIn, db: Session = Depends(get_db),
                            user: User = Depends(get_current_user)):
     d = create_defect_code(db, payload.model_dump())
-    return ok({"id": d.id})
+    out = {"id": d.id}
+    db.commit()
+    return ok(out)
 
 
 @router.put("/defect-codes/{code_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
@@ -166,7 +179,9 @@ def update_defect_code_api(code_id: int, payload: DefectCodeUpdateIn,
     d = update_defect_code(db, code_id, payload.model_dump())
     if not d:
         raise HTTPException(status_code=404, detail="缺陷代码不存在")
-    return ok({"id": d.id})
+    out = {"id": d.id}
+    db.commit()
+    return ok(out)
 
 
 @router.delete("/defect-codes/{code_id}", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
@@ -175,4 +190,5 @@ def delete_defect_code_api(code_id: int, db: Session = Depends(get_db),
     ok_ = delete_defect_code(db, code_id)
     if not ok_:
         raise HTTPException(status_code=404, detail="缺陷代码不存在")
+    db.commit()
     return ok({"deleted": True})
