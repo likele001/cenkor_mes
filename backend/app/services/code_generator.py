@@ -49,6 +49,9 @@ class BizType:
     STOCKTAKE = "stocktake"
     DISPOSITION = "disposition"
     INSPECTION = "inspection"
+    REWORK = "rework"
+    ECN = "ecn"
+    DOWNTIME = "downtime"
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,9 @@ _RULES: dict[str, _Rule] = {
     BizType.STOCKTAKE: _Rule("PD"),
     BizType.DISPOSITION: _Rule("CZ"),
     BizType.INSPECTION: _Rule("QC"),
+    BizType.REWORK: _Rule("RW"),
+    BizType.ECN: _Rule("ECN"),
+    BizType.DOWNTIME: _Rule("DT"),
 }
 
 

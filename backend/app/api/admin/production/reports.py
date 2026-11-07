@@ -1,10 +1,12 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok
+from app.crud.inspection import get_inspection, inspection_out, list_inspections
 from app.crud.notification import create_notification
 from app.crud.report import (
     calc_and_create_salary,
@@ -25,6 +27,16 @@ from app.services.production_rollup import sync_after_report
 router = APIRouter(
     dependencies=[Depends(require_any_permissions(["report.audit", "report.approve", "qc.approve"]))]
 )
+
+
+class QCApproveIn(BaseModel):
+    """终审可选参数。
+
+    `inspection_id` 不传时行为与 v2.2.17 完全一致（向后兼容）：
+    上一版刻意「不强制检验闸门」，先让检验单跑起来积累数据。传了才校验并留痕，
+    是否强制由客户后续按数据决定，不由系统替业务拍板。
+    """
+    inspection_id: int | None = Field(default=None, ge=1)
 
 
 def _report_out(x) -> dict:
@@ -165,6 +177,7 @@ def leader_approve_api(
 @router.post("/{report_id}/qc-approve", dependencies=[Depends(require_any_permissions(["report.audit", "qc.approve"]))])
 def qc_approve_api(
     report_id: int,
+    payload: QCApproveIn | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -173,8 +186,25 @@ def qc_approve_api(
         raise HTTPException(status_code=400, detail="报工记录不存在")
     if report.status != "leader_approved":
         raise HTTPException(status_code=400, detail="报工状态不允许终审操作")
+
+    # 检验依据（0019）：传了才校验，且必须是对本条报工判过合格的 IPQC 单。
+    # 不合格单不能拿来放行；挂别条报工的单也不能拿来凑数。
+    inspection_code = None
+    if payload and payload.inspection_id:
+        ins = get_inspection(db, int(payload.inspection_id))
+        if not ins:
+            raise HTTPException(status_code=400, detail="检验依据单不存在")
+        if ins.inspection_type != "ipqc":
+            raise HTTPException(status_code=400, detail="检验依据必须是制程检验（IPQC）单")
+        if ins.status != "passed":
+            raise HTTPException(status_code=400, detail="检验依据单未判定合格，不能作为终审放行依据")
+        if int(ins.report_id or 0) != int(report.id):
+            raise HTTPException(status_code=400, detail="该检验单挂在其他报工上，不能用于本次终审")
+        inspection_code = ins.code
+
     create_audit(db, report_id=report.id,
-                 auditor_id=user.id, audit_level="qc", action="approve", reason=None)
+                 auditor_id=user.id, audit_level="qc", action="approve",
+                 reason=f"检验依据：{inspection_code}" if inspection_code else None)
     update_report_status(db, report, "qc_approved")
 
     # 审核通过 → 自动生成工资明细 + 追溯码
@@ -226,7 +256,19 @@ def qc_approve_api(
         "salary_generated": salary is not None,
         "salary_amount": float(salary.amount) if salary else None,
         "trace_code": trace_code.code if trace_code else None,
+        "inspection_code": inspection_code,
     })
+
+
+@router.get("/{report_id}/inspections")
+def report_inspections_api(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """该报工挂着的检验依据单（终审弹窗用）。"""
+    items = list_inspections(db, report_id=report_id, limit=50)
+    return ok({"items": [inspection_out(o, with_items=False) for o in items]})
 
 
 @router.post("/{report_id}/reject", dependencies=[Depends(require_any_permissions(["report.audit", "report.approve", "qc.approve"]))])

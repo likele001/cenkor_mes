@@ -64,6 +64,17 @@ DEFAULT_PERMISSIONS: list[tuple[str, str]] = [
     ("inspection.view", "检验单查看"),
     ("inspection.manage", "检验单登记"),
     ("inspection.audit", "检验判定"),
+    ("rework.view", "返工单查看"),
+    ("rework.manage", "返工单派工与完成"),
+    ("substitute.view", "物料替代查看"),
+    ("substitute.manage", "物料替代维护"),
+    ("ecn.view", "工程变更查看"),
+    ("ecn.manage", "工程变更登记"),
+    ("ecn.approve", "工程变更审批"),
+    ("downtime.view", "设备停机查看"),
+    ("downtime.manage", "设备停机登记"),
+    ("supplier_score.view", "供应商评分查看"),
+    ("supplier_score.manage", "供应商评分维护"),
 ]
 
 DEFAULT_ROLES: list[tuple[str, str]] = [
@@ -78,11 +89,13 @@ ROLE_PERMISSION_PRESETS: dict[str, set[str]] = {
     "admin": {code for code, _ in DEFAULT_PERMISSIONS},
     "qc": {"report.audit", "trace.query", "salary.view", "attachment.view",
            "disposition.view", "disposition.manage", "disposition.approve",
-           "inspection.view", "inspection.manage", "inspection.audit"},
+           "inspection.view", "inspection.manage", "inspection.audit",
+           "rework.view", "ecn.view", "downtime.view", "supplier_score.view"},
     "leader": {"dispatch.manage", "report.audit", "report.submit", "salary.view", "dashboard.view", "report.view",
                "order.manage", "plan.manage", "work.manage", "task.manage", "notification.view", "attendance.manage",
                "attachment.view", "disposition.view", "disposition.manage",
-               "inspection.view"},
+               "inspection.view", "rework.view", "rework.manage", "substitute.view",
+               "ecn.view", "downtime.view", "downtime.manage"},
     "employee": {"report.submit", "salary.view", "notification.view"},
     "customer": {"notification.view"},
 }

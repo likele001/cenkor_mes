@@ -1549,8 +1549,14 @@ export const productionApi = {
   leaderApprove(id: number) {
     return http.request<any>({ url: `/admin/production/reports/${id}/leader-approve`, method: 'POST' })
   },
-  qcApprove(id: number) {
-    return http.request<any>({ url: `/admin/production/reports/${id}/qc-approve`, method: 'POST' })
+  qcApprove(id: number, data?: { inspection_id?: number }) {
+    return http.request<any>({ url: `/admin/production/reports/${id}/qc-approve`, method: 'POST', data })
+  },
+  /** 该报工挂着的 IPQC 检验依据单（终审弹窗选单用） */
+  listReportInspections(reportId: number) {
+    return http.request<{ items: any[] }>({
+      url: `/admin/production/reports/${reportId}/inspections`, method: 'GET',
+    })
   },
   rejectReport(id: number, reason?: string) {
     return http.request<any>({

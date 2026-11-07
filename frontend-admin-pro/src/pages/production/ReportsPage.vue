@@ -94,13 +94,58 @@ async function viewDetail(id: number) {
   }
 }
 
-async function handleApprove(report: ReportOut, level: 'leader' | 'qc') {
+const qcDialogVisible = ref(false)
+const qcTarget = ref<any>(null)
+const qcInspections = ref<any[]>([])
+const qcSelected = ref<number | null>(null)
+const qcLoading = ref(false)
+const qcSaving = ref(false)
+
+/** 终审先选检验依据：列出本条报工挂着的 IPQC 单，默认选中已判合格的那张。
+ *  没有检验单时仍可放行（上一版刻意不做强制闸门），但界面会明确提示「无检验依据」。 */
+async function openQcDialog(report: ReportOut) {
+  qcTarget.value = report
+  qcSelected.value = null
+  qcLoading.value = true
   try {
-    if (level === 'leader') {
-      await productionApi.leaderApprove(report.id)
-    } else {
-      await productionApi.qcApprove(report.id)
-    }
+    const resp = await productionApi.listReportInspections(report.id)
+    qcInspections.value = resp?.items || []
+    const firstPassed = qcInspections.value.find((x: any) => x.status === 'passed')
+    if (firstPassed) qcSelected.value = firstPassed.id
+    qcDialogVisible.value = true
+  } catch {
+    // 拦截器已提示，弹窗不打开
+  } finally {
+    qcLoading.value = false
+  }
+}
+
+async function confirmQcApprove() {
+  if (!qcTarget.value) return
+  qcSaving.value = true
+  try {
+    await productionApi.qcApprove(
+      qcTarget.value.id,
+      qcSelected.value ? { inspection_id: qcSelected.value } : undefined,
+    )
+    ElMessage.success(t('production.reports.approveSuccess'))
+    qcDialogVisible.value = false
+    dialogVisible.value = false
+    load()
+  } catch {
+    // handled by interceptor
+  } finally {
+    qcSaving.value = false
+  }
+}
+
+async function handleApprove(report: ReportOut, level: 'leader' | 'qc') {
+  if (level === 'qc') {
+    await openQcDialog(report)
+    return
+  }
+  try {
+    await productionApi.leaderApprove(report.id)
     ElMessage.success(t('production.reports.approveSuccess'))
     dialogVisible.value = false
     load()
@@ -302,5 +347,31 @@ onMounted(async () => {
         </template>
         <el-empty v-else description="暂无审核记录" />
       </template>
-    </el-dialog>  </AdminPage>
+    </el-dialog>
+
+    <!-- 终审检验依据（0019）：不强制，但把「有没有检验结论」摆到台面上 -->
+    <el-dialog v-model="qcDialogVisible" title="终审检验依据" width="560px">
+      <div v-loading="qcLoading">
+        <el-alert v-if="!qcInspections.length" type="warning" :closable="false" class="mb-3"
+          title="该报工尚未关联检验单" description="可直接终审（沿用既有流程），也可先在「检验单」中用「按报工建单」补一张 IPQC 依据单。" />
+        <el-alert v-else type="info" :closable="false" class="mb-3"
+          title="选择已判定合格的 IPQC 检验单作为放行依据；不选则按既有流程无依据终审。" />
+        <el-radio-group v-if="qcInspections.length" v-model="qcSelected" class="w-full">
+          <div v-for="ins in qcInspections" :key="ins.id" class="mb-2">
+            <el-radio :value="ins.id" :disabled="ins.status !== 'passed'">
+              {{ ins.code }} · {{ ins.status === 'passed' ? '合格' : (ins.status === 'failed' ? '不合格' : ins.status) }}
+              · {{ ins.item_total }} 项 / 已录 {{ ins.item_filled }} 项
+            </el-radio>
+          </div>
+        </el-radio-group>
+        <div class="mt-3 text-xs text-el-placeholder">
+          只有判定合格且挂在本条报工上的检验单能作为依据；不合格单不能用于放行。
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="qcDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="qcSaving" @click="confirmQcApprove">确认终审</el-button>
+      </template>
+    </el-dialog>
+  </AdminPage>
 </template>

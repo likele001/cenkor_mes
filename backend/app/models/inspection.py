@@ -80,8 +80,8 @@ INSPECTION_HANDLINGS = ("return", "accept", "rework", "scrap")
 # 单项检验结果：pass 合格 | fail 不合格 | na 不适用 | 空串表示还没检
 ITEM_RESULTS = ("pass", "fail", "na")
 
-# 来源单据类型
-SOURCE_TYPES = ("purchase_order", "work_order", "shipment", "task", "manual")
+# 来源单据类型（report 是整批报工终审的挂靠点，见 0019）
+SOURCE_TYPES = ("purchase_order", "work_order", "shipment", "task", "report", "manual")
 
 
 class InspectionOrder(Base):
@@ -110,6 +110,14 @@ class InspectionOrder(Base):
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # 冗余来源单号：来源单据日后可能被软删或不可达，单号必须留在检验单上
     source_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # ── 联动挂靠点（0019）──
+    # 都是「软引用」：普通 Integer + 索引，不建外键。检验单是质量证据，
+    # 不能因为报工或工序主档被删就一起消失；查得到名称就显示，查不到就显示 ID。
+    # report_id：整批报工终审时作为检验依据（source_type=report 时 source_id 同时指向它）
+    # process_id：FAI 首件 / IPQC 制程检验所在工序，用于按工序筛选与统计
+    report_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    process_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     # ── 检验对象 ──
     # IQC 检验物料，其余检验产品（SKU）。两者都可为空（纯手工建单时用 item_name 描述）

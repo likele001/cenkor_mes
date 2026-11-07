@@ -418,6 +418,8 @@ export default {
     "dispositions": "Dispositions",
     "inspections": "Inspections",
     "inspectionLedger": "Inspection Ledger",
+    "reworks": "Rework Orders",
+    "basicLedgers": "Basic Ledgers",
     "login": "Login",
     "join": "Join Enterprise",
     "aiModel": "AI Models",

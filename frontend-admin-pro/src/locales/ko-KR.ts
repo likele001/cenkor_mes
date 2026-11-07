@@ -312,6 +312,8 @@ export default {
     "dispositions": "부적합품 처리",
     "inspections": "검사서",
     "inspectionLedger": "검사 대장",
+    "reworks": "재작업 지시",
+    "basicLedgers": "기초 대장",
     "login": "로그인",
     "join": "기업 가입",
     "aiModel": "AI 모델",

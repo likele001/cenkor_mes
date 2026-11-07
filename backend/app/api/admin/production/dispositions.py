@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_any_permissions
 from app.core.response import ok
+from app.crud import basics as basics_crud
 from app.crud.disposition import (
     DispositionStateError,
     approve_disposition,
@@ -256,10 +257,44 @@ def approve_api(
     d = _load(db, disposition_id)
     try:
         approve_disposition(db, d, approved_by=user.id)
+        # ⑤ 返工回流（0019）：批准即把 return_process 明细转成可执行返工单。
+        # 生成是幂等的，重复点批准也不会冒出第二张派工。
+        reworks = basics_crud.generate_reworks_for_disposition(db, d, created_by=user.id)
     except ValueError as e:
         raise _bad(e)
     db.commit()
-    return ok(disposition_out(get_disposition(db, d.id)))
+    return ok({**disposition_out(get_disposition(db, d.id)), "reworks_generated": len(reworks)})
+
+
+@router.post("/{disposition_id}/generate-reworks", dependencies=_WRITE)
+def generate_reworks_api(
+    disposition_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """补生成返工单（幂等）。历史处置单在升级前批准过的，用这个补上。"""
+    d = _load(db, disposition_id)
+    try:
+        reworks = basics_crud.generate_reworks_for_disposition(db, d, created_by=user.id)
+        db.commit()
+    except ValueError as e:
+        raise _bad(e)
+    return ok({
+        "generated": len(reworks),
+        "items": [basics_crud.rework_out(db, r) for r in basics_crud.reworks_for_disposition(db, d.id)],
+    })
+
+
+@router.get("/{disposition_id}/reworks")
+def disposition_reworks_api(
+    disposition_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return ok([
+        basics_crud.rework_out(db, r)
+        for r in basics_crud.reworks_for_disposition(db, disposition_id)
+    ])
 
 
 @router.post("/{disposition_id}/reject", dependencies=_APPROVE)

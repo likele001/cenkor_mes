@@ -19,7 +19,7 @@
 """
 from datetime import date, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.customer import Customer
@@ -29,10 +29,12 @@ from app.models.inspection import (
     INSPECTION_TYPES,
     LOCKED_STATUSES,
     ITEM_RESULTS,
+    SOURCE_TYPES,
     InspectionOrder,
     InspectionOrderItem,
 )
 from app.models.material import Material
+from app.models.order import Order
 from app.models.process import Process
 from app.models.purchase import PurchaseOrder
 from app.models.quality import (
@@ -41,8 +43,9 @@ from app.models.quality import (
     InspectionTemplate,
     InspectionTemplateItem,
 )
+from app.models.report import Report
 from app.models.report_unit import ReportUnit, ReportUnitAudit
-from app.models.shipment import Shipment
+from app.models.shipment import Shipment, ShipmentItem
 from app.models.sku import Sku
 from app.models.supplier import Supplier
 from app.models.task import Task
@@ -107,6 +110,8 @@ def inspection_out(o: InspectionOrder, with_items: bool = True) -> dict:
         "source_type": o.source_type,
         "source_id": o.source_id,
         "source_code": o.source_code,
+        "report_id": o.report_id,
+        "process_id": o.process_id,
         "material_id": o.material_id,
         "sku_id": o.sku_id,
         "item_name": o.item_name,
@@ -160,6 +165,8 @@ def _list_stmt(
     status: str | None = None,
     source_type: str | None = None,
     supplier_id: int | None = None,
+    report_id: int | None = None,
+    process_id: int | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ):
@@ -182,6 +189,10 @@ def _list_stmt(
         stmt = stmt.where(InspectionOrder.source_type == source_type)
     if supplier_id:
         stmt = stmt.where(InspectionOrder.supplier_id == supplier_id)
+    if report_id:
+        stmt = stmt.where(InspectionOrder.report_id == report_id)
+    if process_id:
+        stmt = stmt.where(InspectionOrder.process_id == process_id)
     if date_from:
         stmt = stmt.where(func.date(InspectionOrder.created_at) >= date_from)
     if date_to:
@@ -424,7 +435,7 @@ def _resolve_source(db: Session, o: InspectionOrder, source_type: str, source_id
 
     只做「带出」，不改来源单据的状态——检验单没有权力去推进采购单或工单。
     """
-    if source_type not in ("purchase_order", "work_order", "shipment", "task", "manual"):
+    if source_type not in SOURCE_TYPES:
         raise InspectionStateError("来源单据类型不支持")
     o.source_type = source_type
     o.source_id = None
@@ -463,11 +474,57 @@ def _resolve_source(db: Session, o: InspectionOrder, source_type: str, source_id
         if not sh:
             raise InspectionStateError("发货单不存在")
         o.source_code = sh.code
+        # OQC 联动（0019）：从发货明细带出产品与数量，从订单带出客户。
+        # 只带出，不改发货单状态——检验单没有权力推进别人的单据。
+        sh_items = list(db.scalars(
+            select(ShipmentItem).where(ShipmentItem.shipment_id == sh.id)
+        ).all())
+        if not o.qty:
+            o.qty = sum(int(it.qty or 0) for it in sh_items)
+        if len(sh_items) == 1 and not o.sku_id:
+            o.sku_id = sh_items[0].sku_id
+            sku = db.get(Sku, sh_items[0].sku_id)
+            if sku:
+                o.item_name = o.item_name or sku.name
+        elif sh_items and not o.item_name:
+            o.item_name = f"{len(sh_items)} 个产品明细"
+        if not o.customer_id:
+            order = db.get(Order, sh.order_id)
+            if order:
+                o.customer_id = order.customer_id
     elif source_type == "task":
         task = db.get(Task, int(source_id))
         if not task:
             raise InspectionStateError("任务不存在")
         o.source_code = task.task_code
+        # FAI 联动（0019）：首件确认要知道「哪个产品、哪道工序、做多少」
+        o.process_id = o.process_id or task.process_id
+        wo = db.get(WorkOrder, task.work_order_id)
+        if wo:
+            if not o.sku_id:
+                o.sku_id = wo.sku_id
+            if not o.qty:
+                o.qty = int(task.planned_qty or wo.qty or 0)
+            if not o.item_name and wo.sku:
+                o.item_name = wo.sku.name
+    elif source_type == "report":
+        # 整批报工终审的检验依据（0019）：报工 → 任务 → 工单，把对象一次带全
+        rep = db.get(Report, int(source_id))
+        if not rep:
+            raise InspectionStateError("报工记录不存在")
+        o.report_id = rep.id
+        o.source_code = f"RPT{rep.id}"
+        if not o.qty:
+            o.qty = int(rep.good_qty or 0)
+        task = db.get(Task, rep.task_id)
+        if task:
+            o.process_id = o.process_id or task.process_id
+            wo = db.get(WorkOrder, task.work_order_id)
+            if wo:
+                if not o.sku_id:
+                    o.sku_id = wo.sku_id
+                if not o.item_name and wo.sku:
+                    o.item_name = wo.sku.name
 
 
 def create_inspection(
@@ -489,6 +546,8 @@ def create_inspection(
     customer_id: int | None = None,
     remark: str | None = None,
     created_by: int | None = None,
+    report_id: int | None = None,
+    process_id: int | None = None,
 ) -> InspectionOrder:
     if inspection_type not in INSPECTION_TYPES:
         raise InspectionStateError(f"检验类型必须是 {'/'.join(INSPECTION_TYPES)}")
@@ -503,6 +562,8 @@ def create_inspection(
         batch_no=(batch_no or "").strip() or None,
         remark=(remark or "").strip() or None,
         created_by=created_by,
+        report_id=report_id,
+        process_id=process_id,
     )
 
     _resolve_source(db, o, source_type, source_id)
@@ -840,11 +901,25 @@ def source_options(db: Session, *, inspection_type: str, keyword: str | None = N
         if kw:
             stmt = stmt.where(Shipment.code.like(kw))
         for sh in db.scalars(stmt).all():
+            # 0019：OQC 从发货单带出客户、产品、数量，制单时不必再手工查一遍
+            sh_items = list(db.scalars(
+                select(ShipmentItem).where(ShipmentItem.shipment_id == sh.id)
+            ).all())
+            sku_id = sh_items[0].sku_id if len(sh_items) == 1 else None
+            sku = db.get(Sku, sku_id) if sku_id else None
+            order = db.get(Order, sh.order_id)
+            customer = db.get(Customer, order.customer_id) if order else None
             out.append({
                 "id": sh.id,
                 "code": sh.code,
-                "label": f"{sh.code} · 订单 {sh.order_id}",
+                "label": f"{sh.code} · {customer.name if customer else f'订单 {sh.order_id}'}",
                 "order_id": sh.order_id,
+                "customer_id": order.customer_id if order else None,
+                "customer_name": customer.name if customer else None,
+                "sku_id": sku_id,
+                "item_name": sku.name if sku else (f"{len(sh_items)} 个产品明细" if sh_items else None),
+                "qty": sum(int(it.qty or 0) for it in sh_items),
+                "status": sh.status,
             })
     elif inspection_type == "fai":
         stmt = select(Task).order_by(Task.id.desc()).limit(limit)
@@ -852,14 +927,81 @@ def source_options(db: Session, *, inspection_type: str, keyword: str | None = N
             stmt = stmt.where(Task.task_code.like(kw))
         for t in db.scalars(stmt).all():
             proc = db.get(Process, t.process_id) if t.process_id else None
+            wo = db.get(WorkOrder, t.work_order_id)
+            sku = db.get(Sku, wo.sku_id) if wo else None
             out.append({
                 "id": t.id,
                 "code": t.task_code,
-                "label": f"{t.task_code} · {proc.name if proc else ''}",
+                "label": f"{t.task_code} · {sku.name if sku else (proc.name if proc else '')}",
                 "process_id": t.process_id,
-                "item_name": proc.name if proc else None,
+                "process_name": proc.name if proc else None,
+                "work_order_id": t.work_order_id,
+                "sku_id": wo.sku_id if wo else None,
+                "item_name": sku.name if sku else (proc.name if proc else None),
+                "qty": int(t.planned_qty or 0),
+                "status": t.status,
             })
     return out
+
+
+def report_options(db: Session, *, keyword: str | None = None, limit: int = 50) -> list[dict]:
+    """整批报工终审前可选的报工单（已初审通过、待终审）。
+
+    只列 `leader_approved`：终审都过了才补检验单没有意义，那是事后补票不是检验。
+    """
+    stmt = select(Report).where(Report.status == "leader_approved").order_by(Report.id.desc()).limit(limit)
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        stmt = stmt.where(or_(Report.remark.like(kw), func.cast(Report.id, String).like(kw)))
+    out = []
+    for rep in db.scalars(stmt).all():
+        task = db.get(Task, rep.task_id)
+        proc = db.get(Process, task.process_id) if task else None
+        out.append({
+            "id": rep.id,
+            "code": f"RPT{rep.id}",
+            "label": f"RPT{rep.id} · {task.task_code if task else ''} · 良品 {rep.good_qty}",
+            "task_id": rep.task_id,
+            "task_code": task.task_code if task else None,
+            "process_id": task.process_id if task else None,
+            "process_name": proc.name if proc else None,
+            "good_qty": int(rep.good_qty or 0),
+            "bad_qty": int(rep.bad_qty or 0),
+            "status": rep.status,
+        })
+    return out
+
+
+def source_summary(db: Session, *, source_type: str, source_id: int) -> dict:
+    """来源单据的检验汇总：给发货/任务/报工页面读，**不改来源单据状态**。
+
+    「最近一次判定」按 id 倒序取已判定的单（passed/failed），草稿与作废不算结论。
+    这样 OQC/FAI 联动只提供可查的质量事实，不替仓储或生产推进单据。
+    """
+    rows = list(db.scalars(
+        select(InspectionOrder)
+        .where(
+            InspectionOrder.source_type == source_type,
+            InspectionOrder.source_id == int(source_id),
+        )
+        .order_by(InspectionOrder.id.desc())
+    ).all())
+    judged = [o for o in rows if o.status in ("passed", "failed")]
+    last = judged[0] if judged else None
+    return {
+        "source_type": source_type,
+        "source_id": int(source_id),
+        "inspection_count": len(rows),
+        "judged_count": len(judged),
+        "passed": sum(1 for o in judged if o.status == "passed"),
+        "failed": sum(1 for o in judged if o.status == "failed"),
+        "reject_qty": sum(int(o.reject_qty or 0) for o in judged),
+        "last_code": last.code if last else None,
+        "last_status": last.status if last else None,
+        "last_handling": last.handling if last else None,
+        "last_inspected_at": last.inspected_at.isoformat() if last and last.inspected_at else None,
+        "items": [inspection_out(o, with_items=False) for o in rows[:20]],
+    }
 
 
 # ──────────────────────────── 检验台账（读 inspection_records）────────────────────────────

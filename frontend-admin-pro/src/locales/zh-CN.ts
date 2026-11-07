@@ -472,6 +472,8 @@ export default {
     dispositions: '不良品处置',
     inspections: '检验单',
     inspectionLedger: '检验台账',
+    reworks: '返工单',
+    basicLedgers: '基础台账',
     login: '登录',
     join: '加入企业',
     aiModel: 'AI 模型',

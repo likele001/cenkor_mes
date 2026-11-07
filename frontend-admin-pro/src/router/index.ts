@@ -154,6 +154,21 @@ const routes: RouteRecordRaw[] = [
         meta: { title: () => i18n.global.t('menu.inspectionLedger'), permissions: ['inspection.view', 'inspection.manage', 'inspection.audit'] },
       },
       {
+        path: 'production/reworks',
+        name: 'production-reworks',
+        component: () => import('@/pages/production/ReworkOrdersPage.vue'),
+        meta: { title: () => i18n.global.t('menu.reworks'), permissions: ['rework.view', 'rework.manage'] },
+      },
+      {
+        path: 'production/basic-ledgers',
+        name: 'production-basic-ledgers',
+        component: () => import('@/pages/production/BasicLedgersPage.vue'),
+        meta: {
+          title: () => i18n.global.t('menu.basicLedgers'),
+          permissions: ['substitute.view', 'ecn.view', 'downtime.view', 'supplier_score.view'],
+        },
+      },
+      {
         path: 'production/report-units',
         name: 'production-report-units',
         component: () => import('@/pages/production/ReportUnitsPage.vue'),

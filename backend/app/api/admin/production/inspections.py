@@ -34,7 +34,9 @@ from app.crud.inspection import (
     ledger_stats,
     list_inspections,
     list_ledger,
+    report_options,
     source_options,
+    source_summary,
     submit_inspection,
     template_options,
     update_inspection,
@@ -44,9 +46,11 @@ from app.models.inspection import (
     INSPECTION_STATUSES,
     INSPECTION_TYPES,
     ITEM_RESULTS,
+    SOURCE_TYPES,
     InspectionOrder,
 )
 from app.models.user import User
+from app.models.report import Report
 from app.services.code_generator import BizType, resolve_code
 from app.tasks._sync_excel import make_excel_response
 
@@ -98,8 +102,10 @@ class InspectionCreateIn(BaseModel):
     sample_qty: int = Field(default=0, ge=0, description="抽样数量")
     template_id: int | None = Field(default=None, ge=1)
     items: list[ItemIn] | None = None
-    source_type: str = Field(default="manual", description="purchase_order / work_order / shipment / task / manual")
+    source_type: str = Field(default="manual", description="purchase_order / work_order / shipment / task / report / manual")
     source_id: int | None = Field(default=None, ge=1)
+    report_id: int | None = Field(default=None, ge=1, description="整批报工终审的检验依据挂靠点")
+    process_id: int | None = Field(default=None, ge=1, description="FAI/IPQC 所在工序")
     material_id: int | None = Field(default=None, ge=1)
     sku_id: int | None = Field(default=None, ge=1)
     item_name: str | None = Field(default=None, max_length=255)
@@ -338,6 +344,93 @@ def export_api(
 
 # ──────────────────────────── 检验单 ────────────────────────────
 
+# ── 0019：整批报工终审检验依据 / OQC·FAI 来源联动 ──
+
+class FromReportIn(BaseModel):
+    report_id: int | None = Field(default=None, ge=1)
+    template_id: int | None = Field(default=None, ge=1)
+    items: list[ItemIn] | None = None
+    sample_qty: int = Field(default=0, ge=0)
+    remark: str | None = None
+
+
+@router.get("/report-options")
+def report_options_api(
+    keyword: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """待终审报工单列表：建 IPQC 依据单时选来源。"""
+    return ok(report_options(db, keyword=keyword, limit=limit))
+
+
+@router.get("/source-summary")
+def source_summary_api(
+    source_type: str = Query(...),
+    source_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """来源单据的检验汇总（只读，不推进来源单据状态）。"""
+    if source_type not in SOURCE_TYPES:
+        raise _bad(ValueError("来源单据类型不支持"))
+    return ok(source_summary(db, source_type=source_type, source_id=source_id))
+
+
+@router.get("/by-report/{report_id}")
+def by_report_api(
+    report_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """某条报工挂着的检验单，供终审弹窗列出可选依据。"""
+    items = list_inspections(db, report_id=report_id, limit=50)
+    return ok({"items": [inspection_out(o, with_items=False) for o in items]})
+
+
+@router.post("/from-report", dependencies=_WRITE)
+def from_report_api(
+    payload: FromReportIn | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按一条待终审报工一键建 IPQC 检验单，省掉逐字段手填。"""
+    p = payload or FromReportIn()
+    if not p.report_id:
+        raise _bad(ValueError("请选择报工单"))
+    rep = db.get(Report, int(p.report_id))
+    if not rep:
+        raise _bad(ValueError("报工记录不存在"))
+    if rep.status != "leader_approved":
+        raise _bad(ValueError("只有待终审（已初审通过）的报工可以建检验依据单"))
+
+    def _exists(code: str) -> bool:
+        from sqlalchemy import select as _select
+
+        return db.scalar(_select(InspectionOrder.id).where(InspectionOrder.code == code)) is not None
+
+    try:
+        code = resolve_code(db, biz_type=BizType.INSPECTION, code=None, exists=_exists,
+                            duplicate_msg="检验单号已存在")
+        o = create_inspection(
+            db,
+            code=code,
+            inspection_type="ipqc",
+            source_type="report",
+            source_id=int(p.report_id),
+            template_id=p.template_id,
+            items=_rows(p.items),
+            sample_qty=p.sample_qty,
+            remark=p.remark,
+            created_by=user.id,
+        )
+        db.commit()
+    except (InspectionStateError, ValueError) as e:
+        raise _bad(e)
+    return ok(inspection_out(get_inspection(db, o.id)))
+
+
 @router.get("")
 def list_api(
     inspection_type: str | None = Query(default=None),
@@ -392,6 +485,8 @@ def create_api(
             items=_rows(payload.items),
             source_type=payload.source_type,
             source_id=payload.source_id,
+            report_id=payload.report_id,
+            process_id=payload.process_id,
             material_id=payload.material_id,
             sku_id=payload.sku_id,
             item_name=payload.item_name,

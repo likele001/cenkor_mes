@@ -164,6 +164,14 @@ from app.models.stocktake import Stocktake, StocktakeItem
 from app.models.disposition import Disposition, DispositionItem
 # 检验单：IQC/IPQC/OQC/FAI 四类共用一套结构，明细是模板项的快照
 from app.models.inspection import InspectionOrder, InspectionOrderItem
+# 第二批基础台账：返工单 / 物料替代 / ECN / 停机记录 / 供应商评分
+from app.models.basics import (
+    EngineeringChange,
+    EquipmentDowntime,
+    MaterialSubstitute,
+    ReworkOrder,
+    SupplierScore,
+)
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 # finance（客户对账单/总账）为独立业务域，需注册进 metadata
 from app.models.finance import Statement, StatementItem
