@@ -83,8 +83,18 @@ def _has_active_unit(db: Session, task_id: int) -> bool:
 
 
 def task_done_qty(db: Session, task_id: int) -> int:
-    """终审通过的合格数量 = 整批报工 good_qty + 件次报工合格件数。"""
-    return _approved_report_qty(db, task_id) + _approved_unit_qty(db, task_id)
+    """终审通过的合格数量（整批报工与件次报工互斥取值）。
+
+    `reports.good_qty` 与 `report_units` 是同一批产出的两种记法：批量模式只写
+    reports，逐件模式只写 report_units（逐件模式下批量报工会被拦），但模式切换
+    或历史数据并存时两套记录会同时存在。旧实现直接相加，同一批产出被算两次 ——
+    TK000092 计划 300 曾显示完成 600。
+
+    因此取两者较大值而非求和：并存时它们通常代表同一批产出（max 不会高估），
+    真发生「先批量后逐件」的两段产出时也不会比单取一边更差。宁可保守，绝不
+    给出「完成 > 计划」。
+    """
+    return max(_approved_report_qty(db, task_id), _approved_unit_qty(db, task_id))
 
 
 def task_started(db: Session, task_id: int) -> bool:
