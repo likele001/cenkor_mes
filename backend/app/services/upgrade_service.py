@@ -7,12 +7,15 @@
 - 每一步都写文件日志（backend/data/upgrade_logs/{job_id}.log）并回写 DB 的 stage，
   前端靠轮询任务表 + 读日志展示进度；
 - 数据库备份失败立即中止，绝不带病继续；
-- 重启分两种模式：配置了 CENKORMES_RESTART_CMD 则执行该命令；未配置则「杀掉
-  8500 监听进程，由宝塔面板的项目守护进程在约 60s 内拉起」；
-- 重启会杀掉本进程，因此 kill + 释放端口交给一份独立会话的守护脚本执行；脚本
-  **立即退出**（长期存活会被宝塔误记为项目主进程、阻塞自愈），结果落盘
-  /tmp/cenkormes-upgrade-restart-{job}.json 标记为 pending。服务被面板拉起后，
-  startup 钩子 / 任务接口 / 后台延时线程调用 reconcile_restarts()，实测
+- 重启分三种模式：配置了 CENKORMES_RESTART_CMD 则由该命令整段接管；未配置则
+  「杀掉 8500 监听进程」；杀完之后若配了 CENKORMES_START_CMD（例如宝塔项目的
+  启动封装）就**立刻主动拉起**，没配则等服务管理器按自己的巡检周期拉起；
+- 重启会杀掉本进程，因此 kill + 释放端口 + 等健康交给一份独立会话的守护脚本
+  执行。脚本必须抹掉面板注入的进程身份标记（见 ``_guard_env``）：否则面板会
+  把脚本当成「项目还在跑」，一直不拉起 uvicorn——v2.2.19 实测停机 11 分钟就是
+  这个原因，不是守护周期慢；
+- 结果落盘 /tmp/cenkormes-upgrade-restart-{job}.json（只写终态 ok=1/ok=0）。服务
+  恢复后，startup 钩子 / 任务接口 / 后台延时线程调用 reconcile_restarts()，实测
   /api/health 版本后回写最终状态，任务不会永远停在 running。
 
 两种升级模式（CENKORMES_UPGRADE_MODE）：
@@ -57,7 +60,48 @@ VERSION_FILE = ROOT / "VERSION"
 BACKUP_DIR = ROOT / "backend/data/backups"
 LOG_DIR = ROOT / "backend/data/upgrade_logs"
 LOCK_FILE = Path("/tmp/cenkormes-upgrade.lock")
-RESTART_CMD = os.environ.get("CENKORMES_RESTART_CMD", "")
+BACKEND_DIR = ROOT / "backend"
+ENV_FILE = BACKEND_DIR / ".env"
+
+
+def _env_setting(name: str) -> str:
+    """读一个部署参数：进程环境变量优先，其次 ``backend/.env``。
+
+    为什么还要读 .env：宝塔项目的 env 文件只是一行 ``source backend/.env``，而
+    .env 里的行没写 ``export``，所以那些值只活在那个 shell 里，**不会**进入
+    uvicorn 进程的 environ（应用本身能读到 .env 是靠 pydantic-settings）。
+    现场把参数写进 .env 是最自然的做法，这里替他们兜住。
+
+    Args:
+        name: 参数名，例如 ``CENKORMES_START_CMD``。
+
+    Returns:
+        参数值（已去引号与首尾空白）；未配置时返回空串。
+    """
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    try:
+        text = ENV_FILE.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith(f"{name}="):
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    return ""
+
+
+RESTART_CMD = _env_setting("CENKORMES_RESTART_CMD")
+# 杀完旧进程后主动拉起后端的命令（可选，留空则等服务管理器自己巡检拉起）。
+#
+# 与 CENKORMES_RESTART_CMD 的分工：RESTART_CMD 是「整段接管重启」（执行它就算
+# 重启完成，脚本只兜底 kill）；START_CMD 只负责「进程已经死了，把它拉起来」，
+# 装法最典型的形态是宝塔项目启动封装：
+#   CENKORMES_START_CMD=sudo -n /usr/local/bin/btpy-project-start cenkermes
+# 走面板自己的启动入口而不是 nohup uvicorn：手动起的进程会抢端口、让面板自愈
+# 反复 address already in use，pidfile 也不再归面板管（见 #394）。
+RESTART_START_CMD = _env_setting("CENKORMES_START_CMD")
 # 升级后要一并重启的 celery / beat 单元名。做成可配置是因为守护脚本里的服务名
 # 是全局的：同机再跑一套预发实例时，两个实例若共用同一组名称，升级预发会连带
 # 重启生产 worker（旧 worker 会继续跑旧代码，且打乱在生产跑的任务）。
@@ -66,19 +110,26 @@ RESTART_CMD = os.environ.get("CENKORMES_RESTART_CMD", "")
 # 重启（Redis 信号通道，不需要 systemctl 写权限，也不用 sudo/polkit）。只有当优雅
 # 重启失败时，守护脚本才回退到 `systemctl restart $UNITS`，那才需要 www 的 sudo
 # 白名单（/etc/sudoers.d/cenkormes-services）。
-CELERY_UNITS = os.environ.get("CENKORMES_CELERY_UNITS", "cenkormes-celery cenkormes-beat")
+CELERY_UNITS = _env_setting("CENKORMES_CELERY_UNITS") or "cenkormes-celery cenkormes-beat"
 
-BACKEND_DIR = ROOT / "backend"
-ENV_FILE = BACKEND_DIR / ".env"
 HEALTH_URL = os.environ.get("CENKORMES_HEALTH_URL", "http://127.0.0.1:8500/api/health")
 BACKEND_PORT = urlsplit(HEALTH_URL).port or 8500
 # 2026-11-05 任务 #8 实测：守护脚本若以项目根为 cwd 长期存活，会被宝塔写进
-# /www/server/python_project/vhost/pids/cenkermes.pid；只要脚本还活着，面板就
-# 认为服务在跑、不拉起 uvicorn（当时把窗口从 180s 加到 420s，反而多停 2 分钟）。
+# /www/server/python_project/vhost/pids/cenkermes.pid，面板就认为服务在跑、不
+# 拉起 uvicorn（当时把窗口从 180s 加到 420s，反而多停 2 分钟）。
 # 但这个结论只对「脚本留在项目进程树里」成立，别因此得出「脚本不能等健康」。
 #
-# v2.2.6 的判定：脚本照旧自己等健康，但必须满足两个前置条件，缺一不可——
-#   1) start_new_session=True + cwd=/tmp：脚本脱离项目进程树，宝塔看不到它；
+# 2026-11-07 v2.2.19 在线升级实测把真凶钉死了：只做到 cwd=/tmp + 独立会话
+# 还不够——宝塔认进程靠 /proc/<pid>/environ 里的 BT_PYTHON_SERVICE_SID，而这个
+# 变量是 cmd.sh ``export`` 出来的，Popen 子进程**会原样继承**。于是守护脚本
+# 顶着项目的身份标记活了 600s，面板每个巡检周期都判定「项目在跑」，一次都没
+# 拉起 uvicorn；脚本一退出，下一个周期（≤120s）立刻拉起。实测时间线：
+# 19:13:29 kill → 19:13:31 端口释放 → 19:23:33 脚本等满 600s 退出 →
+# 19:24:41 uvicorn 才起来。所以「停机约 10 分钟」不是守护周期慢，是自家人
+# 冒充了项目进程。修法见 ``_guard_env``：启动守护脚本前把这个变量摘掉。
+#
+# v2.2.6 的判定仍然成立：脚本自己等健康，但必须满足两个前置条件——
+#   1) start_new_session=True + cwd=/tmp + 抹掉进程身份标记：面板看不到它；
 #   2) 只落终态（ok=1 / ok=0），绝不写中间态。
 #
 # 第 2 条是被真机打出来的：回滚会把代码换回旧版本，重启后是【旧代码】在跑
@@ -396,6 +447,8 @@ def check_update() -> dict:
         # 两种模式都能自动重启：自定义命令 / 杀进程后由面板守护进程拉起
         "restart_configured": True,
         "restart_mode": "cmd" if RESTART_CMD.strip() else "guard",
+        # guard 模式下是否配了主动拉起：False 表示只能等服务管理器巡检（宝塔约 120s）
+        "restart_start_configured": bool(RESTART_START_CMD.strip()),
         "disk_free_gb": _disk_free_gb(),
         "working_tree_dirty": dirty,
         "upgrade_mode": mode,
@@ -1009,7 +1062,7 @@ def _do_upgrade_git(db, job: UpgradeJob, skip_frontend: bool = False) -> None:
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, "守护脚本只 kill + 释放端口并立即退出；服务恢复后由 reconcile 实测健康并回写终态")
+    _log(jid, "守护脚本已接管：kill + 释放端口 + 主动拉起 + 实测健康，终态由 reconcile 回写")
     db.commit()
 
 
@@ -1056,7 +1109,7 @@ def _do_rollback_git(db, job: UpgradeJob, restore_db: bool, skip_frontend: bool 
         job.status = "rolled_back"
         db.commit()
         return
-    _log(jid, "代码与数据已回滚；守护脚本只 kill 释放端口，服务恢复后由 reconcile 实测回写终态")
+    _log(jid, "代码与数据已回滚；守护脚本负责 kill、拉起与实测健康，终态由 reconcile 回写")
     db.commit()
 
 
@@ -1578,7 +1631,7 @@ def _do_upgrade_artifact(db, job: UpgradeJob, skip_frontend: bool = False) -> No
         _log(jid, "重启脚本启动失败，停在 awaiting_restart，请手动重启后端后点「健康校验」")
         _set(db, job, status="awaiting_restart", stage="restart")
         return
-    _log(jid, "守护脚本只 kill + 释放端口并立即退出；服务恢复后由 reconcile 实测健康并回写终态")
+    _log(jid, "守护脚本已接管：kill + 释放端口 + 主动拉起 + 实测健康，终态由 reconcile 回写")
     db.commit()
 
 
@@ -1625,7 +1678,7 @@ def _do_rollback_artifact(db, job: UpgradeJob, restore_db: bool, skip_frontend: 
         job.status = "rolled_back"
         db.commit()
         return
-    _log(jid, "代码与数据已回滚；守护脚本只 kill 释放端口，服务恢复后由 reconcile 实测回写终态")
+    _log(jid, "代码与数据已回滚；守护脚本负责 kill、拉起与实测健康，终态由 reconcile 回写")
     db.commit()
 
 
@@ -1720,8 +1773,9 @@ def _build_restart_script(
     py: Path,
     custom: str,
     units: str = "",
+    start_cmd: str = "",
 ) -> str:
-    """生成重启守护脚本正文（独立会话执行：杀进程 → 重启 → 自验健康 → 落终态）。
+    """生成重启守护脚本正文（独立会话执行：杀进程 → 拉起 → 自验健康 → 落终态）。
 
     脚本**只写终态** ``ok=1`` / ``ok=0``。原因见文件顶部 RESTART_GRACE_SECONDS
     上方注释：回滚后是旧代码读这个结果文件，旧代码只认 ``ok=1``，中间态会被
@@ -1731,10 +1785,14 @@ def _build_restart_script(
         units: 优雅重启失败时才去 ``systemctl restart`` 的兜底单元名（空格分隔）。
             传空串表示 worker/beat 已由 ``_restart_workers_gracefully`` 换好代码，
             脚本不再重复重启——重复重启会打断刚起来的 worker。
+        start_cmd: kill 之后主动拉起后端的命令。非空时写进独立脚本再由守护脚本
+            ``bash`` 执行（不直接内联，避免命令里的引号破坏脚本文本）；执行失败
+            不影响后续轮询，只是回落到服务管理器自愈。
     """
     log = _log_path(job_id)
     result = _restart_result_path(job_id)
     custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
+    start_path = LOG_DIR / f"restart_start_{job_id}.sh"
     return f"""#!/bin/bash
 JOB={job_id}
 TARGET='{target_version}'
@@ -1744,6 +1802,7 @@ PORT='{BACKEND_PORT}'
 PID='{pid or ""}'
 PY='{py}'
 CUSTOM='{custom_path if custom else ""}'
+STARTER='{start_path if start_cmd else ""}'
 UNITS='{units}'
 WAIT='{RESTART_GRACE_SECONDS}'
 STEP='{RESTART_POLL_INTERVAL}'
@@ -1795,13 +1854,56 @@ fi
 
 say "旧进程已处理完；端口 $(ss -lnt 2>/dev/null | grep -q ":$PORT " && echo 仍占用 || echo 已释放)"
 
+# ── 主动拉起（可选）────────────────────────────────────────────────────
+# 为什么要这一步：面板（以及各家服务管理器）认「项目主进程」靠进程身份标记，
+# kill 之后它只会等自己的巡检周期再拉起，宝塔默认 120s。配了拉起命令就直接
+# 调它的启动入口，停机时间从「一个巡检周期」压到「一次进程启动」（实测 ~8s）。
+# 命令由部署方提供，本脚本只负责执行：绝不自己后台拉起 uvicorn —— 手动拉的
+# 进程会抢端口、让面板自愈反复 address already in use，pidfile 也不归面板管。
+if [ -n "$STARTER" ]; then
+  # 先等旧进程真正退出。端口释放 ≠ 进程已退出：uvicorn 优雅退出时先把监听
+  # socket 关掉，进程还要拖几百毫秒到几秒。而面板的启动入口只判
+  # psutil.pid_exists(旧 pid)，旧进程还在就直接 continue —— 命令返回「启动
+  # 指令已执行」，实际什么都没起。2026-11-07 手工复现过这个竞态。
+  if [ -n "$PID" ]; then
+    for i in $(seq 1 20); do
+      kill -0 "$PID" 2>/dev/null || break
+      sleep 1
+    done
+  fi
+  ATTEMPT=1
+  UP=0
+  while [ "$ATTEMPT" -le 3 ]; do
+    say "主动拉起后端（第 $ATTEMPT 次）：bash $STARTER"
+    if bash "$STARTER" >> "$LOG" 2>&1; then
+      say "拉起命令已执行（返回 0）"
+    else
+      say "[警告] 拉起命令返回非 0"
+    fi
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      if ss -lnt 2>/dev/null | grep -q ":$PORT "; then UP=1; break; fi
+      sleep 1
+    done
+    if [ "$UP" = "1" ]; then
+      say "端口 $PORT 已重新监听，进入健康校验"
+      break
+    fi
+    say "[警告] 10s 内端口未监听，重试拉起"
+    ATTEMPT=$((ATTEMPT + 1))
+  done
+  if [ "$UP" != "1" ]; then
+    say "[警告] 3 次拉起均未监听到端口，回落到服务管理器自愈（最长 ${{WAIT}}s）"
+  fi
+fi
+
 # ── 自己验健康，只落终态 ───────────────────────────────────────────────
 # 为什么不写中间态交给上层：回滚会把代码换回旧版本，重启后是【旧代码】在跑
 # reconcile。v2.2.3 及更早只看 ok == "1"，其余一律 failed —— 于是「服务明明
 # 健康、任务却记失败」。脚本只在拿到确定结论时落盘，绝不写 pending 这类
 # 需要上层二次解释的值。
-# 本脚本以 start_new_session + cwd=/tmp 运行，不在项目进程树内，因此「等健康」
-# 不会挡住宝塔自愈（lightmes v2.0.5 同款结构实测回滚停机仅 12.7s）。
+# 本脚本以 start_new_session + cwd=/tmp 运行，且启动前已抹掉面板注入的进程身份
+# 标记（BT_PYTHON_SERVICE_SID），面板不会把它当成项目主进程，所以「等健康」
+# 不会挡住自愈（lightmes v2.0.5 同款结构实测回滚停机仅 12.7s）。
 probe() {{
   # curl 优先（轻量、不启解释器）；curl 缺失或响应不可解析时退化到 venv python
   local v
@@ -1878,16 +1980,44 @@ def _restart_workers_gracefully(job_id: int) -> bool:
     return all_ok
 
 
+def _guard_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """守护脚本的运行环境：必须抹掉服务管理器注入的进程身份标记。
+
+    这条是 v2.2.19 在线升级实测挖出来的**真 bug**，代价是 11 分钟停机：
+
+    宝塔（其他面板同理）判断「项目是否在跑」不是看 pidfile，而是扫
+    ``/proc/<pid>/environ`` 里有没有 ``BT_PYTHON_SERVICE_SID=<项目 sid>``。
+    这个变量由项目的启动脚本 ``export``，于是从 uvicorn 继承下去的**任何**
+    子进程都带着它。升级守护脚本正是 uvicorn 的子进程（Popen 默认继承 environ），
+    于是它活着的那 600 秒里，面板每个巡检周期都认为「项目在跑」，一次都不拉起
+    uvicorn；脚本一退出，下一个周期才拉起。
+
+    注意 ``unset`` 在脚本里没用：``/proc/<pid>/environ`` 反映的是进程**初始**
+    环境块，bash 里 unset 之后读到的还是老值。必须在 exec 之前摘掉。
+
+    Args:
+        base: 待处理的环境变量字典，默认取 ``os.environ``。
+
+    Returns:
+        去掉 ``BT_PYTHON_SERVICE_SID`` 后的新字典（不改动传入对象）。
+    """
+    env = dict(os.environ if base is None else base)
+    env.pop("BT_PYTHON_SERVICE_SID", None)
+    return env
+
+
 def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
     """写并启动重启守护脚本（独立会话，不会被本进程退出牵连）。
 
     负责：先优雅重启 worker/beat 换上新代码 → 生成守护脚本（清理升级锁 → 执行
-    自定义重启命令或杀掉旧后端 → 轮询 /api/health 直到版本匹配 → 结果落盘）。
-    因为重启必然杀掉本进程，任务最终状态由 reconcile_restarts() 依据结果文件回写。
+    自定义重启命令或杀掉旧后端 → 主动拉起 → 轮询 /api/health 直到版本匹配 →
+    结果落盘）。因为重启必然杀掉本进程，任务最终状态由 reconcile_restarts()
+    依据结果文件回写。
 
-    注意：脚本杀掉主进程之后**靠谁拉起取决于部署形态**。2026-11-06 实测这台服务器
-    的宝塔没有 Python 项目守护（kill 后无人接管，停机 344 秒），裸装环境则靠
-    systemd 的 Restart=always。见任务 #394。
+    注意：脚本杀掉主进程之后**靠谁拉起取决于部署形态**。配了
+    ``CENKORMES_START_CMD`` 就由脚本立刻主动拉起（宝塔现场推荐，停机 ~10s）；
+    没配则等服务管理器自己巡检（宝塔默认 120s，需先把 ``_guard_env`` 那层身份
+    标记摘干净，否则会一直等下去）。见任务 #394。
     """
     pid = _listener_pid()
     py = _venv_python()
@@ -1895,7 +2025,9 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
     result = _restart_result_path(job_id)
     script = LOG_DIR / f"restart_{job_id}.sh"
     custom = RESTART_CMD.strip()
+    start_cmd = RESTART_START_CMD.strip()
     custom_path = LOG_DIR / f"restart_custom_{job_id}.sh"
+    start_path = LOG_DIR / f"restart_start_{job_id}.sh"
 
     # 先换 worker/beat 的代码，再动主进程。顺序不能反：主进程一死，Redis 信号
     # 就没人发了，只能退回需要 sudo 的 systemctl。
@@ -1906,11 +2038,13 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
         result.unlink(missing_ok=True)
         if custom:
             custom_path.write_text(custom + "\n", encoding="utf-8")
+        if start_cmd:
+            start_path.write_text(start_cmd + "\n", encoding="utf-8")
     except OSError as exc:
         _log(job_id, f"准备重启脚本失败：{exc}")
         return False
 
-    body = _build_restart_script(job_id, target_version, pid, py, custom, units)
+    body = _build_restart_script(job_id, target_version, pid, py, custom, units, start_cmd)
 
     try:
         script.write_text(body, encoding="utf-8")
@@ -1922,7 +2056,8 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
     _log(
         job_id,
         f"启动重启守护脚本 {script}（{'自定义命令' if custom else '杀进程 + 面板守护拉起'}模式，"
-        f"{'worker/beat 已优雅重启，脚本不再碰' if not units else 'worker/beat 走 systemctl 兜底'}）",
+        f"{'worker/beat 已优雅重启，脚本不再碰' if not units else 'worker/beat 走 systemctl 兜底'}，"
+        f"主动拉起：{start_cmd or '未配置'}）",
     )
     try:
         with open(log, "a", encoding="utf-8") as out:
@@ -1933,6 +2068,9 @@ def _spawn_restart_guard(job_id: int, target_version: str) -> bool:
                 # 以 ROOT 为 cwd，它会被写进 cenkermes.pid 并阻塞面板自愈。
                 # 脚本内所有路径都是绝对路径，改 cwd 不影响行为。
                 cwd="/tmp",
+                # 更要紧的是环境：不摘掉面板的进程身份标记，面板会把脚本当成
+                # 项目主进程，整个等健康窗口都不拉起 uvicorn（11 分钟停机）。
+                env=_guard_env(),
                 stdout=out,
                 stderr=out,
                 start_new_session=True,

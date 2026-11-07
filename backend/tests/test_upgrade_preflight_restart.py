@@ -555,3 +555,122 @@ def test_verify_refuses_to_correct_when_version_mismatch(monkeypatch):
 
     assert result["corrected"] is False
     assert job.status == "failed"
+
+
+# ── v2.2.20：停机时间从「一个巡检周期」压到「一次进程启动」──────────────
+#
+# 背景（2026-11-07 v2.2.19 在线升级真机实测）：Job#15 从 kill 到服务恢复用了
+# 11 分钟。当时以为是宝塔守护周期慢，实际是自家守护脚本**冒充了项目主进程**：
+# 宝塔判断「项目在跑」靠 /proc/<pid>/environ 里的 BT_PYTHON_SERVICE_SID，这个
+# 变量由 cmd.sh export，Popen 子进程原样继承 → 面板扫到守护脚本就认为服务健康，
+# 整整 600s 窗口一次都没拉起 uvicorn；脚本退出后下一个周期（≤120s）才拉起。
+# 实测时间线：19:13:29 kill → 19:13:31 端口释放 → 19:23:33 脚本退出 →
+# 19:24:41 uvicorn 才起来。两组用例把这两个坑都钉死。
+
+
+def test_guard_env_drops_panel_process_marker():
+    """守护脚本的环境必须抹掉面板的项目身份标记，否则面板永远不拉起新进程。
+
+    注意 unset 在脚本里没用：/proc/<pid>/environ 反映的是进程初始环境块，
+    bash 里 unset 之后读到的还是老值。必须在 exec 之前从 env 里摘掉。
+    """
+    base = {"BT_PYTHON_SERVICE_SID": "fac7cdfe00cf17a0aa6d85ab10a022cd", "PATH": "/usr/bin"}
+
+    env = us._guard_env(base)
+
+    assert "BT_PYTHON_SERVICE_SID" not in env
+    assert env["PATH"] == "/usr/bin"
+    # 不改动调用方传入的字典（避免污染本进程环境）
+    assert base["BT_PYTHON_SERVICE_SID"] == "fac7cdfe00cf17a0aa6d85ab10a022cd"
+
+
+def test_spawn_restart_guard_passes_clean_env_and_start_cmd(monkeypatch, tmp_path):
+    """Popen 必须显式传去掉身份标记的 env；配了拉起命令就写成独立脚本。"""
+    captured: dict = {}
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(us, "_listener_pid", lambda: 12345)
+    monkeypatch.setattr(us, "_venv_python", lambda: Path("/usr/bin/python3"))
+    monkeypatch.setattr(us, "_log", lambda *a, **k: None)
+    monkeypatch.setattr(us, "RESTART_CMD", "")
+    monkeypatch.setattr(us, "_restart_workers_gracefully", lambda _jid: False)
+    monkeypatch.setenv("BT_PYTHON_SERVICE_SID", "should-be-dropped")
+    monkeypatch.setattr(
+        us, "RESTART_START_CMD", "sudo -n /usr/local/bin/btpy-project-start cenkermes"
+    )
+
+    class _FakePopen:
+        def __init__(self, args, **kwargs):
+            captured["args"] = args
+            captured.update(kwargs)
+
+    monkeypatch.setattr(us.subprocess, "Popen", _FakePopen)
+    assert us._spawn_restart_guard(21, "v2.2.20") is True
+
+    assert "BT_PYTHON_SERVICE_SID" not in captured["env"]
+    # 拉起命令落成独立脚本，避免内联时引号把守护脚本写坏
+    start_script = tmp_path / "restart_start_21.sh"
+    assert start_script.read_text(encoding="utf-8").strip().endswith("cenkermes")
+    guard = (tmp_path / "restart_21.sh").read_text(encoding="utf-8")
+    assert f"STARTER='{start_script}'" in guard
+    assert 'bash "$STARTER"' in guard
+
+
+def test_restart_script_without_start_cmd_keeps_starter_empty():
+    """没配拉起命令时 STARTER 为空，脚本走「等服务管理器巡检」的老路。"""
+    body = us._build_restart_script(
+        job_id=22, target_version="v2.2.20", pid=None, py=Path("/p"), custom=""
+    )
+
+    assert "STARTER=''" in body
+    assert 'bash "$STARTER"' in body  # 分支仍在，只是不执行
+
+
+def test_restart_script_runs_starter_after_kill(tmp_path):
+    """拉起动作必须排在 kill / 释放端口之后，且脚本仍能通过 bash -n。"""
+    body = us._build_restart_script(
+        job_id=23,
+        target_version="v2.2.20",
+        pid=999,
+        py=Path("/usr/bin/python3"),
+        custom="",
+        units="",
+        start_cmd="sudo -n /usr/local/bin/btpy-project-start cenkermes",
+    )
+
+    kill_at = body.index('kill -TERM "$PID"')
+    # 拉起前排「等旧 pid 退出」：否则面板启动入口看到旧进程还在会直接跳过，
+    # 命令返回「已执行」却什么都没起来（2026-11-07 手工复现的竞态）
+    wait_at = body.index('kill -0 "$PID" 2>/dev/null || break')
+    start_at = body.index('say "主动拉起后端（第 $ATTEMPT 次）：bash $STARTER"')
+    assert kill_at < wait_at < start_at
+    # 拉起失败要能重试，不能一次失败就干等 600s
+    assert "while [ \"$ATTEMPT\" -le 3 ]" in body
+
+    script = tmp_path / "guard.sh"
+    script.write_text(body, encoding="utf-8")
+    res = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+
+
+def test_env_setting_falls_back_to_dotenv(tmp_path, monkeypatch):
+    """部署参数可以写进 backend/.env。
+
+    宝塔项目的 env 文件只是 ``source backend/.env``，行里没有 export，所以
+    .env 的值进不了 uvicorn 的 environ（应用读 .env 靠 pydantic-settings）。
+    现场写 .env 是最自然的做法，这里必须兜住；进程环境变量优先级更高。
+    """
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        '# 注释行不该被误读\nCENKORMES_START_CMD="sudo -n /usr/local/bin/btpy-project-start cenkermes"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(us, "ENV_FILE", env_file)
+    monkeypatch.delenv("CENKORMES_START_CMD", raising=False)
+
+    assert us._env_setting("CENKORMES_START_CMD") == (
+        "sudo -n /usr/local/bin/btpy-project-start cenkermes"
+    )
+    assert us._env_setting("CENKORMES_NOT_THERE") == ""
+
+    monkeypatch.setenv("CENKORMES_START_CMD", "from-environ")
+    assert us._env_setting("CENKORMES_START_CMD") == "from-environ"
