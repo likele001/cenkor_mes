@@ -590,7 +590,8 @@ Python 项目管理器是**定时巡检**（默认 120s 一轮），所以不配
 
 ```bash
 # 1) 放一个 root 属主的启动封装：只允许启动白名单里的项目，其它参数一律拒绝
-install -o root -g root -m 755 btpy-project-start /usr/local/bin/btpy-project-start
+#    源码在 scripts/panel/btpy-project-start（不进产物包，由运维手工安装）
+install -o root -g root -m 755 scripts/panel/btpy-project-start /usr/local/bin/btpy-project-start
 
 # 2) 给 www 一条固定的 sudo 白名单，只授权「启动 cenkermes 项目」这一件事
 echo 'www ALL=(root) NOPASSWD: /usr/local/bin/btpy-project-start cenkermes' \

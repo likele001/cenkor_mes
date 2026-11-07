@@ -1,0 +1,55 @@
+#!/www/server/panel/pyenv/bin/python3
+# -*- coding: utf-8 -*-
+"""以宝塔面板官方入口启动指定的 Python 项目。
+
+用途：CenkorMES 在线升级 kill 掉后端主进程之后，立即调本封装把服务拉起来，
+把停机时间从「一个面板巡检周期（默认 120s）」压缩到「一次进程启动（~10s）」。
+
+为什么不能直接在应用里 nohup uvicorn：
+  - 手动起的进程会抢 8500 端口，面板自愈随后反复 address already in use；
+  - pidfile 不再由面板写入，面板的启动/停止/日志/自愈全部失准；
+  - 面板认进程靠 /proc/<pid>/environ 里的 BT_PYTHON_SERVICE_SID，手起进程
+    不带这个标记，面板永远认为项目没在跑。
+
+安全边界（本文件必须 root:root 0755，www 只能执行、不能修改）：
+  - 只接受白名单里的项目名，其它参数一律拒绝；
+  - 不拼 shell、不透传任何参数给启动命令；
+  - 面板 StartProject 内部以项目配置的用户（www）执行启动脚本，所以被拉起的
+    进程身份不变，升级流程拿不到任何额外权限。
+
+安装（只需一次，root 执行）：
+  install -o root -g root -m 755 scripts/panel/btpy-project-start /usr/local/bin/btpy-project-start
+  echo 'www ALL=(root) NOPASSWD: /usr/local/bin/btpy-project-start cenkermes' \
+    >> /etc/sudoers.d/cenkormes-services && visudo -c
+  echo 'CENKORMES_START_CMD="sudo -n /usr/local/bin/btpy-project-start cenkermes"' \
+    >> backend/.env
+
+换项目名/面板路径时改 ALLOWED 与 PANEL 两处；本文件不进产物包，由运维手工安装。
+"""
+import os
+import sys
+
+PANEL = "/www/server/panel"
+ALLOWED = ("cenkermes",)
+
+if len(sys.argv) != 2 or sys.argv[1] not in ALLOWED:
+    sys.stderr.write("usage: btpy-project-start {%s}\n" % "|".join(ALLOWED))
+    sys.exit(2)
+
+project_name = sys.argv[1]
+
+if PANEL + "/class" not in sys.path:
+    sys.path.insert(0, PANEL + "/class")
+if PANEL not in sys.path:
+    sys.path.insert(0, PANEL)
+os.chdir(PANEL)
+
+import public                      # noqa: E402
+from projectModel import pythonModel   # noqa: E402
+
+model = pythonModel.main()
+get = public.dict_obj()
+get.name = project_name
+result = model.StartProject(get)
+print(result)
+sys.exit(0 if isinstance(result, dict) and result.get("status") else 1)
