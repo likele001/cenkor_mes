@@ -1,6 +1,5 @@
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
-import * as Vue from 'vue'
 import { createApp } from 'vue'
 // Element Plus 改为按需引入：模板组件与指令由 unplugin-vue-components 自动引入并注入样式。
 // 编程式 API（ElMessage / ElMessageBox）在各文件显式 import，样式需在此手动引入副作用。
@@ -15,13 +14,15 @@ import './style.css'
 import App from './App.vue'
 import router from './router'
 import { installChunkReloadHandlers } from '@/utils/chunk-reload'
+import { installExtensionBridge } from '@/utils/extensionBridge'
 import { setupExtensionLoader } from '@/utils/extensionLoader'
 
 initAdminTheme()
 installChunkReloadHandlers()
 
-// 扩展宿主运行时：向插件脚本暴露共享 Vue 运行时，并安装插件注册桥
-window.Vue = Vue
+// 扩展宿主运行时：暴露共享 Vue + Element Plus 组件、请求/提示桥，并安装插件注册桥。
+// 插件脚本以 Blob 注入，无法 import 宿主模块；缺任一桥都会导致扩展页只剩「共 0 条」。
+installExtensionBridge()
 setupExtensionLoader({ router })
 
 const app = createApp(App)
