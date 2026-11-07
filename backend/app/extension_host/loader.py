@@ -65,6 +65,36 @@ def extension_module_name(key: str) -> str:
     return f"cenkormes_ext_{key}"
 
 
+def _core_table_ids() -> set[int]:
+    """收集核心 ``app.*`` 模块命名空间里出现过的 Table 对象 id 集合。
+
+    用于区分「扩展自己声明的表」与「扩展顺带 import 进来的核心表」：核心模型在
+    ``app.models`` 中一定以类属性或模块级 Table 的形式存在，同一个 Table 对象
+    只要出现在任一 ``app.*`` 命名空间里，就认定为核心表。
+    """
+    from sqlalchemy import Table
+
+    ids: set[int] = set()
+    for name, module in list(sys.modules.items()):
+        if name != "app" and not name.startswith("app."):
+            continue
+        try:
+            values = list(vars(module).values())
+        except Exception:  # noqa: BLE001 - 个别模块命名空间异常不影响判定
+            continue
+        for obj in values:
+            try:
+                if isinstance(obj, Table):
+                    ids.add(id(obj))
+                    continue
+                table = getattr(obj, "__table__", None)
+            except Exception:  # noqa: BLE001 - celery Proxy 等惰性对象取值失败
+                continue
+            if table is not None:
+                ids.add(id(table))
+    return ids
+
+
 def _detach_extension_tables(module) -> int:
     """把扩展声明的表从共享 ``Base.metadata`` 摘掉。
 
@@ -79,6 +109,7 @@ def _detach_extension_tables(module) -> int:
 
     meta = Base.metadata
     dropped = 0
+    core_ids: set[int] | None = None
     for obj in list(vars(module).values()):
         # celery.local.Proxy（@shared_task 装饰产物）在任务已被反注册后，
         # isinstance 会触发惰性解析并抛 NotRegistered；跳过即可，本函数只摘表。
@@ -87,6 +118,16 @@ def _detach_extension_tables(module) -> int:
                 table = getattr(obj, "__table__", None)
                 owner = getattr(obj, "__module__", "") or ""
             elif isinstance(obj, Table):
+                # 扩展模块里出现 Table 有两种来源：自己命令式声明的表（应随扩展摘掉），
+                # 以及 ``from app.models.user import user_roles`` 这类顺带引进来的
+                # **核心表**。核心表绝不能摘：摘掉之后 ``Role.users`` 这类字符串关系
+                # 在首次 mapper 配置时就找不到表名，worker 侧表现为
+                # ``expression 'user_roles' failed to locate a name``，
+                # 且该进程内所有涉及该表的关系查询都会失败。
+                if core_ids is None:
+                    core_ids = _core_table_ids()
+                if id(obj) in core_ids:
+                    continue
                 table = obj
                 owner = module.__name__
             else:

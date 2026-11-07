@@ -4,7 +4,7 @@ import logging
 
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_init, worker_process_init
+from celery.signals import worker_init
 from kombu import Queue
 
 from app.core.config import settings
@@ -31,18 +31,19 @@ celery.autodiscover_tasks(["app"])
 
 
 @worker_init.connect
-@worker_process_init.connect
 def _import_extension_modules_in_worker(**kwargs):
-    """Worker 主进程与子进程启动时 import 已装扩展模块，注册扩展 @shared_task。
+    """Worker 主进程启动时 import 已装扩展模块，注册扩展 @shared_task。
 
     worker 只通过 ``celery -A app.celery_app`` 启动，不会 import app.main；
     不加这一步，扩展声明的 celery 任务在 worker 端永远是「未注册任务」。
 
-    为什么主进程也要挂：prefork 下由 MainProcess 从 broker 取消息并查
-    app.tasks 注册表，只有 worker_process_init（子进程）导入时，@shared_task
-    会注册在子进程各自的 app 实例上，主进程查不到，报
-    "Received unregistered task of type 'qcode.inspection_scan'"。
-    因此 worker_init（主进程）与 worker_process_init（子进程）都要导入。
+    只挂主进程 ``worker_init``，**刻意不挂** ``worker_process_init``：
+    prefork 子进程从主进程 fork，天然继承已注册的任务表；若在子进程里再调一次
+    ``import_extension_modules()``，会触发 ``load_extension()`` 内部的
+    ``purge_extension_modules()``，把上一轮已加载扩展模块里的 Table 从共享
+    metadata 摘掉——其中包括扩展 ``from app.models.user import user_roles``
+    顺带引入的核心表，于是 ``Role.users`` 关系无法解析，扩展任务在子进程里必失败
+    （``expression 'user_roles' failed to locate a name``）。
     """
     try:
         from app.extension_host import import_extension_modules
