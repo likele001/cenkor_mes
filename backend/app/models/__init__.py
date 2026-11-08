@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.attachment import Attachment
 from app.models.customer import Customer
 from app.models.customer_product import CustomerProduct
+from app.models.customer_price_tier import CustomerPriceTier
 from app.models.customer_sku_price import CustomerSkuPrice
 from app.models.department import Department
 from app.models.operation_log import OperationLog

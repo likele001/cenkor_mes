@@ -73,6 +73,29 @@ class CustomerSkuPricesSetIn(BaseModel):
     items: list[CustomerSkuPricingIn] = Field(default_factory=list)
 
 
+class CustomerPriceTierIn(BaseModel):
+    """阶梯价的一个档位：采购满 `min_qty` 件时单价为 `price`。"""
+
+    min_qty: int = Field(ge=1, le=1_000_000)
+    price: Decimal = Field(gt=0, le=Decimal("99999999.9999"))
+
+
+class CustomerPriceTierScopeIn(BaseModel):
+    """某个 scope（产品通用 / 某型号）的完整档位列表。
+
+    `sku_id` 传 0 表示产品通用阶梯（所有型号共用），传型号 ID 表示该型号专属；
+    `tiers` 传空列表表示清空该 scope 的阶梯、回落到单一单价。
+    """
+
+    product_id: int = Field(ge=1)
+    sku_id: int = Field(default=0, ge=0)
+    tiers: list[CustomerPriceTierIn] = Field(default_factory=list)
+
+
+class CustomerPriceTiersSetIn(BaseModel):
+    items: list[CustomerPriceTierScopeIn] = Field(default_factory=list)
+
+
 class CustomerOut(BaseModel):
     id: int
     user_id: int | None

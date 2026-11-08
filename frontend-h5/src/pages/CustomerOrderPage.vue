@@ -65,8 +65,63 @@ function priceUnits(raw?: string | number | null): number {
   return Math.round(n * PRICE_SCALE)
 }
 
+interface TierHit {
+  min_qty: number
+  price: string
+}
+
+/** 档位按起点升序；后端已排好序，这里再排一次防止脏数据打乱命中逻辑 */
+function sortedTiers(sku: CustomerSkuOut): TierHit[] {
+  const list = (sku.tiers ?? []).map((x) => ({ min_qty: Number(x.min_qty), price: String(x.price) }))
+  return list.sort((a, b) => a.min_qty - b.min_qty)
+}
+
+function hasTiers(sku: CustomerSkuOut): boolean {
+  return sortedTiers(sku).length > 0
+}
+
+/** 按数量命中档位，与后端 `pick_tier` 同口径：取满足 min_qty 的最大档 */
+function hitTier(sku: CustomerSkuOut, qty: number): TierHit | null {
+  const tiers = sortedTiers(sku)
+  if (!tiers.length) return null
+  let hit = tiers[0]
+  for (const tier of tiers) {
+    if (tier.min_qty <= qty) hit = tier
+    else break
+  }
+  return hit
+}
+
+/** 下一档（更高数量、更低单价）；已是最高档返回 null */
+function nextTier(sku: CustomerSkuOut, qty: number): TierHit | null {
+  for (const tier of sortedTiers(sku)) {
+    if (tier.min_qty > qty) return tier
+  }
+  return null
+}
+
+/** 结算单价：有阶梯按数量命中，无阶梯用价目表单价。后端下单会再算一次，前端只做展示 */
+function lineUnitPrice(line: CartLine): string | number {
+  const tier = hitTier(line.sku, line.qty)
+  return tier ? tier.price : line.sku.unit_price
+}
+
+function lineUnitPriceText(line: CartLine): string {
+  return fmtMoney(priceUnits(lineUnitPrice(line)), line.sku.currency || 'CNY', 4)
+}
+
+/** 「再买 N 件，单价降至 X」提示；已是最高档返回空串由 v-if 挡住 */
+function tierNextText(sku: CustomerSkuOut, qty: number): string {
+  const nxt = nextTier(sku, qty)
+  if (!nxt) return ''
+  return t('customer.order.tierNext', {
+    qty: nxt.min_qty,
+    price: fmtMoney(priceUnits(nxt.price), sku.currency || 'CNY', 4),
+  })
+}
+
 function lineSubtotalUnits(line: CartLine): number {
-  return priceUnits(line.sku.unit_price) * line.qty
+  return priceUnits(lineUnitPrice(line)) * line.qty
 }
 
 const cartTotalUnits = computed(() => cart.value.reduce((sum, l) => sum + lineSubtotalUnits(l), 0))
@@ -344,10 +399,18 @@ onMounted(() => {
 
               <div class="shrink-0 ml-2 flex flex-col items-end">
                 <template v-if="isPriced(s)">
-                  <div class="text-base font-semibold text-rose-600">{{ unitPriceText(s) }}</div>
+                  <div class="text-base font-semibold text-rose-600">
+                    {{ unitPriceText(s) }}
+                    <span v-if="hasTiers(s)" class="text-[11px] font-normal text-zinc-400">
+                      {{ t('customer.order.tierFrom') }}
+                    </span>
+                  </div>
                   <div class="mt-0.5 text-[11px] text-zinc-400">
                     {{ t('customer.order.unitPrice') }}
                     <span v-if="minQtyOf(s) > 1"> · {{ t('customer.order.minQty') }} {{ minQtyOf(s) }}</span>
+                  </div>
+                  <div v-if="nextTier(s, minQtyOf(s))" class="mt-0.5 text-right text-[11px] text-rose-500">
+                    {{ tierNextText(s, minQtyOf(s)) }}
                   </div>
                   <van-button
                     size="small"
@@ -434,8 +497,11 @@ onMounted(() => {
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium">{{ skuLabel(line.sku) }}</div>
               <div class="mt-0.5 text-xs text-zinc-500">
-                {{ t('customer.order.unitPrice') }} {{ unitPriceText(line.sku) }}
+                {{ t('customer.order.unitPrice') }} {{ lineUnitPriceText(line) }}
                 <span v-if="minQtyOf(line.sku) > 1"> · {{ t('customer.order.minQty') }} {{ minQtyOf(line.sku) }}</span>
+              </div>
+              <div v-if="tierNextText(line.sku, line.qty)" class="mt-0.5 text-xs text-rose-500">
+                {{ tierNextText(line.sku, line.qty) }}
               </div>
             </div>
             <van-icon name="cross" class="ml-2 shrink-0 text-zinc-400" @click="removeLine(line.sku.id)" />

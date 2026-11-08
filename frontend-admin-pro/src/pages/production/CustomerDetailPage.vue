@@ -7,7 +7,7 @@ import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { masterApi, type ProductOut } from '@/api/master'
 import { http } from '@/utils/http'
@@ -245,8 +245,8 @@ async function loadCustomerProducts() {
   } finally {
     productsLoading.value = false
   }
-  // 产品级价目变了，型号级的生效值也会变，必须跟着刷新
-  await loadSkuPricing()
+  // 产品级价目变了，型号级的生效值与阶梯档位都会跟着变，必须一起刷新
+  await Promise.all([loadSkuPricing(), loadPriceTiers()])
 }
 
 async function loadSkuPricing() {
@@ -297,6 +297,184 @@ async function saveSkuPricing() {
   } finally {
     skuPricingSaving.value = false
   }
+}
+
+/**
+ * 阶梯价：按 scope（产品通用 sku_id=0 / 型号专属 sku_id>0）**整组替换**。
+ * 一次保存只提交一个 scope，避免动到别的 scope 的档位。
+ */
+interface PriceTierRow {
+  min_qty: number
+  price: string
+}
+
+interface TierScopeRow {
+  product_id: number
+  sku_id: number
+  label: string
+  sublabel: string
+  base_price: string
+  currency: string
+  tiers: PriceTierRow[]
+}
+
+const tierProductRows = ref<TierScopeRow[]>([])
+const tierSkuRows = ref<TierScopeRow[]>([])
+const tierSkuOptions = ref<
+  { sku_id: number; sku_code: string; sku_name: string; product_id: number; product_name: string }[]
+>([])
+const tiersLoading = ref(false)
+const pendingSkuTierId = ref<number | null>(null)
+
+const tierDlg = reactive({
+  open: false,
+  saving: false,
+  product_id: 0,
+  sku_id: 0,
+  label: '',
+  base_price: '0',
+  currency: 'CNY',
+  tiers: [] as PriceTierRow[],
+})
+
+async function loadPriceTiers() {
+  tiersLoading.value = true
+  try {
+    const res = await productionApi.getCustomerPriceTiers(customerId.value)
+    tierProductRows.value = (res.products ?? []).map((p) => ({
+      product_id: p.product_id,
+      sku_id: 0,
+      label: p.product_name || productLabelById(p.product_id),
+      sublabel: t('production.customers.tierScopeProductWide'),
+      base_price: String(p.price ?? '0'),
+      currency: p.currency || 'CNY',
+      tiers: (p.tiers ?? []).map((x) => ({ min_qty: Number(x.min_qty), price: String(x.price) })),
+    }))
+    tierSkuRows.value = (res.skus ?? []).map((s) => ({
+      product_id: s.product_id,
+      sku_id: s.sku_id,
+      label: s.sku_name || s.sku_code || `#${s.sku_id}`,
+      sublabel: `${s.sku_code} · ${s.product_name}`,
+      base_price: String(s.sku_price ?? s.product_price ?? '0'),
+      currency: s.currency || 'CNY',
+      tiers: (s.tiers ?? []).map((x) => ({ min_qty: Number(x.min_qty), price: String(x.price) })),
+    }))
+    tierSkuOptions.value = res.sku_options ?? []
+  } finally {
+    tiersLoading.value = false
+  }
+}
+
+/** 档位摘要：`1+→12.50 · 100+→11.80`，未配置时返回空串由文案兜底 */
+function tierSummary(row: TierScopeRow) {
+  return row.tiers.map((x) => `${x.min_qty}+ → ${x.price}`).join(' · ')
+}
+
+function openTierEditor(row: TierScopeRow) {
+  tierDlg.product_id = row.product_id
+  tierDlg.sku_id = row.sku_id
+  tierDlg.label = row.label
+  tierDlg.base_price = row.base_price
+  tierDlg.currency = row.currency
+  // 深拷贝：编辑中的改动不能直接影响表格，取消即丢弃
+  tierDlg.tiers = row.tiers.length
+    ? row.tiers.map((x) => ({ ...x }))
+    : [{ min_qty: 1, price: row.base_price !== '0' ? row.base_price : '' }]
+  tierDlg.open = true
+}
+
+function addTierRow() {
+  const last = tierDlg.tiers[tierDlg.tiers.length - 1]
+  tierDlg.tiers.push({
+    min_qty: last ? Number(last.min_qty) * 10 || 10 : 1,
+    price: last ? last.price : '',
+  })
+}
+
+function removeTierRow(index: number) {
+  tierDlg.tiers.splice(index, 1)
+}
+
+/** 前端先做一次校验：错误配置一旦落库，下单金额会静默算错 */
+function validateTiers(rows: PriceTierRow[]): string | null {
+  if (!rows.length) return t('production.customers.tierEmpty')
+  const seen = new Set<number>()
+  let prev: { qty: number; price: number } | null = null
+  const ordered = [...rows].sort((a, b) => Number(a.min_qty) - Number(b.min_qty))
+  for (const row of ordered) {
+    const qty = Number(row.min_qty)
+    const price = Number(row.price)
+    if (!Number.isFinite(qty) || qty < 1 || !Number.isInteger(qty)) {
+      return t('production.customers.tierQtyInvalid')
+    }
+    if (!Number.isFinite(price) || price <= 0) return t('production.customers.tierPriceInvalid')
+    if (seen.has(qty)) return t('production.customers.tierDuplicateQty', { qty })
+    seen.add(qty)
+    if (prev && price > prev.price) {
+      return t('production.customers.tierNotDescending', { qty, prev: prev.qty })
+    }
+    prev = { qty, price }
+  }
+  return null
+}
+
+async function saveTierScope() {
+  const err = validateTiers(tierDlg.tiers)
+  if (err) {
+    ElMessage.warning(err)
+    return
+  }
+  tierDlg.saving = true
+  try {
+    await productionApi.setCustomerPriceTiers(customerId.value, [
+      {
+        product_id: tierDlg.product_id,
+        sku_id: tierDlg.sku_id,
+        tiers: tierDlg.tiers.map((x) => ({ min_qty: Number(x.min_qty), price: x.price })),
+      },
+    ])
+    ElMessage.success(t('production.customers.tierSaved'))
+    tierDlg.open = false
+    await Promise.all([loadPriceTiers(), loadSkuPricing()])
+  } finally {
+    tierDlg.saving = false
+  }
+}
+
+/** 清空某个 scope 的阶梯：提交空数组，回落到该 scope 的单一单价 */
+async function clearTierScope(row: TierScopeRow) {
+  await ElMessageBox.confirm(
+    t('production.customers.tierClearConfirm', { scope: row.label }),
+    t('production.common.confirm'),
+    { type: 'warning' },
+  )
+  await productionApi.setCustomerPriceTiers(customerId.value, [
+    { product_id: row.product_id, sku_id: row.sku_id, tiers: [] },
+  ])
+  ElMessage.success(t('production.customers.tierSaved'))
+  await Promise.all([loadPriceTiers(), loadSkuPricing()])
+}
+
+/** 为某个型号新增专属阶梯：先选型号，再进档位编辑器 */
+function onPickSkuForTier(skuId: number | null) {
+  if (!skuId) return
+  const opt = tierSkuOptions.value.find((x) => x.sku_id === skuId)
+  pendingSkuTierId.value = null
+  if (!opt) return
+  const existing = tierSkuRows.value.find((r) => r.sku_id === skuId)
+  if (existing) {
+    openTierEditor(existing)
+    return
+  }
+  openTierEditor({
+    product_id: opt.product_id,
+    sku_id: opt.sku_id,
+    label: opt.sku_name || opt.sku_code,
+    sublabel: `${opt.sku_code} · ${opt.product_name}`,
+    base_price: '0',
+    currency: 'CNY',
+    tiers: [],
+  })
 }
 
 async function loadAllProducts() {
@@ -869,6 +1047,101 @@ onMounted(async () => {
             <div v-else-if="!skuPricingLoading" class="py-6 text-center text-sm text-zinc-400">
               {{ t('production.customers.skuPricingEmpty') }}
             </div>
+
+            <el-divider />
+
+            <div class="mb-3">
+              <div class="text-sm font-medium">{{ t('production.customers.tierPricingTitle') }}</div>
+              <div class="text-xs text-zinc-500">{{ t('production.customers.tierPricingHint') }}</div>
+            </div>
+
+            <div v-loading="tiersLoading">
+              <div class="mb-2 text-xs font-medium text-zinc-500">
+                {{ t('production.customers.tierScopeProductWide') }}
+              </div>
+              <el-table v-if="tierProductRows.length" :data="tierProductRows" border size="small">
+                <el-table-column :label="t('production.customers.colProduct')" min-width="230">
+                  <template #default="{ row }">
+                    <div class="text-sm">{{ row.label }}</div>
+                    <div class="text-xs text-zinc-400">
+                      {{ t('production.customers.tierBasePrice') }}: {{ row.base_price }} {{ row.currency }}
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('production.customers.colTierSummary')" min-width="260">
+                  <template #default="{ row }">
+                    <span v-if="row.tiers.length" class="text-sm">{{ tierSummary(row) }}</span>
+                    <el-tag v-else type="info" size="small">
+                      {{ t('production.customers.tierNotConfigured') }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('production.common.operation')" width="200">
+                  <template #default="{ row }">
+                    <el-button size="small" @click="openTierEditor(row)">
+                      {{ t('production.customers.configTiers') }}
+                    </el-button>
+                    <el-button
+                      v-if="row.tiers.length"
+                      size="small"
+                      type="danger"
+                      plain
+                      @click="clearTierScope(row)"
+                    >{{ t('production.customers.clearTiers') }}</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-else class="py-4 text-center text-sm text-zinc-400">
+                {{ t('production.customers.pricingEmpty') }}
+              </div>
+
+              <div class="mt-5 mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div class="text-xs font-medium text-zinc-500">
+                  {{ t('production.customers.tierScopeSku') }}
+                </div>
+                <el-select
+                  v-model="pendingSkuTierId"
+                  filterable
+                  clearable
+                  :placeholder="t('production.customers.addSkuTierPlaceholder')"
+                  style="width: 300px"
+                  @change="onPickSkuForTier"
+                >
+                  <el-option
+                    v-for="o in tierSkuOptions"
+                    :key="o.sku_id"
+                    :label="`${o.sku_code} · ${o.sku_name || ''}`"
+                    :value="o.sku_id"
+                  />
+                </el-select>
+              </div>
+              <el-table v-if="tierSkuRows.length" :data="tierSkuRows" border size="small">
+                <el-table-column :label="t('production.customers.colSku')" min-width="220">
+                  <template #default="{ row }">
+                    <div class="text-sm">{{ row.label }}</div>
+                    <div class="text-xs text-zinc-400">{{ row.sublabel }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('production.customers.colTierSummary')" min-width="240">
+                  <template #default="{ row }">
+                    <span class="text-sm">{{ tierSummary(row) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('production.common.operation')" width="200">
+                  <template #default="{ row }">
+                    <el-button size="small" @click="openTierEditor(row)">
+                      {{ t('production.customers.configTiers') }}
+                    </el-button>
+                    <el-button size="small" type="danger" plain @click="clearTierScope(row)">
+                      {{ t('production.customers.clearTiers') }}
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-else class="py-4 text-center text-sm text-zinc-400">
+                {{ t('production.customers.tierSkuEmpty') }}
+              </div>
+            </div>
           </div>
         </el-tab-pane>
         <el-tab-pane label="联系人" name="contacts">
@@ -1148,6 +1421,48 @@ onMounted(async () => {
     <template #footer>
       <el-button @click="convertDlg.open = false">{{ t('production.common.cancel') }}</el-button>
       <el-button type="primary" :loading="convertDlg.saving" @click="submitConvertOrder">{{ t('production.customers.convertOrder') }}</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog
+    v-model="tierDlg.open"
+    :title="`${t('production.customers.configTiers')} · ${tierDlg.label}`"
+    width="640px"
+    destroy-on-close
+  >
+    <div class="mb-3 text-xs text-zinc-500">
+      {{ t('production.customers.tierDlgHint', { price: tierDlg.base_price, currency: tierDlg.currency }) }}
+    </div>
+    <div class="space-y-2">
+      <div v-for="(row, idx) in tierDlg.tiers" :key="idx" class="flex flex-wrap items-center gap-2">
+        <span class="w-24 text-xs text-zinc-500">{{ t('production.customers.colMinQty') }}</span>
+        <el-input-number
+          v-model="row.min_qty"
+          :min="1"
+          :step="1"
+          :precision="0"
+          controls-position="right"
+          style="width: 140px"
+        />
+        <span class="text-xs text-zinc-500">{{ t('production.customers.colTierPrice') }}</span>
+        <el-input v-model="row.price" placeholder="0.00" style="width: 130px" />
+        <span class="text-xs text-zinc-400">{{ tierDlg.currency }}</span>
+        <el-button
+          v-if="tierDlg.tiers.length > 1"
+          type="danger"
+          link
+          @click="removeTierRow(idx)"
+        >{{ t('production.common.delete') }}</el-button>
+      </div>
+    </div>
+    <el-button class="mt-3" link type="primary" @click="addTierRow">
+      + {{ t('production.customers.addTier') }}
+    </el-button>
+    <template #footer>
+      <el-button @click="tierDlg.open = false">{{ t('production.common.cancel') }}</el-button>
+      <el-button type="primary" :loading="tierDlg.saving" @click="saveTierScope">
+        {{ t('production.common.save') }}
+      </el-button>
     </template>
   </el-dialog>
     </template>

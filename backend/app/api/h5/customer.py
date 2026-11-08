@@ -15,6 +15,7 @@ from app.core.response import ok
 from app.crud.after_sale import create_after_sale, list_after_sales, list_shipments_by_order
 from app.crud.approval_record import record_status
 from app.crud.customer import get_customer_by_user_id
+from app.crud.customer_price_tier import PRODUCT_WIDE_SKU_ID, get_price_tier_map
 from app.crud.customer_product import get_customer_product_map, list_customer_product_ids
 from app.crud.customer_sku_price import get_customer_sku_price_map
 from app.crud.finance import get_statement_by_id, list_statements, update_statement_status
@@ -34,6 +35,7 @@ from app.services.customer_pricing import (
     PriceRule,
     price_customer_order,
     resolve_price_rule,
+    to_price_tiers,
 )
 from app.services.display_label import product_display_name, sku_display_name
 from app.services.sku_scope import apply_finished_product_sku_filter, is_material_product
@@ -66,7 +68,9 @@ def _product_public(p: Product) -> dict:
 def _catalog_price(rule: PriceRule | None) -> dict:
     """把生效定价转成前端可展示的纯值（金额用字符串避免 JS 浮点误差）。
 
-    `price_source` 让前端/排查能看出这个价来自型号级覆盖还是产品级兼底。
+    `price_source` 让前端/排查能看出这个价来自型号阶梯、型号覆盖、产品阶梯
+    还是产品级兜底；`tiers` 是完整阶梯，H5 拿它渲染「满 X 件 Y 元/件」的提示。
+    `unit_price` 在阶梯场景下是**起价**（最小档），下单时后端会按实际数量重算。
     """
     if rule is None:
         return {
@@ -75,6 +79,8 @@ def _catalog_price(rule: PriceRule | None) -> dict:
             "currency": "CNY",
             "priced": False,
             "price_source": "none",
+            "tiers": [],
+            "tier_min_qty": None,
         }
     return {
         "unit_price": str(rule.unit_price),
@@ -82,6 +88,8 @@ def _catalog_price(rule: PriceRule | None) -> dict:
         "currency": rule.currency,
         "priced": True,
         "price_source": rule.source,
+        "tiers": [{"min_qty": t.min_qty, "price": str(t.price)} for t in rule.tiers],
+        "tier_min_qty": rule.tier_min_qty,
     }
 
 @router.get("/catalog")
@@ -106,6 +114,19 @@ def catalog_api(
 
     price_map = get_customer_product_map(db, customer_id=customer.id)
     sku_price_map = get_customer_sku_price_map(db, customer_id=customer.id)
+    tier_map = get_price_tier_map(db, customer_id=customer.id)
+
+    def _sku_rule(sku: Sku) -> PriceRule | None:
+        """展示用定价：不传数量，阶梯返回起价（最小档）。"""
+        return resolve_price_rule(
+            price_map.get(sku.product_id),
+            sku_price_map.get(sku.id),
+            sku_tiers=to_price_tiers(tier_map.get((sku.product_id, sku.id))),
+            product_tiers=to_price_tiers(
+                tier_map.get((sku.product_id, PRODUCT_WIDE_SKU_ID))
+            ),
+        )
+
     sku_stmt = select(Sku).where(Sku.is_active.is_(True),
         Sku.product_id.in_(allowed_ids))
     sku_stmt = apply_finished_product_sku_filter(sku_stmt)
@@ -132,14 +153,22 @@ def catalog_api(
         "items": [
             {
                 **_sku_public(s),
-                **_catalog_price(resolve_price_rule(price_map.get(s.product_id), sku_price_map.get(s.id))),
+                **_catalog_price(_sku_rule(s)),
             }
             for s in skus
         ],
         "products": [
             {
                 **_product_public(p),
-                **_catalog_price(resolve_price_rule(price_map.get(p.id), None)),
+                **_catalog_price(
+                    resolve_price_rule(
+                        price_map.get(p.id),
+                        None,
+                        product_tiers=to_price_tiers(
+                            tier_map.get((p.id, PRODUCT_WIDE_SKU_ID))
+                        ),
+                    )
+                ),
             }
             for p in products
         ],

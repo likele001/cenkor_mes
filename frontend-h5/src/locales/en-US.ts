@@ -79,6 +79,8 @@ export default {
       totalAmount: 'Total',
       unitPrice: 'Unit price',
       minQty: 'Min. qty',
+      tierFrom: 'from',
+      tierNext: 'Buy {qty} to get {price} each',
       unpriced: 'Not available',
       unpricedHint: 'Contact sales for a quote',
       belowMinQty: 'Quantity must be at least {min}',

@@ -79,6 +79,8 @@ export default {
       totalAmount: '合计',
       unitPrice: '单价',
       minQty: '起订量',
+      tierFrom: '起',
+      tierNext: '再买 {qty} 件，单价降至 {price}',
       unpriced: '暂未开放',
       unpricedHint: '请联系业务员询价',
       belowMinQty: '数量不得低于起订量 {min}',

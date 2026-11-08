@@ -1285,6 +1285,59 @@ export const productionApi = {
       data: { items },
     })
   },
+  /** 读取客户阶梯价：产品通用档（每个白名单产品一行）+ 已配置的型号专属档 */
+  getCustomerPriceTiers(customerId: number) {
+    return http.request<{
+      customer_id: number
+      products: {
+        product_id: number
+        product_name: string
+        price: string
+        min_qty: number
+        currency: string
+        tiers: { min_qty: number; price: string }[]
+      }[]
+      skus: {
+        sku_id: number
+        sku_code: string
+        sku_name: string
+        product_id: number
+        product_name: string
+        sku_price: string | null
+        product_price: string
+        currency: string
+        tiers: { min_qty: number; price: string }[]
+      }[]
+      sku_options: {
+        sku_id: number
+        sku_code: string
+        sku_name: string
+        product_id: number
+        product_name: string
+      }[]
+    }>({
+      url: `/admin/production/customers/${customerId}/price-tiers`,
+      method: 'GET',
+    })
+  },
+  /** 按 scope 整组替换阶梯价：tiers 传空数组表示清空该 scope 的阶梯 */
+  setCustomerPriceTiers(
+    customerId: number,
+    items: {
+      product_id: number
+      sku_id: number
+      tiers: { min_qty: number; price: string | number }[]
+    }[],
+  ) {
+    return http.request<{
+      customer_id: number
+      items: { product_id: number; sku_id: number; min_qty: number; price: string }[]
+    }>({
+      url: `/admin/production/customers/${customerId}/price-tiers`,
+      method: 'PUT',
+      data: { items },
+    })
+  },
   listCustomerContacts(customerId: number, params?: any) {
     return http.request<ListResp<CustomerContactOut>>({ url: `/admin/production/customers/${customerId}/contacts`, method: 'GET', params })
   },

@@ -18,6 +18,11 @@ from app.crud.customer_product import (
     set_customer_product_pricing,
     set_customer_products,
 )
+from app.crud.customer_price_tier import (
+    PRODUCT_WIDE_SKU_ID,
+    get_price_tier_map,
+    replace_price_tiers,
+)
 from app.crud.customer_sku_price import (
     get_customer_sku_price_map,
     list_customer_skus,
@@ -33,6 +38,7 @@ from app.crud.user import get_user_by_id
 from app.models.user import User
 from app.schemas.customer import (
     CustomerCreateIn,
+    CustomerPriceTiersSetIn,
     CustomerProductsPricingSetIn,
     CustomerProductsSetIn,
     CustomerSkuPricesSetIn,
@@ -40,7 +46,7 @@ from app.schemas.customer import (
 )
 from app.services.code_generator import BizType, resolve_code
 from app.services.customer_account import ensure_customer_login_user
-from app.services.customer_pricing import resolve_price_rule
+from app.services.customer_pricing import resolve_price_rule, to_price_tiers
 from app.storage import get_active_storage
 
 router = APIRouter(
@@ -205,13 +211,22 @@ def list_customer_skus_pricing_api(
     c = _need_customer(db, customer_id)
     product_map = get_customer_product_map(db, customer_id=c.id)
     sku_price_map = get_customer_sku_price_map(db, customer_id=c.id)
+    tier_map = get_price_tier_map(db, customer_id=c.id)
     products = {p.id: p for p in list_customer_products_with_detail(db, customer_id=c.id)}
 
     items: list[dict] = []
     for sku in list_customer_skus(db, customer_id=c.id, product_id=product_id):
         product_cfg = product_map.get(sku.product_id)
         sku_cfg = sku_price_map.get(sku.id)
-        rule = resolve_price_rule(product_cfg, sku_cfg)
+        sku_tiers = to_price_tiers(tier_map.get((sku.product_id, sku.id)))
+        product_tiers = to_price_tiers(tier_map.get((sku.product_id, PRODUCT_WIDE_SKU_ID)))
+        # 不传 qty：阶梯给起价，管理端表格用 effective_unit_price 展示「起」
+        rule = resolve_price_rule(
+            product_cfg,
+            sku_cfg,
+            sku_tiers=sku_tiers,
+            product_tiers=product_tiers,
+        )
         product = products.get(sku.product_id)
         items.append({
             "sku_id": sku.id,
@@ -232,6 +247,12 @@ def list_customer_skus_pricing_api(
             "effective_currency": rule.currency if rule else "CNY",
             "source": rule.source if rule else "none",
             "priced": rule is not None,
+            "tier_count": len(rule.tiers) if rule else 0,
+            "tiers": (
+                [{"min_qty": t.min_qty, "price": str(t.price)} for t in rule.tiers]
+                if rule
+                else []
+            ),
         })
     return ok({"customer_id": c.id, "items": items})
 
@@ -263,6 +284,113 @@ def set_customer_skus_pricing_api(
             "price": str(r.price or 0),
             "min_qty": int(r.min_qty) if r.min_qty is not None else None,
             "currency": r.currency,
+        }
+        for r in rows
+    ]
+    db.commit()
+    return ok({"customer_id": c.id, "items": items})
+
+
+@router.get("/{customer_id}/price-tiers", dependencies=[Depends(require_permissions(["customer.view"]))])
+def list_customer_price_tiers_api(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions)):
+    """列出客户阶梯价配置（产品通用 + 型号专属两种 scope）。
+
+    产品通用档对所有白名单产品都返回（未配置时 `tiers` 为空数组），
+    型号专属档只返回已配过档位的型号，避免把上百个型号全拉给前端。
+    """
+    c = _need_customer(db, customer_id)
+    product_map = get_customer_product_map(db, customer_id=c.id)
+    tier_map = get_price_tier_map(db, customer_id=c.id)
+    sku_price_map = get_customer_sku_price_map(db, customer_id=c.id)
+    products = {p.id: p for p in list_customer_products_with_detail(db, customer_id=c.id)}
+    skus = {s.id: s for s in list_customer_skus(db, customer_id=c.id)}
+
+    def _tiers(product_id: int, sku_id: int) -> list[dict]:
+        return [
+            {"min_qty": int(r.min_qty), "price": str(r.price)}
+            for r in tier_map.get((product_id, sku_id), [])
+        ]
+
+    product_items = []
+    for product_id, cfg in sorted(product_map.items()):
+        product = products.get(product_id)
+        product_items.append({
+            "product_id": product_id,
+            "product_name": product.name if product else "",
+            "price": str(cfg.price or 0),
+            "min_qty": int(cfg.min_qty or 1),
+            "currency": str(cfg.currency or "CNY"),
+            "tiers": _tiers(product_id, PRODUCT_WIDE_SKU_ID),
+        })
+
+    sku_items = []
+    for (product_id, sku_id), rows in sorted(tier_map.items()):
+        if sku_id == PRODUCT_WIDE_SKU_ID or not rows:
+            continue
+        sku = skus.get(sku_id)
+        product = products.get(product_id)
+        sku_cfg = sku_price_map.get(sku_id)
+        sku_items.append({
+            "sku_id": sku_id,
+            "sku_code": sku.code if sku else "",
+            "sku_name": sku.name if sku else "",
+            "product_id": product_id,
+            "product_name": product.name if product else "",
+            "sku_price": str(sku_cfg.price) if sku_cfg is not None else None,
+            "product_price": str(product_map[product_id].price or 0),
+            "currency": str(product_map[product_id].currency or "CNY"),
+            "tiers": _tiers(product_id, sku_id),
+        })
+
+    return ok({
+        "customer_id": c.id,
+        "products": product_items,
+        "skus": sku_items,
+        "sku_options": [
+            {
+                "sku_id": s.id,
+                "sku_code": s.code,
+                "sku_name": s.name,
+                "product_id": s.product_id,
+                "product_name": products[s.product_id].name if s.product_id in products else "",
+            }
+            for s in skus.values()
+        ],
+    })
+
+
+@router.put("/{customer_id}/price-tiers", dependencies=[Depends(require_permissions(["customer.manage"]))])
+def set_customer_price_tiers_api(
+    customer_id: int,
+    payload: CustomerPriceTiersSetIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions)):
+    """按 scope 整组替换阶梯价（含显式 commit）。
+
+    每个 scope 提交的是**完整档位列表**，不在列表里的档位即被删除；
+    `tiers` 传空数组表示清空该 scope 的阶梯、回落到单一单价。
+    """
+    c = _need_customer(db, customer_id)
+    try:
+        rows = replace_price_tiers(
+            db,
+            customer_id=c.id,
+            items=[item.model_dump() for item in payload.items],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # commit 前先取纯值：expire_on_commit 之后再读 ORM 属性会触发额外查询
+    items = [
+        {
+            "product_id": r.product_id,
+            "sku_id": r.sku_id,
+            "min_qty": int(r.min_qty),
+            "price": str(r.price),
         }
         for r in rows
     ]

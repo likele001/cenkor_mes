@@ -2,21 +2,34 @@
 # SPDX-License-Identifier: AGPL-3.0
 """客户下单定价服务。
 
-安全口径：**单价只从服务端价目表取**（型号级 `customer_sku_prices` 优先，
-回落产品级 `customer_products`），请求体里不带单价字段，客户无法自己报价；
+安全口径：**单价只从服务端价目表取**，请求体里不带单价字段，客户无法自己报价；
 金额算法与 `app.services.production_rollup.recalc_order_amount` 保持一致
 （单价 × 数量，按分取整），避免 H5 订单与管理端订单两套口径。
 
+定价按「越具体越优先」四级解析：
+
+1. `customer_price_tiers` 里该**型号专属**的阶梯（按数量命中档）
+2. `customer_sku_prices` 型号单价
+3. `customer_price_tiers` 里该**产品通用**的阶梯
+4. `customer_products` 产品单价
+
+阶梯与单一价的关系：阶梯一旦配置就代表管理员对「这个范围怎么定价」
+给出了更完整的规则，因此整体优先于同维度的单一价；型号维度仍然比产品维度
+更具体 —— 给某个特殊型号单独定价，不会被产品通用阶梯抢走。
+
 币种不做汇率换算，整单必须同一币种，否则不同币种的数值直接相加没有业务含义。
+阶梯档位不单独设币种，统一继承产品级币种：阶梯只表达数量折扣，不承担多币种职责。
 """
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, Sequence
 
 from sqlalchemy.orm import Session
 
+from app.crud.customer_price_tier import PRODUCT_WIDE_SKU_ID, get_price_tier_map
 from app.crud.customer_product import SUPPORTED_CURRENCIES, get_customer_product_map
 from app.crud.customer_sku_price import get_customer_sku_price_map
+from app.models.customer_price_tier import CustomerPriceTier
 from app.models.customer_product import CustomerProduct
 from app.models.customer_sku_price import CustomerSkuPrice
 from app.models.sku import Sku
@@ -25,7 +38,7 @@ from app.schemas.order import CustomerOrderItemIn
 CENT = Decimal("0.01")
 UNIT_PRICE_QUANT = Decimal("0.0001")
 
-PriceSource = Literal["sku", "product"]
+PriceSource = Literal["sku_tier", "sku", "product_tier", "product"]
 
 
 class CustomerPricingError(ValueError):
@@ -33,13 +46,32 @@ class CustomerPricingError(ValueError):
 
 
 @dataclass(frozen=True)
+class PriceTier:
+    """一个数量档位：满 `min_qty` 件时单价为 `price`。"""
+
+    min_qty: int
+    price: Decimal
+
+
+@dataclass(frozen=True)
 class PriceRule:
-    """某个型号对某个客户的**生效**定价（已合并型号级与产品级）。"""
+    """某个型号对某个客户的**生效**定价（已合并所有层级的配置）。
+
+    Attributes:
+        unit_price: 实际结算单价（阶梯时是命中档的价）。
+        min_qty: 起订量。阶梯时为最小档起点，不是命中档起点。
+        currency: 结算币种。
+        source: 定价来源，便于排查与管理端回显。
+        tiers: 生效的完整阶梯（升序）；非阶梯定价时为空。
+        tier_min_qty: 命中的档位起点；非阶梯定价时为 None。
+    """
 
     unit_price: Decimal
     min_qty: int
     currency: str
     source: PriceSource
+    tiers: tuple[PriceTier, ...] = ()
+    tier_min_qty: int | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +84,7 @@ class PricedLine:
     subtotal: Decimal
     currency: str
     source: PriceSource
+    tier_min_qty: int | None = None
 
 
 @dataclass(frozen=True)
@@ -61,11 +94,52 @@ class PricedOrder:
     currency: str
 
 
+def to_price_tiers(rows: Sequence[CustomerPriceTier] | None) -> tuple[PriceTier, ...]:
+    """把 ORM 行转成不可变档位元组（已按 min_qty 升序）。"""
+    if not rows:
+        return ()
+    ordered = sorted(rows, key=lambda r: int(r.min_qty))
+    return tuple(
+        PriceTier(
+            min_qty=int(r.min_qty),
+            price=Decimal(str(r.price or 0)).quantize(UNIT_PRICE_QUANT),
+        )
+        for r in ordered
+    )
+
+
+def pick_tier(tiers: Sequence[PriceTier], qty: int | None) -> PriceTier:
+    """按数量选出应结算的档位。
+
+    Args:
+        tiers: 升序档位列表（非空）。
+        qty: 采购数量；None 表示「只是展示」，取最小档作为起价。
+
+    Returns:
+        命中的档位。数量未达最小档时**返回最小档**而不是报错 ——
+        起订量拦截由 `price_customer_order` 统一做，报错文案才能一致。
+    """
+    first = tiers[0]
+    if qty is None:
+        return first
+    hit = first
+    for tier in tiers:
+        if tier.min_qty <= qty:
+            hit = tier
+        else:
+            break
+    return hit
+
+
 def resolve_price_rule(
     product_cfg: CustomerProduct | None,
     sku_cfg: CustomerSkuPrice | None,
+    *,
+    sku_tiers: Sequence[PriceTier] | None = None,
+    product_tiers: Sequence[PriceTier] | None = None,
+    qty: int | None = None,
 ) -> PriceRule | None:
-    """把型号级 / 产品级两条配置合并成一条生效定价。
+    """把型号级 / 产品级 / 阶梯价三类配置合并成一条生效定价。
 
     型号级覆盖只在 `price > 0` 时生效；`min_qty` / `currency` 为 NULL 时
     逐字段回落到产品级，这样「只改型号单价」不会把产品级起订量重置成 1。
@@ -73,6 +147,9 @@ def resolve_price_rule(
     Args:
         product_cfg: 产品级价目行；None 表示该产品不在客户白名单。
         sku_cfg: 型号级价目行；None 表示没有型号级覆盖。
+        sku_tiers: 该型号专属阶梯（升序）；空表示未配置。
+        product_tiers: 产品通用阶梯（升序）；空表示未配置。
+        qty: 采购数量；None 表示只做展示（取阶梯起价）。
 
     Returns:
         PriceRule；返回 None 表示该型号未定价（不允许下单）。
@@ -80,23 +157,51 @@ def resolve_price_rule(
     if product_cfg is None:
         return None
 
+    currency = str(product_cfg.currency or "CNY").upper()
+
+    # 1) 型号专属阶梯：最具体的一层
+    if sku_tiers:
+        hit = pick_tier(sku_tiers, qty)
+        return PriceRule(
+            unit_price=hit.price,
+            min_qty=sku_tiers[0].min_qty,
+            currency=currency,
+            source="sku_tier",
+            tiers=tuple(sku_tiers),
+            tier_min_qty=hit.min_qty,
+        )
+
+    # 2) 型号单价
     if sku_cfg is not None:
         sku_price = Decimal(str(sku_cfg.price or 0)).quantize(UNIT_PRICE_QUANT)
         if sku_price > 0:
             return PriceRule(
                 unit_price=sku_price,
                 min_qty=int(sku_cfg.min_qty) if sku_cfg.min_qty is not None else int(product_cfg.min_qty or 1),
-                currency=str(sku_cfg.currency or product_cfg.currency or "CNY").upper(),
+                currency=str(sku_cfg.currency or currency).upper(),
                 source="sku",
             )
 
+    # 3) 产品通用阶梯
+    if product_tiers:
+        hit = pick_tier(product_tiers, qty)
+        return PriceRule(
+            unit_price=hit.price,
+            min_qty=product_tiers[0].min_qty,
+            currency=currency,
+            source="product_tier",
+            tiers=tuple(product_tiers),
+            tier_min_qty=hit.min_qty,
+        )
+
+    # 4) 产品单价
     product_price = Decimal(str(product_cfg.price or 0)).quantize(UNIT_PRICE_QUANT)
     if product_price <= 0:
         return None
     return PriceRule(
         unit_price=product_price,
         min_qty=int(product_cfg.min_qty or 1),
-        currency=str(product_cfg.currency or "CNY").upper(),
+        currency=currency,
         source="product",
     )
 
@@ -122,6 +227,7 @@ def price_customer_order(
     """
     product_map = get_customer_product_map(db, customer_id=customer_id)
     sku_price_map = get_customer_sku_price_map(db, customer_id=customer_id)
+    tier_map = get_price_tier_map(db, customer_id=customer_id)
     lines: list[PricedLine] = []
     currencies: set[str] = set()
     total = Decimal("0")
@@ -133,7 +239,13 @@ def price_customer_order(
         if sku.product_id not in product_map:
             raise CustomerPricingError(f"型号 {sku.code} 不在您的可下单范围内")
 
-        rule = resolve_price_rule(product_map[sku.product_id], sku_price_map.get(sku.id))
+        rule = resolve_price_rule(
+            product_map[sku.product_id],
+            sku_price_map.get(sku.id),
+            sku_tiers=to_price_tiers(tier_map.get((sku.product_id, sku.id))),
+            product_tiers=to_price_tiers(tier_map.get((sku.product_id, PRODUCT_WIDE_SKU_ID))),
+            qty=row.qty,
+        )
         if rule is None:
             raise CustomerPricingError(f"型号 {sku.code} 尚未定价，请联系工厂配置价格后再下单")
         if row.qty < rule.min_qty:
@@ -154,6 +266,7 @@ def price_customer_order(
                 subtotal=subtotal,
                 currency=rule.currency,
                 source=rule.source,
+                tier_min_qty=rule.tier_min_qty,
             )
         )
 

@@ -89,6 +89,8 @@ export default {
       totalAmount: '합계',
       unitPrice: '단가',
       minQty: '최소 수량',
+      tierFrom: '부터',
+      tierNext: '{qty}개 더 구매하면 단가가 {price}로 낮아집니다',
       unpriced: '주문 불가',
       unpricedHint: '영업 담당자에게 문의하세요',
       belowMinQty: '수량은 최소 {min} 이상이어야 합니다',

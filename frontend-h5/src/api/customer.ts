@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0
 import { apiGet, apiPost, http } from '@/utils/http'
 
+/** 阶梯价档位：满 min_qty 件时单价为 price */
+export interface PriceTierOut {
+  min_qty: number
+  price: string
+}
+
 export interface CustomerSkuOut {
   id: number
   code: string
@@ -13,12 +19,20 @@ export interface CustomerSkuOut {
   material: string | null
   spec: string | null
   remark: string | null
-  /** 客户专属单价（字符串传输，避免 JS 浮点误差）；由服务端价目表下发，前端不可改写 */
+  /**
+   * 客户专属单价（字符串传输，避免 JS 浮点误差）；由服务端价目表下发，前端不可改写。
+   * 配置了阶梯价时这里是**起价**（最小档），实际结算价以后端按数量重算为准。
+   */
   unit_price?: string | number
+  /** 起订量；阶梯价时是最小档的起点 */
   min_qty?: number
   currency?: string
   /** false 表示管理员尚未定价，该型号不允许下单 */
   priced?: boolean
+  /** 阶梯档位（升序）；空数组表示没有阶梯价，按 unit_price 计价 */
+  tiers?: PriceTierOut[]
+  /** 命中的档位起点，仅展示时有意义（下单由后端重新命中） */
+  tier_min_qty?: number | null
 }
 
 export interface CatalogProductOut {
@@ -32,6 +46,8 @@ export interface CatalogProductOut {
   min_qty?: number
   currency?: string
   priced?: boolean
+  tiers?: PriceTierOut[]
+  tier_min_qty?: number | null
 }
 
 export interface CustomerProcessOut {
