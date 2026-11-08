@@ -235,3 +235,17 @@ def assignment(session: Session, task: "Task", test_user: User) -> "TaskAssignme
     session.add(a)
     session.flush()
     return a
+
+
+@pytest.fixture(autouse=True)
+def _isolate_upgrade_logs(tmp_path_factory, monkeypatch):
+    """把升级服务的日志目录指到临时目录。
+
+    ``upgrade_service.LOG_DIR`` 是模块级常量，导入时就由 ROOT 算好了；像 ``app_root``
+    这种只 patch ROOT 的 fixture 带不动它，于是升级相关测试会往
+    ``backend/data/upgrade_logs/`` 里写真实文件——历史上把 7.log 灌了几十行伪造的
+    "disk full"，一度让人误判发布换入链路坏了。这里全局兜住，谁也别想写进生产路径。
+    """
+    from app.services import upgrade_service as us
+
+    monkeypatch.setattr(us, "LOG_DIR", tmp_path_factory.mktemp("upgrade_logs"))
