@@ -186,7 +186,7 @@
       <!-- 5. 推送日志 -->
       <el-tab-pane :label="t('messageCenter.tabLogs')" name="logs">
         <div class="mt-4 mb-3 flex gap-2 flex-wrap">
-          <el-select v-model="logChannel" clearable :placeholder="t('messageCenter.channel')" style="width: 120px" @change="loadLogs">
+          <el-select v-model="logChannel" clearable :placeholder="t('messageCenter.channelLabel')" style="width: 120px" @change="loadLogs">
             <el-option label="Feishu" value="feishu" />
             <el-option label="WeCom" value="wecom" />
             <el-option label="DingTalk" value="dingtalk" />

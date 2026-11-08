@@ -198,6 +198,14 @@ export default {
     }
   },
   "common": {
+    "export": "Export",
+    "reset": "Reset",
+    "search": "Search",
+    "confirm": "Confirm",
+    "failed": "Failed",
+    "success": "Success",
+    "back": "Back",
+    "unsavedConfirm": "You have unsaved changes. Leave anyway?",
     "home": "Dashboard",
     "language": "Language",
     "zhCN": "中文",
@@ -287,6 +295,7 @@ export default {
     "loadFailed": "Failed to load executive dashboard, please retry later"
   },
   "menu": {
+    "extensionEvents": "Extension Events",
     "boardAndReports": "Boards & Reports",
     "salesAndPlans": "Sales & Planning",
     "execution": "Production Execution",
@@ -455,6 +464,7 @@ export default {
     "fallback": "Switched to polling refresh"
   },
   "reports": {
+    "exportExcel": "Export Excel",
     "title": "Analytics Reports",
     "tabProduction": "Production Summary",
     "tabYield": "Yield Summary",
@@ -540,6 +550,11 @@ export default {
       "no": "No"
     },
     "products": {
+      "autoGenerateHint": "Leave blank to auto-generate",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "operation": "Actions",
+      "status": "Status",
       "title": "Products",
       "code": "Code",
       "name": "Name",
@@ -568,6 +583,9 @@ export default {
       "货号": "Item No."
     },
     "skus": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "noData": "No SKUs",
       "title": "SKUs",
       "product": "Product",
       "code": "Code",
@@ -608,6 +626,9 @@ export default {
       "saveConfirmNo": "Later"
     },
     "processes": {
+      "autoGenerateHint": "Leave blank to auto-generate",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
       "title": "Processes",
       "code": "Code",
       "name": "Name",
@@ -630,6 +651,8 @@ export default {
       "noData": "No data"
     },
     "processRoutes": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
       "title": "Process Routes",
       "product": "Product",
       "name": "Name",
@@ -661,6 +684,8 @@ export default {
       "pleaseSelectStepProcess": "Please select a process for the step"
     },
     "processPrices": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
       "title": "Process Prices",
       "product": "Product",
       "sku": "SKU",
@@ -696,6 +721,8 @@ export default {
       "routeLabel": "Route: "
     },
     "materials": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
       "title": "Materials",
       "code": "Code",
       "name": "Name",
@@ -772,6 +799,8 @@ export default {
       "copySuccess": "Copied as SKU-specific BOM"
     },
     "suppliers": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
       "title": "Suppliers",
       "code": "Code",
       "name": "Name",
@@ -830,6 +859,7 @@ export default {
   },
   "production": {
     "common": {
+      "rejected": "Rejected",
       "id": "ID",
       "status": "Status",
       "operation": "Action",
@@ -887,6 +917,8 @@ export default {
       "disableConfirm": "Confirm disable this {item}?"
     },
     "orders": {
+      "exportPdf": "Export PDF",
+      "print": "Print",
       "title": "Orders",
       "code": "Order No.",
       "customer": "Customer",
@@ -1434,6 +1466,8 @@ export default {
       "pleaseInputCycle": "Please enter cycle"
     },
     "customers": {
+      "exportPdf": "Export PDF",
+      "print": "Print",
       "title": "Customer Management",
       "createCustomer": "New Customer",
       "search": "Search",
@@ -1682,6 +1716,7 @@ export default {
       "statsBySeverity": "Failures by severity",
     },
     "dispositions": {
+      "refresh": "Refresh",
       "title": "Nonconforming Disposition",
       "create": "New Disposition",
       "createTitle": "New Disposition",
@@ -2568,6 +2603,8 @@ export default {
       "saved": "Saved"
     },
     "dictionary": {
+      "code": "Code",
+      "name": "Name",
       "title": "Dictionary",
       "searchPlaceholder": "Search code/name",
       "create": "New",
@@ -2852,6 +2889,7 @@ export default {
         "noJob": "No migration job yet.",
         "confirm": "Migrate existing local attachments to {name}? It runs in the background and you may leave this page.",
         "status": {
+          "partial": "Partially Failed",
           "pending": "Queued",
           "running": "Running",
           "done": "Completed",
@@ -3038,6 +3076,8 @@ export default {
       "empty": "No purchase orders"
     },
     "orderDetail": {
+      "exportPdf": "Export PDF",
+      "print": "Print",
       "title": "Purchase Order Detail",
       "back": "Back",
       "confirm": "Confirm",
@@ -3500,6 +3540,10 @@ export default {
       "cancelled": "Stocktake voided",
     },
     "shipments": {
+      "shippedWarehouse": "Shipping Warehouse",
+      "warehouse": "Warehouse",
+      "warehousePlaceholder": "Select warehouse",
+      "warehouseRequired": "Please select a shipping warehouse",
       "title": "Shipment Management",
       "createNew": "New Shipment",
       "createTitle": "New Shipment",
@@ -3742,6 +3786,7 @@ export default {
     }
   },
   "messageCenter": {
+    "channelLabel": "Channel",
     "title": "Message Center",
     "subtitle": "Unified management of Feishu, WeCom, DingTalk and other channel notifications.",
     "runMigration": "Migrate Legacy Config",
@@ -4116,6 +4161,7 @@ export default {
     }
   },
   "planReadiness": {
+    "planReadiness": "Production Readiness Check",
     "title": "Production-Ready Check",
     "readyPreview": "Production-Ready Preview",
     "readyToRelease": "Dispatchable",
