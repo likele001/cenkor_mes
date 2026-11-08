@@ -1,7 +1,18 @@
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
 export default {
+  aiEmployee: {
+    title: 'AI 직원',
+    empty: '사용 가능한 AI 직원이 없습니다',
+    chat: 'AI 직원',
+    inputPlaceholder: '메시지를 입력하세요...',
+    newChat: '새 대화',
+    deleteChat: '대화 삭제',
+    deleted: '삭제되었습니다',
+    error: '전송에 실패했습니다. 다시 시도해 주세요',
+  },
   common: {
+    send: '보내기',
     loading: '로딩 중...',
     noData: '데이터 없음',
     confirm: '확인',

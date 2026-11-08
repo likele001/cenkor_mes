@@ -79,6 +79,13 @@ jobs:
       - name: 安装依赖
         run: npm ci --no-audit --no-fund
 
-      # build 脚本为 `vue-tsc -b && vite build`：类型检查 + 产物构建一并校验
+      # i18n 门禁：新增页面只写 t('a.b.c') 却忘补语言包时，vue-tsc / vite build
+      # 都不会报错，线上会直接渲染出裸 key。必须在构建前单独拦一次。
+      # build 脚本里也挂了同一检查（双保险，防止绕过 CI 直接出包）。
+      - name: 多语言键检查
+        run: npm run check:i18n
+
+      # build 脚本为 `vue-tsc -b && node ../scripts/check-i18n.mjs && vite build`：
+      # 类型检查 + i18n 门禁 + 产物构建一并校验
       - name: 类型检查与构建
         run: npm run build

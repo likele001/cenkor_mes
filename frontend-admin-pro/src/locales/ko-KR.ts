@@ -176,6 +176,9 @@ export default {
     "loadFailed": "경영 대시보드 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요"
   },
   "menu": {
+    "extensionEvents": "이벤트 훅",
+    "extensions": "확장 앱",
+    "market": "기능 마켓",
     "boardAndReports": "현황판 및 리포트",
     "salesAndPlans": "영업 및 계획",
     "execution": "생산 실행",
@@ -324,6 +327,67 @@ export default {
     "aiModels": "AI 모델"
   },
   "system": {
+    "cloudStorage": {
+      "activateConfirm": "첨부 파일 저장 백엔드를 {name}(으)로 전환하시겠습니까? 이후 업로드에는 해당 백엔드가 사용됩니다.",
+      "activated": "활성 백엔드가 전환되었습니다",
+      "activeNow": "사용 중",
+      "clearConfirm": "{name}의 자격 증명을 삭제하시겠습니까? 사용 중인 경우 로컬 저장소로 변경됩니다.",
+      "clearCreds": "자격 증명 삭제",
+      "cleared": "자격 증명이 삭제되었습니다",
+      "configured": "구성됨",
+      "currentActive": "현재 활성 백엔드",
+      "driverNotReady": "드라이버 미내장",
+      "fields": {
+        "access_key": "AccessKey ID",
+        "bucket": "버킷",
+        "custom_domain": "사용자 정의 도메인",
+        "endpoint": "엔드포인트",
+        "prefix": "경로 접두사",
+        "region": "리전",
+        "secret_key": "AccessKey Secret",
+      },
+      "hints": {
+        "custom_domain": "Qiniu 다운로드 서명에는 버킷에 연결된 인증 도메인이 필요하므로 필수 항목입니다.",
+        "prefix": "선택 사항이며, 객체가 저장될 디렉터리 접두사입니다.",
+      },
+      "keepLocalBackup": "로컬 백업 함께 유지",
+      "keepLocalBackupHint": "활성화하면 클라우드에 업로드한 파일의 로컬 사본도 함께 보관합니다.",
+      "localHint": "로컬 저장소는 기본 제공 백엔드로 자격 증명이 필요 없으며 항상 사용할 수 있습니다.",
+      "migration": {
+        "confirm": "로컬의 기존 첨부 파일을 {name}(으)로 이전하시겠습니까? 백그라운드에서 실행되므로 페이지를 떠나도 됩니다.",
+        "failed": "실패",
+        "noJob": "이전 작업이 없습니다.",
+        "pickTarget": "대상 선택",
+        "start": "이전 시작",
+        "status": {
+          "done": "완료",
+          "failed": "실패",
+          "partial": "일부 실패",
+          "pending": "대기 중",
+          "running": "이전 중",
+        },
+        "subtitle": "로컬에 저장된 기존 첨부 파일을 구성된 클라우드 백엔드로 일괄 이전합니다. 원본 파일은 삭제되지 않으며 언제든 다시 실행할 수 있습니다.",
+        "title": "기존 첨부 파일 이전",
+      },
+      "notConfigured": "미구성",
+      "providers": {
+        "aliyun": "Alibaba Cloud OSS",
+        "local": "로컬 저장소",
+        "qiniu": "Qiniu Kodo",
+        "tencent": "Tencent Cloud COS",
+        "upyun": "Upyun",
+      },
+      "refresh": "새로고침",
+      "requiredTag": "필수",
+      "save": "자격 증명 저장",
+      "saved": "구성이 저장되었습니다",
+      "setActive": "활성으로 설정",
+      "subtitle": "객체 스토리지(Alibaba Cloud OSS / Tencent Cloud COS / Qiniu Kodo)의 자격 증명을 구성하고 활성 첨부 파일 저장 백엔드를 전환합니다. 자격 증명은 암호화되어 저장되며 조회 시 항상 마스킹됩니다.",
+      "testConnection": "연결 테스트",
+      "testFail": "연결 실패",
+      "testOk": "연결 정상",
+      "title": "클라우드 스토리지 설정",
+    },
     "users": {
       "title": "사용자 관리",
       "searchPlaceholder": "계정/이름 검색",
@@ -584,6 +648,8 @@ export default {
       "saved": "저장됨"
     },
     "dictionary": {
+      "code": "코드",
+      "name": "이름",
       "title": "사전 관리",
       "searchPlaceholder": "코드/이름 검색",
       "create": "신규",
@@ -1095,6 +1161,54 @@ export default {
     }
   },
   "platform": {
+    "shifts": {
+      "addSchedule": "근무 일정 추가",
+      "addShift": "교대 추가",
+      "batchSchedule": "근무 일정 일괄 등록",
+      "cancel": "취소",
+      "code": "코드",
+      "codePlaceholder": "비워 두면 자동 생성됩니다",
+      "confirmDelete": "이 교대를 삭제하시겠습니까?",
+      "confirmDeleteSchedule": "이 근무 일정을 삭제하시겠습니까?",
+      "dateRange": "날짜 범위",
+      "delete": "삭제",
+      "edit": "편집",
+      "editShift": "교대 편집",
+      "employee": "직원",
+      "employees": "직원 선택",
+      "endDate": "종료일",
+      "endTime": "종료 시간",
+      "endTimePlaceholder": "종료 시간을 선택하세요",
+      "filterUser": "직원별 필터",
+      "name": "이름",
+      "namePlaceholder": "예: 주간, 야간",
+      "noSchedules": "근무 일정이 없습니다",
+      "noShifts": "등록된 교대가 없습니다",
+      "operation": "작업",
+      "remark": "비고",
+      "restMinutes": "휴식(분)",
+      "save": "저장",
+      "scheduleList": "근무 일정 목록",
+      "selectDate": "날짜 선택",
+      "selectEmployee": "직원 선택",
+      "selectEmployees": "직원 다중 선택 가능",
+      "selectShift": "교대 선택",
+      "shiftList": "교대 목록",
+      "shiftName": "교대",
+      "shiftType": "유형",
+      "startDate": "시작일",
+      "startTime": "시작 시간",
+      "startTimePlaceholder": "시작 시간을 선택하세요",
+      "status": "상태",
+      "statusActive": "활성",
+      "statusInactive": "비활성",
+      "timeRange": "근무 시간",
+      "title": "교대 관리",
+      "typeDay": "주간",
+      "typeNight": "야간",
+      "typeOvertime": "초과 근무",
+      "workDate": "근무일",
+    },
     "tenants": {
       "title": "테넌트 관리",
       "newTenant": "새 테넌트",
@@ -1390,6 +1504,10 @@ export default {
       "cancelled": "실사서가 취소되었습니다",
     },
     "shipments": {
+      "shippedWarehouse": "출고 창고",
+      "warehouse": "창고",
+      "warehousePlaceholder": "창고를 선택하세요",
+      "warehouseRequired": "출고 창고를 선택하세요",
       "title": "배송 관리",
       "createNew": "새 배송",
       "createTitle": "새 배송",
@@ -1435,7 +1553,55 @@ export default {
     }
   },
   "finance": {
+    "aging": {
+      "ap": "매입채무(AP)",
+      "ar": "매출채권(AR)",
+      "asOf": "기준일",
+      "balance": "잔액",
+      "bucket1_30": "연체 1~30일",
+      "bucket31_60": "연체 31~60일",
+      "bucket61_90": "연체 61~90일",
+      "bucket90_plus": "연체 90일 초과",
+      "bucketNotDue": "만기 전",
+      "close": "닫기",
+      "code": "정산서번호",
+      "count": "건수",
+      "daysOverdue": "연체 일수",
+      "dueDate": "만기일",
+      "noData": "미결 정산서가 없습니다",
+      "overdueBalance": "연체 금액",
+      "title": "연령 분석",
+      "totalBalance": "미결 총액",
+    },
+    "settle": {
+      "alreadyPaid": "상계 완료",
+      "amount": "상계 금액",
+      "amountRequired": "금액을 입력하세요",
+      "balance": "미결 잔액",
+      "history": "상계 내역",
+      "method": "방식",
+      "methodAcceptance": "어음 인수",
+      "methodCash": "현금",
+      "methodOther": "기타",
+      "methodTransfer": "계좌 이체",
+      "noPayments": "상계 내역이 없습니다",
+      "paidDate": "상계 일자",
+      "remark": "비고",
+      "reverse": "상계 취소",
+      "reverseConfirm": "이 상계 내역을 취소하시겠습니까?",
+      "reversed": "상계 취소됨",
+      "submit": "등록",
+      "success": "상계 내역이 등록되었습니다",
+      "title": "상계 등록",
+      "totalAmount": "정산 금액",
+    },
     "statements": {
+      "aging": "연령 분석",
+      "balance": "미결 잔액",
+      "dueDate": "만기일",
+      "paidAmount": "상계 완료",
+      "partial": "부분 상계",
+      "settle": "상계 등록",
       "title": "고객 정산서",
       "customer": "고객",
       "statusFilter": "상태",
@@ -1519,6 +1685,12 @@ export default {
       "noData": "데이터 없음"
     },
     "supplierStatements": {
+      "aging": "연령 분석",
+      "balance": "미결 잔액",
+      "dueDate": "만기일",
+      "paidAmount": "상계 완료",
+      "partial": "부분 상계",
+      "settle": "상계 등록",
       "title": "공급업체 정산",
       "supplier": "공급업체",
       "statusFilter": "상태",
@@ -1578,6 +1750,7 @@ export default {
     }
   },
   "messageCenter": {
+    "channelLabel": "채널",
     "title": "메시지 센터",
     "subtitle": "飞书, 기업위챗 등 다중 채널 메시지 푸시를 통합 관리합니다.",
     "runMigration": "기존 설정 마이그레이션",
@@ -2130,6 +2303,14 @@ export default {
     }
   },
   "common": {
+    "back": "뒤로",
+    "confirm": "확인",
+    "export": "내보내기",
+    "failed": "실패",
+    "reset": "초기화",
+    "search": "조회",
+    "success": "성공",
+    "unsavedConfirm": "저장하지 않은 변경 사항이 있습니다. 그래도 나가시겠습니까?",
     "home": "작업대",
     "language": "언어",
     "zhCN": "중국어",
@@ -2184,6 +2365,7 @@ export default {
     "pleaseEnterCaptcha": "이미지의 문자를 입력하세요"
   },
   "planReadiness": {
+    "planReadiness": "생산 준비 점검",
     "title": "생산 준비 점검",
     "readyPreview": "생산 준비 미리보기",
     "readyToRelease": "발주 가능",
@@ -2248,6 +2430,7 @@ export default {
     "fallback": "폴링 새로고침으로 전환됨"
   },
   "reports": {
+    "exportExcel": "Excel 내보내기",
     "title": "데이터 보고서",
     "tabProduction": "생산량 집계",
     "tabYield": "수율 집계",
@@ -2333,6 +2516,12 @@ export default {
       "pleaseInputName": "이름을 입력하세요"
     },
     "products": {
+      "autoGenerateHint": "비워 두면 자동 생성됩니다",
+      "disabled": "비활성",
+      "enabled": "활성",
+      "itemNo": "품번",
+      "operation": "작업",
+      "status": "상태",
       "title": "제품",
       "code": "코드",
       "name": "이름",
@@ -2360,6 +2549,9 @@ export default {
       "pleaseInputName": "이름을 입력하세요"
     },
     "skus": {
+      "disabled": "비활성",
+      "enabled": "활성",
+      "noData": "등록된 모델이 없습니다",
       "title": "모델",
       "product": "제품",
       "code": "코드",
@@ -2400,6 +2592,9 @@ export default {
       "pleaseInputName": "이름을 입력하세요"
     },
     "processes": {
+      "autoGenerateHint": "비워 두면 자동 생성됩니다",
+      "disabled": "비활성",
+      "enabled": "활성",
       "title": "공정",
       "code": "코드",
       "name": "이름",
@@ -2422,6 +2617,8 @@ export default {
       "pleaseInputName": "이름을 입력하세요"
     },
     "processRoutes": {
+      "disabled": "비활성",
+      "enabled": "활성",
       "title": "공정 경로",
       "product": "제품",
       "name": "이름",
@@ -2453,6 +2650,8 @@ export default {
       "atLeastOneStep": "최소 하나의 단계를 설정하세요"
     },
     "processPrices": {
+      "disabled": "비활성",
+      "enabled": "활성",
       "title": "단가",
       "product": "제품",
       "sku": "모델",
@@ -2488,6 +2687,8 @@ export default {
       "pleaseFillAtLeastOne": "최소 하나의 공정 단가를 입력하세요"
     },
     "materials": {
+      "disabled": "비활성",
+      "enabled": "활성",
       "title": "자재",
       "code": "코드",
       "name": "이름",
@@ -2564,6 +2765,8 @@ export default {
       "atLeastOneMaterial": "최소 하나의 자재 명세를 설정하세요"
     },
     "suppliers": {
+      "disabled": "비활성",
+      "enabled": "활성",
       "title": "공급업체",
       "code": "코드",
       "name": "이름",
@@ -2622,6 +2825,7 @@ export default {
   },
   "production": {
     "common": {
+      "rejected": "반려됨",
       "id": "ID",
       "status": "상태",
       "operation": "작업",
@@ -2679,6 +2883,8 @@ export default {
       "pleaseInput": "입력하세요"
     },
     "orders": {
+      "exportPdf": "PDF 내보내기",
+      "print": "인쇄",
       "title": "주문",
       "code": "주문 번호",
       "customer": "고객",
@@ -3226,6 +3432,8 @@ export default {
       "pleaseInputCycle": "주기를 입력하세요"
     },
     "customers": {
+      "exportPdf": "PDF 내보내기",
+      "print": "인쇄",
       "title": "고객 관리",
       "createCustomer": "신규 고객",
       "keywordLabel": "키워드",
@@ -3474,6 +3682,7 @@ export default {
       "statsBySeverity": "심각도별 불합격",
     },
     "dispositions": {
+      "refresh": "새로고침",
       "title": "부적합품 처리",
       "create": "처리서 등록",
       "createTitle": "부적합품 처리서 등록",
@@ -3971,6 +4180,8 @@ export default {
       "empty": "구매 주문 없음"
     },
     "orderDetail": {
+      "exportPdf": "PDF 내보내기",
+      "print": "인쇄",
       "title": "구매 주문 상세",
       "back": "뒤로",
       "confirm": "확인",

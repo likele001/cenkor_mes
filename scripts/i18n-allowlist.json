@@ -1,0 +1,16 @@
+{
+  "_comment": "i18n 门禁白名单。literalKeys 是权限码/路由标识等形如 a.b 但不是翻译 key 的字符串；untranslated 是刻意保持英文的标签；missingKeys 用于极少数运行时才拼出的 key。新增例外请写清原因。",
+  "literalKeys": [
+    "dashboard.view",
+    "crm.sales",
+    "crm.admin",
+    "production.plan",
+    "warehouse.manage",
+    "warehouse.view",
+    "purchase.manage",
+    "finance.manage",
+    "attendance.manage"
+  ],
+  "untranslated": [],
+  "missingKeys": []
+}

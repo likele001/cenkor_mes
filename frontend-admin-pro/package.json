@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && node ../scripts/check-i18n.mjs && vite build",
     "preview": "vite preview",
     "check": "vue-tsc -b",
+    "check:i18n": "node ../scripts/check-i18n.mjs",
     "check:ext-routes": "node scripts/check-extension-routes.mjs",
     "lint": "eslint . --ext .ts,.vue",
     "lint:fix": "eslint . --ext .ts,.vue --fix"

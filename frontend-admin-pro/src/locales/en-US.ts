@@ -2022,7 +2022,7 @@ export default {
       "close": "Close",
       "overload": "Overload",
       "normal": "Normal",
-      "defaultCapacity": "Default",
+      "defaultCapacity": "Default Daily Capacity ({unit})",
       "capacityOverride": "Override",
       "automationEnabled": "Production Automation Enabled",
       "automationHint": "Order confirmation can auto-create plan; plan save can auto schedule/dispatch/assign.",

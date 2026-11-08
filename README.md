@@ -209,6 +209,7 @@ cenkormes/
 │   ├── frontend/            # 前端多阶段构建镜像
 │   ├── nginx/               # 前端容器 nginx 配置（/api 反代）
 │   └── scripts/             # 容器入口 / 演示数据 / 离线导出
+├── scripts/                 # 跨前端共用脚本：check-i18n.mjs / i18n-allowlist.json
 ├── docker-compose.yml       # 全栈一键部署
 └── docs/                    # 部署指南等
 ```
@@ -239,6 +240,40 @@ cenkormes/
 | 飞书 / 钉钉 / 企微消息通道 | ✅ | ✅ |
 
 完整差异见 [`docs/cenkormes-vs-lightmes.html`](docs/cenkormes-vs-lightmes.html)。
+
+---
+
+## 前端多语言（i18n）门禁
+
+语言包在 `frontend-admin-pro/src/locales/` 与 `frontend-h5/src/locales/`，以 `zh-CN.ts` 为基准。
+新增页面时若只写了 `t('a.b.c')` 却忘了补语言包，vue-i18n 会把 **key 本身**渲染到界面上，
+而 TypeScript 类型检查和 `vite build` 都不会报错。因此仓库有一道独立门禁：
+
+```bash
+cd frontend-admin-pro    # 或 frontend-h5
+npm run check:i18n       # 只读检查，退出码 0 = 通过
+```
+
+`npm run build` 与 `.github/workflows/ci.yml` 都会自动执行它（双重拦截，PR 红了不能合并）。
+
+`scripts/check-i18n.mjs` 的检查项：
+
+| 级别 | 检查项 | 说明 |
+|------|--------|------|
+| ERROR | `missing-key` | 源码 `t()` 引用的 key 在任一语言（含 ko-KR 运行时合并）中不存在 |
+| ERROR | `pack-gap` | 某语言包缺少 `zh-CN` 已有的 key，防止「只补中文、其它语言半吊子」 |
+| ERROR | `type-conflict` | `t()` 引用的 key 在语言包里是对象，会渲染成 `[object Object]` |
+| ERROR | `placeholder` | 同一 key 各语言的 `{name}` 插值参数不一致 |
+| ERROR | `locale-load` | 语言包无法编译加载 |
+| WARN | `literal-key` | 源码里形如 `"a.b.c"` 的字符串疑似动态 key（权限码请用白名单排除） |
+| WARN | `untranslated` | 某语言的长文案与英文完全相同，可能漏翻 |
+
+约定：
+
+- **只补中文不够**：`zh-CN` / `en-US` / `ko-KR` 三个包必须同时补，键集合以 `zh-CN` 为准；目标语言允许保留历史冗余键。
+- 管理后台韩语运行时是 `deepMerge(en-US, ko-KR, ko-KR-shell)`，`*-shell.ts` 是补充包，不参与键集合对齐。
+- 确认是误报的例外写进 `scripts/i18n-allowlist.json`（权限码、刻意保留英文的品牌名等），不要直接删检查。
+- 机器可读报告：`node ../scripts/check-i18n.mjs --json report.json`；人工复核漏翻嫌疑：加 `--strict-untranslated`。
 
 ---
 

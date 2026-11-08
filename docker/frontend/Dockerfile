@@ -18,6 +18,11 @@ COPY ${FRONTEND}/package.json ${FRONTEND}/package-lock.json ./
 RUN npm ci --prefer-offline --no-audit --no-fund
 
 COPY ${FRONTEND}/ ./
+
+# npm run build 会先跑 i18n 门禁，package.json 里用的是 ../scripts/check-i18n.mjs。
+# 镜像 WORKDIR=/app，所以把仓库根的 scripts/ 映射到 /scripts，保持相对路径一致；
+# 白名单与脚本同目录，门禁会自动加载。
+COPY scripts/check-i18n.mjs scripts/i18n-allowlist.json /scripts/
 RUN npm run build
 
 # ---- 阶段二：nginx 运行时 ----
