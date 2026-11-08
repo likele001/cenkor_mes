@@ -13,6 +13,12 @@ export interface CustomerSkuOut {
   material: string | null
   spec: string | null
   remark: string | null
+  /** 客户专属单价（字符串传输，避免 JS 浮点误差）；由服务端价目表下发，前端不可改写 */
+  unit_price?: string | number
+  min_qty?: number
+  currency?: string
+  /** false 表示管理员尚未定价，该型号不允许下单 */
+  priced?: boolean
 }
 
 export interface CatalogProductOut {
@@ -22,6 +28,10 @@ export interface CatalogProductOut {
   /** 对客户展示的名称（产品名/规格，不含货号编码） */
   display_name?: string
   category: string | null
+  unit_price?: string | number
+  min_qty?: number
+  currency?: string
+  priced?: boolean
 }
 
 export interface CustomerProcessOut {
@@ -102,13 +112,24 @@ export function getCatalog(params?: { product_id?: number; keyword?: string }) {
   return apiGet<{ items: CustomerSkuOut[]; products: CatalogProductOut[]; hint?: string }>('/h5/customer/catalog', { params })
 }
 
+export interface CustomerPlaceOrderResult {
+  id: number
+  code: string
+  status: string
+  /** 服务端按客户价目表算出的订单金额；前端不传价，也不参与计算 */
+  amount: number
+  currency: string
+  created_at: string
+}
+
 export function placeOrder(body: {
+  /** 只允许传型号与数量；单价由服务端价目表决定，传了也会被忽略 */
   items: Array<{ sku_id: number; qty: number; remark?: string }>
   due_date?: string
   remark?: string
   submit?: boolean
 }) {
-  return apiPost<{ id: number; code: string; status: string; created_at: string }>('/h5/customer/orders', body)
+  return apiPost<CustomerPlaceOrderResult>('/h5/customer/orders', body)
 }
 
 export function listMyOrders() {

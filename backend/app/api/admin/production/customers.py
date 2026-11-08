@@ -11,7 +11,13 @@ from app.core.deps import get_current_permissions, get_current_user, get_db, req
 from app.core.response import ok
 from app.crud.attachment import create_attachment
 from app.crud.customer import create_customer, get_customer_by_code, get_customer_by_id, list_customers, update_customer
-from app.crud.customer_product import list_customer_product_ids, list_customer_products_with_detail, set_customer_products
+from app.crud.customer_product import (
+    get_customer_product_map,
+    list_customer_product_ids,
+    list_customer_products_with_detail,
+    set_customer_product_pricing,
+    set_customer_products,
+)
 from app.crud.print_template import (
     get_print_template_by_code,
     get_print_template_by_id,
@@ -20,7 +26,12 @@ from app.crud.print_template import (
     wrap_pdf_html_with_page_number)
 from app.crud.user import get_user_by_id
 from app.models.user import User
-from app.schemas.customer import CustomerCreateIn, CustomerProductsSetIn, CustomerUpdateIn
+from app.schemas.customer import (
+    CustomerCreateIn,
+    CustomerProductsPricingSetIn,
+    CustomerProductsSetIn,
+    CustomerUpdateIn,
+)
 from app.services.code_generator import BizType, resolve_code
 from app.services.customer_account import ensure_customer_login_user
 from app.storage import get_active_storage
@@ -108,12 +119,24 @@ def list_customer_products_api(
     permission_codes: list[str] = Depends(get_current_permissions)):
     c = _need_customer(db, customer_id)
     products = list_customer_products_with_detail(db, customer_id=c.id)
-    return ok(
-        {
-            "product_ids": [p.id for p in products],
-            "items": [{"id": p.id, "code": p.code, "name": p.name, "category": p.category} for p in products],
+    price_map = get_customer_product_map(db, customer_id=c.id)
+
+    def _row(p) -> dict:
+        cfg = price_map.get(p.id)
+        return {
+            "id": p.id,
+            "code": p.code,
+            "name": p.name,
+            "category": p.category,
+            "price": str(cfg.price or 0) if cfg else "0",
+            "min_qty": int(cfg.min_qty or 1) if cfg else 1,
+            "currency": str(cfg.currency or "CNY") if cfg else "CNY",
         }
-    )
+
+    return ok({
+        "product_ids": [p.id for p in products],
+        "items": [_row(p) for p in products],
+    })
 
 
 @router.put("/{customer_id}/products", dependencies=[Depends(require_permissions(["customer.manage"]))])
@@ -127,6 +150,37 @@ def set_customer_products_api(
     ids = set_customer_products(db, customer_id=c.id, product_ids=payload.product_ids)
     db.commit()
     return ok({"customer_id": c.id, "product_ids": ids})
+
+
+@router.put("/{customer_id}/products/pricing", dependencies=[Depends(require_permissions(["customer.manage"]))])
+def set_customer_products_pricing_api(
+    customer_id: int,
+    payload: CustomerProductsPricingSetIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions)):
+    """批量维护客户专属单价 / 起订量 / 币种（含显式 commit）。"""
+    c = _need_customer(db, customer_id)
+    try:
+        rows = set_customer_product_pricing(
+            db,
+            customer_id=c.id,
+            items=[item.model_dump() for item in payload.items],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # 先在 commit 前把 ORM 属性取成纯值：expire_on_commit 之后再读会触发额外查询
+    items = [
+        {
+            "product_id": r.product_id,
+            "price": str(r.price or 0),
+            "min_qty": int(r.min_qty or 1),
+            "currency": str(r.currency or "CNY"),
+        }
+        for r in rows
+    ]
+    db.commit()
+    return ok({"customer_id": c.id, "items": items})
 
 
 @router.post("", dependencies=[Depends(require_permissions(["customer.manage"]))])

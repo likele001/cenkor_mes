@@ -3,6 +3,7 @@
 import csv
 import io
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -15,7 +16,7 @@ from app.core.response import ok
 from app.crud.after_sale import create_after_sale, list_after_sales, list_shipments_by_order
 from app.crud.approval_record import record_status
 from app.crud.customer import get_customer_by_user_id
-from app.crud.customer_product import list_customer_product_ids
+from app.crud.customer_product import get_customer_product_map, list_customer_product_ids
 from app.crud.finance import get_statement_by_id, list_statements, update_statement_status
 from app.crud.kanban import build_order_progress_for_loaded_order, get_order_progress_summary
 from app.models.finance import StatementItem
@@ -28,6 +29,7 @@ from app.schemas.order import CustomerPlaceOrderIn
 from app.models.task import Task
 from app.models.user import User
 from app.models.work_order import WorkOrder
+from app.services.customer_pricing import CustomerPricingError, price_customer_order
 from app.services.display_label import product_display_name, sku_display_name
 from app.services.sku_scope import apply_finished_product_sku_filter, is_material_product
 
@@ -56,6 +58,18 @@ def _product_public(p: Product) -> dict:
         "category": p.category,
     }
 
+def _catalog_price(cfg) -> dict:
+    """把客户价目配置转成前端可展示的纯值（金额用字符串避免 JS 浮点误差）。"""
+    if cfg is None:
+        return {"unit_price": "0", "min_qty": 1, "currency": "CNY", "priced": False}
+    price = Decimal(str(cfg.price or 0)).quantize(Decimal("0.0001"))
+    return {
+        "unit_price": str(price),
+        "min_qty": int(cfg.min_qty or 1),
+        "currency": str(cfg.currency or "CNY").upper(),
+        "priced": price > 0,
+    }
+
 @router.get("/catalog")
 def catalog_api(
     product_id: int | None = Query(default=None, ge=1),
@@ -76,6 +90,7 @@ def catalog_api(
             "hint": "管理员尚未为您配置可下单产品，请联系工厂在「客户详情-可下单产品」中设置",
         })
 
+    price_map = get_customer_product_map(db, customer_id=customer.id)
     sku_stmt = select(Sku).where(Sku.is_active.is_(True),
         Sku.product_id.in_(allowed_ids))
     sku_stmt = apply_finished_product_sku_filter(sku_stmt)
@@ -99,8 +114,8 @@ def catalog_api(
     products = [p for p in db.scalars(products_stmt).all() if not is_material_product(p)]
 
     return ok({
-        "items": [_sku_public(s) for s in skus],
-        "products": [_product_public(p) for p in products],
+        "items": [{**_sku_public(s), **_catalog_price(price_map.get(s.product_id))} for s in skus],
+        "products": [{**_product_public(p), **_catalog_price(price_map.get(p.id))} for p in products],
     })
 
 def _ensure_customer_user(user: User) -> None:
@@ -113,8 +128,6 @@ def place_order_api(
     payload: CustomerPlaceOrderIn,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
-    from app.crud.sku import get_sku_by_id
-
     _ensure_customer_user(user)
     customer = get_customer_by_user_id(db, user_id=user.id)
     if not customer:
@@ -140,23 +153,28 @@ def place_order_api(
         status=status,
         remark=payload.remark,
         due_date=payload.due_date)
-    lines = []
-    for idx, row in enumerate(payload.items, start=1):
-        sku = get_sku_by_id(db, sku_id=row.sku_id)
-        if not sku or not sku.is_active:
-            raise HTTPException(status_code=400, detail=f"型号#{row.sku_id}不可用")
-        if sku.product_id not in allowed_ids:
-            raise HTTPException(status_code=400, detail=f"型号 {sku.code} 不在您的可下单范围内")
-        lines.append(
-            OrderItem(
-                line_no=idx,
-                sku_id=row.sku_id,
-                qty=row.qty,
-                remark=row.remark)
+    try:
+        priced = price_customer_order(db, customer_id=customer.id, items=payload.items)
+    except CustomerPricingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # 单价/小计只来自服务端价目表；提交后再用统一口径重算一次订单金额
+    lines = [
+        OrderItem(
+            line_no=idx,
+            sku_id=line.sku_id,
+            qty=line.qty,
+            remark=line.remark,
+            unit_price=line.unit_price,
+            subtotal=line.subtotal,
         )
+        for idx, line in enumerate(priced.lines, start=1)
+    ]
     order.items = lines
     db.add(order)
     db.flush()
+    from app.services.production_rollup import recalc_order_amount
+
+    amount = recalc_order_amount(db, order)
     if status == "pending_confirm":
         notify_users_with_permission(
             db,
@@ -179,7 +197,9 @@ def place_order_api(
             pass
     db.commit()
     db.refresh(order)
-    return ok({"id": order.id, "code": order.code, "status": order.status, "created_at": order.created_at})
+    return ok({"id": order.id, "code": order.code, "status": order.status,
+               "amount": float(amount), "currency": priced.currency,
+               "created_at": order.created_at})
 
 @router.post("/orders/legacy")
 def place_order_legacy_api(

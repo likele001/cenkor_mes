@@ -25,14 +25,84 @@ const searchKeyword = ref('')
 const orders = ref<CustomerOrderListItem[]>([])
 const ordersLoading = ref(false)
 
-// ── Place order dialog ──
-const orderDlgVisible = ref(false)
-const orderSku = ref<CustomerSkuOut | null>(null)
-const orderQty = ref(1)
+// ── Cart（多行下单清单，仅存本地，单价一律以服务端价目表为准）──
+interface CartLine {
+  sku: CustomerSkuOut
+  qty: number
+}
+
+const cart = ref<CartLine[]>([])
+const cartVisible = ref(false)
 const orderRemark = ref('')
 const orderSubmitting = ref(false)
 
 const activeTab = ref(0)
+
+/**
+ * 金额统一用「万分之一」整数运算。
+ * 理由：单价是 Numeric(12,4)，用浮点乘加会在多行下单时产生 0.01 级别漂移，
+ * 与后端 recalc_order_amount() 的口径对不上，客户会看到「前端 99.99 / 后台 100.00」。
+ */
+const PRICE_SCALE = 10000
+
+const CURRENCY_SYMBOL: Record<string, string> = {
+  CNY: '¥',
+  USD: '$',
+  EUR: '€',
+  KRW: '₩',
+  JPY: 'JP¥',
+  HKD: 'HK$',
+  GBP: '£',
+}
+
+/** 零小数币种不显示小数位 */
+const ZERO_DECIMAL = new Set(['KRW', 'JPY', 'VND'])
+
+function priceUnits(raw?: string | number | null): number {
+  if (raw === undefined || raw === null || raw === '') return 0
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.round(n * PRICE_SCALE)
+}
+
+function lineSubtotalUnits(line: CartLine): number {
+  return priceUnits(line.sku.unit_price) * line.qty
+}
+
+const cartTotalUnits = computed(() => cart.value.reduce((sum, l) => sum + lineSubtotalUnits(l), 0))
+const cartCount = computed(() => cart.value.length)
+const cartQtyTotal = computed(() => cart.value.reduce((sum, l) => sum + l.qty, 0))
+const cartCurrency = computed(() => (cart.value[0]?.sku.currency || 'CNY').toUpperCase())
+
+function fmtMoney(units: number, currency: string, maxDigits = 2): string {
+  const cur = (currency || 'CNY').toUpperCase()
+  const digits = ZERO_DECIMAL.has(cur) ? 0 : maxDigits
+  let body = (units / PRICE_SCALE).toFixed(digits)
+  if (digits > 2) body = body.replace(/0+$/, '').replace(/\.$/, '')
+  const sym = CURRENCY_SYMBOL[cur]
+  return sym ? `${sym}${body}` : `${body} ${cur}`
+}
+
+/** 单价展示保留 4 位有效小数（客户价目常带分以下精度），并去掉尾随 0 */
+function unitPriceText(sku: CustomerSkuOut): string {
+  return fmtMoney(priceUnits(sku.unit_price), sku.currency || 'CNY', 4)
+}
+
+function lineSubtotalText(line: CartLine): string {
+  return fmtMoney(lineSubtotalUnits(line), line.sku.currency || 'CNY', 2)
+}
+
+function isPriced(sku: CustomerSkuOut): boolean {
+  return sku.priced === true && priceUnits(sku.unit_price) > 0
+}
+
+function minQtyOf(sku: CustomerSkuOut): number {
+  return Math.max(1, Number(sku.min_qty || 1))
+}
+
+function inCart(skuId: number): boolean {
+  return cart.value.some((l) => l.sku.id === skuId)
+}
 
 function productLabel(pid: number) {
   const p = products.value.find((x) => x.id === pid)
@@ -59,6 +129,7 @@ function statusLabel(s: string) {
 function statusTag(s: string): TagType {
   const map: Record<string, TagType> = {
     draft: 'warning',
+    pending_confirm: 'warning',
     confirmed: 'primary',
     producing: 'default',
     done: 'success',
@@ -110,36 +181,93 @@ async function loadOrders() {
   }
 }
 
-function openPlaceOrder(sku: CustomerSkuOut) {
-  orderSku.value = sku
-  orderQty.value = 1
-  orderRemark.value = ''
-  orderDlgVisible.value = true
+// ── Cart 操作 ──
+function addToCart(sku: CustomerSkuOut) {
+  if (!isPriced(sku)) {
+    showToast(t('customer.order.unpriced'))
+    return
+  }
+  if (inCart(sku.id)) {
+    showToast(t('customer.order.inCart'))
+    return
+  }
+  // 同一张订单只允许一种币种：混币种会让 orders.amount 失去意义
+  if (cart.value.length && cartCurrency.value !== (sku.currency || 'CNY').toUpperCase()) {
+    showToast(t('customer.order.currencyMismatch'))
+    return
+  }
+  cart.value.push({ sku, qty: minQtyOf(sku) })
+  showToast(t('customer.order.addedToCart'))
+}
+
+function removeLine(skuId: number) {
+  cart.value = cart.value.filter((l) => l.sku.id !== skuId)
+  if (!cart.value.length) {
+    cartVisible.value = false
+  }
+}
+
+async function clearCart() {
+  try {
+    await showConfirmDialog({
+      title: t('customer.order.clearCart'),
+      message: t('customer.order.confirmClearCart'),
+    })
+  } catch {
+    return
+  }
+  cart.value = []
+  cartVisible.value = false
+}
+
+function openCart() {
+  if (!cart.value.length) {
+    showToast(t('customer.order.cartEmpty'))
+    return
+  }
+  cartVisible.value = true
+}
+
+/** 提交前把每一行都校验一遍：低于起订量、未定价、跨币种都不允许提交 */
+function validateCart(): string | null {
+  if (!cart.value.length) return t('customer.order.cartEmpty')
+  for (const line of cart.value) {
+    if (!isPriced(line.sku)) return t('customer.order.unpriced')
+    if (line.qty < minQtyOf(line.sku)) {
+      return t('customer.order.belowMinQty', { min: minQtyOf(line.sku) })
+    }
+  }
+  return null
 }
 
 async function submitOrder() {
-  if (!orderSku.value || orderQty.value < 1) return
+  const err = validateCart()
+  if (err) {
+    showToast(err)
+    return
+  }
   orderSubmitting.value = true
   showLoadingToast({ message: t('customer.orderDetail.submitting'), duration: 0 })
   try {
     const result = await placeOrder({
-      items: [
-        {
-          sku_id: orderSku.value.id,
-          qty: orderQty.value,
-          remark: orderRemark.value.trim() || undefined,
-        },
-      ],
+      items: cart.value.map((l) => ({ sku_id: l.sku.id, qty: l.qty })),
       remark: orderRemark.value.trim() || undefined,
       submit: true,
     })
     closeToast()
+    // 金额用服务端返回值展示：客户看到的就是写进 orders.amount 的数字
     await showDialog({
       title: t('customer.order.orderSuccess'),
-      message: `${t('customer.order.orderCode')}：${result.code}\n${t('customer.order.status')}：${statusLabel(result.status)}`,
+      message: [
+        `${t('customer.order.orderCode')}：${result.code}`,
+        `${t('customer.order.status')}：${statusLabel(result.status)}`,
+        `${t('customer.order.amount')}：${fmtMoney(priceUnits(result.amount), result.currency, 2)}`,
+      ].join('\n'),
       confirmButtonText: t('customer.order.viewOrder'),
     })
-    orderDlgVisible.value = false
+    cart.value = []
+    orderRemark.value = ''
+    cartVisible.value = false
     router.push({ name: 'customerOrderDetail', params: { id: result.id } })
     loadOrders()
   } catch {
@@ -163,7 +291,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
+  <div :class="cart.length ? 'pb-32' : ''">
     <van-tabs v-model:active="activeTab" sticky>
       <van-tab :title="t('customer.order.tabBrowse')">
         <div class="px-3 pt-3">
@@ -213,13 +341,27 @@ onMounted(() => {
                   <div v-if="s.remark" class="mt-1 text-zinc-400">{{ s.remark }}</div>
                 </div>
               </div>
-              <van-button
-                size="small"
-                type="primary"
-                round
-                class="shrink-0 ml-2"
-                @click="openPlaceOrder(s)"
-              >{{ t('customer.order.orderNow') }}</van-button>
+
+              <div class="shrink-0 ml-2 flex flex-col items-end">
+                <template v-if="isPriced(s)">
+                  <div class="text-base font-semibold text-rose-600">{{ unitPriceText(s) }}</div>
+                  <div class="mt-0.5 text-[11px] text-zinc-400">
+                    {{ t('customer.order.unitPrice') }}
+                    <span v-if="minQtyOf(s) > 1"> · {{ t('customer.order.minQty') }} {{ minQtyOf(s) }}</span>
+                  </div>
+                  <van-button
+                    size="small"
+                    :type="inCart(s.id) ? 'default' : 'primary'"
+                    round
+                    class="mt-2"
+                    @click="addToCart(s)"
+                  >{{ inCart(s.id) ? t('customer.order.inCart') : t('customer.order.addToCart') }}</van-button>
+                </template>
+                <template v-else>
+                  <van-tag type="warning" size="medium">{{ t('customer.order.unpriced') }}</van-tag>
+                  <div class="mt-1 text-[11px] text-zinc-400">{{ t('customer.order.unpricedHint') }}</div>
+                </template>
+              </div>
             </div>
           </div>
           <van-empty v-if="!filteredSkus.length && !catalogLoading" :description="t('customer.order.noProduct')" />
@@ -259,25 +401,64 @@ onMounted(() => {
       </van-tab>
     </van-tabs>
 
-    <van-action-sheet v-model:show="orderDlgVisible" :title="t('customer.order.confirmOrder')" closeable>
-      <div class="px-4 pb-6">
-        <div v-if="orderSku" class="mb-4 rounded-lg bg-blue-50 p-3 text-sm">
-          <div class="font-semibold">{{ skuLabel(orderSku) }}</div>
-          <div class="mt-1 text-xs text-zinc-600" v-if="orderSku.color || orderSku.material || orderSku.spec">
-            <span v-if="orderSku.color">颜色：{{ orderSku.color }}　</span>
-            <span v-if="orderSku.material">材料：{{ orderSku.material }}　</span>
-            <span v-if="orderSku.spec">规格：{{ orderSku.spec }}</span>
+    <!-- 购物清单悬浮条：压在客户 tabbar（50px）之上 -->
+    <div
+      v-if="cart.length && !cartVisible"
+      class="cart-bar"
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <van-icon name="shopping-cart-o" size="22" class="shrink-0" />
+        <div class="min-w-0">
+          <div class="text-xs text-zinc-400">
+            {{ t('customer.order.cartSummary', { lines: cartCount, qty: cartQtyTotal }) }}
+          </div>
+          <div class="truncate text-sm font-semibold text-rose-600">
+            {{ fmtMoney(cartTotalUnits, cartCurrency, 2) }}
+          </div>
+        </div>
+      </div>
+      <van-button type="primary" round size="small" class="shrink-0" @click="openCart">
+        {{ t('customer.order.checkout') }}
+      </van-button>
+    </div>
+
+    <!-- 清单弹层 -->
+    <van-action-sheet v-model:show="cartVisible" :title="t('customer.order.cart')" closeable>
+      <div class="max-h-[70vh] overflow-y-auto px-4 pb-6">
+        <div
+          v-for="line in cart"
+          :key="line.sku.id"
+          class="mb-3 rounded-lg bg-zinc-50 p-3"
+        >
+          <div class="flex items-start justify-between">
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium">{{ skuLabel(line.sku) }}</div>
+              <div class="mt-0.5 text-xs text-zinc-500">
+                {{ t('customer.order.unitPrice') }} {{ unitPriceText(line.sku) }}
+                <span v-if="minQtyOf(line.sku) > 1"> · {{ t('customer.order.minQty') }} {{ minQtyOf(line.sku) }}</span>
+              </div>
+            </div>
+            <van-icon name="cross" class="ml-2 shrink-0 text-zinc-400" @click="removeLine(line.sku.id)" />
+          </div>
+          <div class="mt-2 flex items-center justify-between">
+            <van-stepper
+              v-model="line.qty"
+              :min="minQtyOf(line.sku)"
+              :max="999999"
+              integer
+              input-width="52px"
+              button-size="26px"
+            />
+            <div class="text-sm font-semibold text-rose-600">{{ lineSubtotalText(line) }}</div>
           </div>
         </div>
 
-          <van-cell-group inset>
-          <van-field
-            v-model.number="orderQty"
-            :label="t('customer.order.quantity')"
-            type="number"
-            :min="1"
-            :placeholder="t('customer.order.quantityPlaceholder')"
-          />
+        <div class="mt-3 flex items-center justify-between rounded-lg bg-rose-50 px-3 py-2">
+          <span class="text-sm text-zinc-600">{{ t('customer.order.totalAmount') }}</span>
+          <span class="text-lg font-bold text-rose-600">{{ fmtMoney(cartTotalUnits, cartCurrency, 2) }}</span>
+        </div>
+
+        <van-cell-group inset class="mt-3">
           <van-field
             v-model="orderRemark"
             :label="t('customer.order.remark')"
@@ -287,20 +468,38 @@ onMounted(() => {
           />
         </van-cell-group>
 
-        <div class="mt-4 px-2">
+        <div class="mt-2 px-2 text-center text-[11px] text-zinc-400">{{ t('customer.order.priceHint') }}</div>
+
+        <div class="mt-3 flex gap-2 px-2">
+          <van-button block plain round @click="clearCart">{{ t('customer.order.clearCart') }}</van-button>
           <van-button
             block
             type="primary"
             round
-            size="large"
             :loading="orderSubmitting"
-            :disabled="orderQty < 1"
             @click="submitOrder"
-          >
-            {{ t('customer.order.submitOrder') }}
-          </van-button>
+          >{{ t('customer.order.submitOrder') }}</van-button>
         </div>
       </div>
     </van-action-sheet>
   </div>
 </template>
+
+<style scoped>
+.cart-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* 客户 tabbar 固定 50px 高，清单条压在它上方，避免遮住导航 */
+  bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  box-shadow: 0 -2px 8px rgb(0 0 0 / 6%);
+}
+</style>

@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import AdminPage from '@/components/admin/AdminPage.vue'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -75,6 +75,38 @@ const allProducts = ref<ProductOut[]>([])
 const selectedProductIds = ref<number[]>([])
 const productsSaving = ref(false)
 const productsLoading = ref(false)
+
+/**
+ * 客户专属价目（产品级）：
+ * 与「可下单范围」分开保存——范围用 PUT /products（全删重建），价目用 PUT /products/pricing。
+ * 如果价目跟着范围全删重建，每次调整范围都会把已定的价格清零，客户就下出 0 元订单。
+ */
+interface PricingRow {
+  product_id: number
+  price: string
+  min_qty: number
+  currency: string
+}
+
+const pricingRows = ref<PricingRow[]>([])
+const pricingSaving = ref(false)
+const CURRENCY_OPTIONS = ['CNY', 'USD', 'EUR', 'KRW', 'JPY', 'HKD']
+
+function productLabelById(id: number) {
+  const p = allProducts.value.find((x) => x.id === id)
+  return p ? productOptionLabel(p) : `#${id}`
+}
+
+/** 勾选范围变化时同步价目行：保留已有价格，新勾选的给默认值，取消勾选的移出 */
+function syncPricingRows(ids: number[]) {
+  const keep = new Map(pricingRows.value.map((r) => [r.product_id, r]))
+  pricingRows.value = ids.map(
+    (id) => keep.get(id) ?? { product_id: id, price: '0', min_qty: 1, currency: 'CNY' },
+  )
+}
+
+// 勾选变化时立刻同步价目表格，让管理员看到「这个产品还没定价」而不是空白
+watch(selectedProductIds, (ids) => syncPricingRows(ids ?? []), { deep: true })
 
 const loginDlg = reactive({
   open: false,
@@ -175,6 +207,12 @@ async function loadCustomerProducts() {
   try {
     const res = await productionApi.getCustomerProducts(customerId.value)
     selectedProductIds.value = res.product_ids ?? []
+    pricingRows.value = (res.items ?? []).map((p) => ({
+      product_id: p.id,
+      price: String(p.price ?? '0'),
+      min_qty: Number(p.min_qty ?? 1),
+      currency: p.currency || 'CNY',
+    }))
   } finally {
     productsLoading.value = false
   }
@@ -190,9 +228,45 @@ async function saveCustomerProducts() {
   try {
     await productionApi.setCustomerProducts(customerId.value, selectedProductIds.value)
     ElMessage.success(t('production.customers.productsSaved'))
-    await loadCustomer()
+    // 保存范围后重新拉取：后端会把「新加入的产品」以默认价目落库，这里同步回来避免显示漂移
+    await Promise.all([loadCustomer(), loadCustomerProducts()])
   } finally {
     productsSaving.value = false
+  }
+}
+
+async function savePricing() {
+  if (!pricingRows.value.length) {
+    ElMessage.warning(t('production.customers.pricingEmpty'))
+    return
+  }
+  // 前端先做一次兜底校验，避免把明显非法的价格送到后端再 400
+  for (const row of pricingRows.value) {
+    const price = Number(row.price)
+    if (!Number.isFinite(price) || price < 0) {
+      ElMessage.warning(t('production.customers.priceInvalid', { product: productLabelById(row.product_id) }))
+      return
+    }
+    if (!Number.isFinite(row.min_qty) || row.min_qty < 1) {
+      ElMessage.warning(t('production.customers.minQtyInvalid', { product: productLabelById(row.product_id) }))
+      return
+    }
+  }
+  pricingSaving.value = true
+  try {
+    await productionApi.setCustomerProductsPricing(
+      customerId.value,
+      pricingRows.value.map((r) => ({
+        product_id: r.product_id,
+        price: r.price,
+        min_qty: r.min_qty,
+        currency: r.currency,
+      })),
+    )
+    ElMessage.success(t('production.customers.pricingSaved'))
+    await loadCustomerProducts()
+  } finally {
+    pricingSaving.value = false
   }
 }
 
@@ -537,7 +611,7 @@ onMounted(async () => {
           <el-tag v-else type="warning" size="small">未开通</el-tag>
           <el-button class="ml-2" size="small" link type="primary" @click="openLoginDlg">设置登录</el-button>
         </el-descriptions-item>
-        <el-descriptions-item label="可下单产品">{{ customer.product_count ?? 0 }} 个（见下方 Tab）</el-descriptions-item>
+        <el-descriptions-item :label="t('production.customers.productsTab')">{{ customer.product_count ?? 0 }}（{{ t('production.customers.seeTabBelow') }}）</el-descriptions-item>
         <el-descriptions-item label="客户标签" :span="3">
           <div class="flex items-center gap-2 flex-wrap">
             <el-select v-model="selectedTagIds" multiple filterable placeholder="选择标签" style="width: 520px">
@@ -551,16 +625,16 @@ onMounted(async () => {
 
     <el-card shadow="never" class="mt-4">
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="可下单产品" name="products">
+        <el-tab-pane :label="t('production.customers.productsTab')" name="products">
           <div v-loading="productsLoading" class="py-2">
             <p class="text-sm text-zinc-500 mb-3">
-              仅勾选的产品/型号会在该客户 H5 下单页显示；未配置任何产品时客户无法下单。
+              {{ t('production.customers.productsHint') }}
             </p>
             <el-select
               v-model="selectedProductIds"
               multiple
               filterable
-              placeholder="选择可下单产品"
+              :placeholder="t('production.customers.productsPlaceholder')"
               style="width: 100%"
             >
               <el-option
@@ -571,7 +645,64 @@ onMounted(async () => {
               />
             </el-select>
             <div class="mt-3">
-              <el-button type="primary" :loading="productsSaving" @click="saveCustomerProducts">保存产品范围</el-button>
+              <el-button type="primary" :loading="productsSaving" @click="saveCustomerProducts">
+                {{ t('production.customers.saveProducts') }}
+              </el-button>
+            </div>
+
+            <el-divider />
+
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="text-sm font-medium">{{ t('production.customers.pricingTitle') }}</div>
+                <div class="text-xs text-zinc-500">{{ t('production.customers.pricingHint') }}</div>
+              </div>
+              <el-button
+                type="primary"
+                :loading="pricingSaving"
+                :disabled="!pricingRows.length"
+                @click="savePricing"
+              >{{ t('production.customers.savePricing') }}</el-button>
+            </div>
+
+            <el-table v-if="pricingRows.length" :data="pricingRows" border size="small">
+              <el-table-column :label="t('production.customers.colProduct')" min-width="220">
+                <template #default="{ row }">{{ productLabelById(row.product_id) }}</template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colPrice')" width="190">
+                <template #default="{ row }">
+                  <el-input v-model="row.price" :placeholder="t('production.customers.pricePlaceholder')" />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colMinQty')" width="150">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.min_qty"
+                    :min="1"
+                    :step="1"
+                    :precision="0"
+                    controls-position="right"
+                    style="width: 120px"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colCurrency')" width="140">
+                <template #default="{ row }">
+                  <el-select v-model="row.currency" style="width: 110px">
+                    <el-option v-for="c in CURRENCY_OPTIONS" :key="c" :label="c" :value="c" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colPricingStatus')" width="130">
+                <template #default="{ row }">
+                  <el-tag :type="Number(row.price) > 0 ? 'success' : 'warning'" size="small">
+                    {{ Number(row.price) > 0 ? t('production.customers.priced') : t('production.customers.unpriced') }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-else class="py-6 text-center text-sm text-zinc-400">
+              {{ t('production.customers.pricingEmpty') }}
             </div>
           </div>
         </el-tab-pane>

@@ -7,9 +7,15 @@ from pydantic import BaseModel, Field
 
 
 class CustomerOrderItemIn(BaseModel):
+    """客户购物车行。
+
+    刻意不接收单价：客户报价必须只由服务端 `customer_products` 价目表决定，
+    否则前端可以随意把 unit_price 改成 0 买空库存。多余的 unit_price 字段
+    会被 Pydantic 静默忽略（extra=ignore），不会污染订单金额。
+    """
+
     sku_id: int = Field(ge=1)
     qty: int = Field(ge=1)
-    unit_price: Decimal = Field(default=Decimal("0"), ge=0)
     remark: str | None = None
 
 

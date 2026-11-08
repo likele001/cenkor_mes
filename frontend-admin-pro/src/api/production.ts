@@ -1200,7 +1200,19 @@ export const productionApi = {
     return http.request<CustomerOut>({ url: `/admin/production/customers/${id}`, method: 'PUT', data })
   },
   getCustomerProducts(customerId: number) {
-    return http.request<{ product_ids: number[]; items: { id: number; code: string; name: string; category: string | null }[] }>({
+    return http.request<{
+      product_ids: number[]
+      items: {
+        id: number
+        code: string
+        name: string
+        category: string | null
+        /** 客户专属单价（字符串，避免浮点误差） */
+        price: string
+        min_qty: number
+        currency: string
+      }[]
+    }>({
       url: `/admin/production/customers/${customerId}/products`,
       method: 'GET',
     })
@@ -1210,6 +1222,20 @@ export const productionApi = {
       url: `/admin/production/customers/${customerId}/products`,
       method: 'PUT',
       data: { product_ids },
+    })
+  },
+  /** 批量维护客户专属价目：价格 / 起订量 / 币种（产品级，作用于该产品下所有型号） */
+  setCustomerProductsPricing(
+    customerId: number,
+    items: { product_id: number; price: string | number; min_qty: number; currency: string }[],
+  ) {
+    return http.request<{
+      customer_id: number
+      items: { product_id: number; price: string; min_qty: number; currency: string }[]
+    }>({
+      url: `/admin/production/customers/${customerId}/products/pricing`,
+      method: 'PUT',
+      data: { items },
     })
   },
   listCustomerContacts(customerId: number, params?: any) {

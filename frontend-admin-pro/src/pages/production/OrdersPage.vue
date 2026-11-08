@@ -6,20 +6,20 @@
   <AdminPage :title="t('production.orders.title')">
     <template #actions>
       <div class="flex items-center gap-2 flex-wrap">
-          <el-button :loading="exporting" @click="exportExcel">导出 Excel</el-button>
+          <el-button :loading="exporting" @click="exportExcel">{{ t('production.orders.exportExcel') }}</el-button>
           <el-button type="primary" @click="openCreate">{{ t('production.orders.createOrder') }}</el-button>
           <el-button @click="router.push('/production/orders/import')">{{ t('production.orders.excelImport') }}</el-button>
           <el-input v-model="query.keyword" :placeholder="t('production.orders.searchCode')" clearable style="width: 220px" @keyup.enter="reload(true)" />
           <el-input-number v-model="query.customer_id" :min="1" :controls="false" :placeholder="t('production.orders.customerId')" style="width: 140px" @change="reload(true)" />
-          <el-input-number v-model="query.opportunity_id" :min="1" :controls="false" placeholder="来源商机ID" style="width: 140px" @change="reload(true)" />
+          <el-input-number v-model="query.opportunity_id" :min="1" :controls="false" :placeholder="t('production.orders.opportunityIdPlaceholder')" style="width: 140px" @change="reload(true)" />
           <el-select v-model="query.status" clearable :placeholder="t('production.common.status')" style="width: 140px" @change="reload(true)">
             <el-option :label="t('production.orders.draft')" value="draft" />
             <el-option :label="t('production.orders.pendingConfirm')" value="pending_confirm" />
             <el-option :label="t('production.orders.confirmed')" value="confirmed" />
             <el-option :label="t('production.orders.producing')" value="producing" />
           </el-select>
-          <el-button @click="reload(true)">刷新</el-button>
-          <el-button v-if="deliveryOntimeLoaded" type="success" plain @click="goExt(deliveryOntimeRoute)">交期履约分析</el-button>
+          <el-button @click="reload(true)">{{ t('production.orders.refresh') }}</el-button>
+          <el-button v-if="deliveryOntimeLoaded" type="success" plain @click="goExt(deliveryOntimeRoute)">{{ t('production.orders.deliveryOntimeAnalysis') }}</el-button>
         </div>
     </template>
 
@@ -63,7 +63,7 @@
                 :disabled="row.status !== 'draft' && row.status !== 'confirmed' && row.status !== 'producing'"
                 @click="openEdit(row)"
               >
-                编辑
+                {{ t('production.orders.edit') }}
               </el-button>
               <el-button
                 v-if="row.status === 'pending_confirm'"
@@ -72,7 +72,7 @@
                 link
                 @click="onReject(row.id)"
               >
-                驳回
+                {{ t('production.orders.reject') }}
               </el-button>
               <el-button
                 size="small"
@@ -81,7 +81,7 @@
                 :loading="confirmingId === row.id"
                 @click="onConfirm(row.id)"
               >
-                审核通过
+                {{ t('production.orders.approve') }}
               </el-button>
             </template>
           </el-table-column>
@@ -98,18 +98,18 @@
               <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
             </div>
             <dl class="admin-mobile-kv">
-              <dt>客户</dt>
+              <dt>{{ t('production.orders.customerLabel') }}</dt>
               <dd>
                 <span v-if="row.customer">{{ row.customer.name }}（{{ row.customer.code }}）</span>
                 <span v-else>{{ t('production.common.customer') }}#{{ row.customer_id }}</span>
               </dd>
-              <dt>交期</dt>
+              <dt>{{ t('production.orders.dueDateLabel') }}</dt>
               <dd>{{ row.due_date || '—' }}</dd>
-              <dt>金额</dt>
+              <dt>{{ t('production.orders.amountTotal') }}</dt>
               <dd>{{ money(row.amount) }}</dd>
-              <dt>备注</dt>
+              <dt>{{ t('production.common.remark') }}</dt>
               <dd>{{ row.remark || '—' }}</dd>
-              <dt>确认时间</dt>
+              <dt>{{ t('production.orders.confirmTimeLabel') }}</dt>
               <dd>{{ row.confirmed_at || '—' }}</dd>
             </dl>
             <div class="admin-mobile-actions">
@@ -119,7 +119,7 @@
                 :disabled="row.status !== 'draft' && row.status !== 'confirmed' && row.status !== 'producing'"
                 @click="openEdit(row)"
               >
-                编辑
+                {{ t('production.orders.edit') }}
               </el-button>
               <el-button
                 size="small"
@@ -128,7 +128,7 @@
                 :loading="confirmingId === row.id"
                 @click="onConfirm(row.id)"
               >
-                审核通过
+                {{ t('production.orders.approve') }}
               </el-button>
             </div>
           </div>
@@ -142,17 +142,17 @@
         <el-descriptions v-if="detail.data" :column="3" border>
           <el-descriptions-item label="ID">{{ detail.data.id }}</el-descriptions-item>
           <el-descriptions-item :label="t('production.orders.code')">{{ detail.data.code }}</el-descriptions-item>
-          <el-descriptions-item label="客户">
+          <el-descriptions-item :label="t('production.orders.customerLabel')">
             <span v-if="detail.data.customer">{{ detail.data.customer.name }}（{{ detail.data.customer.code }}）</span>
             <span v-else>{{ t('production.common.customer') }}#{{ detail.data.customer_id }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="状态">{{ statusLabel(detail.data.status) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('production.orders.status')">{{ statusLabel(detail.data.status) }}</el-descriptions-item>
           <el-descriptions-item :label="t('production.orders.dueDate')">{{ detail.data.due_date || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="确认时间">{{ detail.data.confirmed_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('production.orders.confirmTimeLabel')">{{ detail.data.confirmed_at || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('production.orders.amountTotal')">{{ money(detail.data.amount) }}</el-descriptions-item>
           <el-descriptions-item :label="t('production.orders.costTotal')">{{ money(detail.data.cost_amount) }}</el-descriptions-item>
-          <el-descriptions-item label="完工时间">{{ detail.data.actual_completed_at || '-' }}</el-descriptions-item>
-          <el-descriptions-item v-if="detail.data.opportunity_id" label="来源商机">
+          <el-descriptions-item :label="t('production.orders.completedTime')">{{ detail.data.actual_completed_at || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.data.opportunity_id" :label="t('production.orders.sourceOpportunity')">
             <router-link :to="{ name: 'production-customer-detail', params: { id: detail.data.customer_id }, query: { tab: 'opps' } }">
               {{ detail.data.opportunity_code || `#${detail.data.opportunity_id}` }}
             </router-link>
@@ -171,7 +171,7 @@
           <el-table-column prop="line_no" :label="t('production.orders.lineNo')" width="90" />
           <el-table-column v-if="detail.data.status === 'confirmed' || detail.data.status === 'producing'" :label="t('production.orders.lockedLabel')" width="120">
             <template #default="{ row }">
-              <el-tag v-if="row.locked" type="warning" size="small">{{ row.lock_reason || '锁定' }}</el-tag>
+              <el-tag v-if="row.locked" type="warning" size="small">{{ row.lock_reason || t('production.orders.lockReason') }}</el-tag>
               <span v-else class="text-zinc-400">—</span>
             </template>
           </el-table-column>
@@ -198,20 +198,20 @@
         </p>
         <div v-if="detail.data" class="lg:hidden space-y-3 mt-4">
           <div v-for="row in detail.data.items" :key="row.line_no" class="admin-mobile-row">
-            <div class="text-xs text-el-placeholder">行 {{ row.line_no }}</div>
+            <div class="text-xs text-el-placeholder">{{ t('production.orders.rowNumber', { row: row.line_no }) }}</div>
             <div v-if="row.sku" class="text-sm">
               <div class="font-medium">{{ row.sku.product_name || row.sku.name }}</div>
               <div class="text-xs text-zinc-500">{{ row.sku.sku_name || row.sku.display_label }}</div>
             </div>
             <div v-else class="font-medium text-sm">{{ t('production.common.customer') }}#{{ row.sku_id }}</div>
             <dl class="admin-mobile-kv mt-2">
-              <dt>数量</dt>
+              <dt>{{ t('production.orders.quantityLabel') }}</dt>
               <dd>{{ row.qty }}</dd>
-              <dt>单价</dt>
+              <dt>{{ t('production.orders.unitPriceLabel') }}</dt>
               <dd>{{ money(row.unit_price, 4) }}</dd>
-              <dt>小计</dt>
+              <dt>{{ t('production.orders.subtotalLabel') }}</dt>
               <dd>{{ money(row.subtotal) }}</dd>
-              <dt>备注</dt>
+              <dt>{{ t('production.common.remark') }}</dt>
               <dd class="text-left">{{ row.remark || '—' }}</dd>
             </dl>
           </div>
@@ -246,7 +246,7 @@
               maxlength="64"
               show-word-limit
             />
-            <div class="text-xs text-zinc-500 mt-1">编号按日递增（ORD+日期+序号）。保存后会占用序号，下次自动为 002、003…</div>
+            <div class="text-xs text-zinc-500 mt-1">{{ t('production.orders.orderCodeHint') }}</div>
           </el-form-item>
           <el-form-item :label="t('production.orders.dueDate')">
             <el-date-picker
@@ -279,7 +279,7 @@
                     <el-option v-for="s in createDlg.skus" :key="s.id" :label="orderSkuOptionLabel(s)" :value="s.id">
                       <div class="leading-tight py-0.5">
                         <div>{{ orderSkuOptionLabel(s) }}</div>
-                        <div class="text-xs text-zinc-400">编码 {{ s.code }}</div>
+                        <div class="text-xs text-zinc-400">{{ t('production.orders.codeLabel') }} {{ s.code }}</div>
                       </div>
                     </el-option>
                   </el-select>
@@ -305,7 +305,7 @@
               </el-table-column>
               <el-table-column label="" width="70" fixed="right">
                 <template #default="{ $index }">
-                  <el-button size="small" type="danger" link :disabled="createDlg.lines.length <= 1" @click="removeCreateLine($index)">删</el-button>
+                  <el-button size="small" type="danger" link :disabled="createDlg.lines.length <= 1" @click="removeCreateLine($index)">{{ t('production.orders.delete') }}</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -343,7 +343,7 @@
             <el-select
               v-model="editDlg.form.customer_id"
               filterable
-              placeholder="客户"
+              :placeholder="t('production.orders.customerPlaceholder')"
               style="width: 100%"
               :disabled="editDlg.status !== 'draft'"
             >
@@ -378,10 +378,10 @@
               <el-table-column label="#" width="50">
                 <template #default="{ $index }">{{ $index + 1 }}</template>
               </el-table-column>
-              <el-table-column v-if="editDlg.status === 'confirmed'" label="状态" width="100">
+              <el-table-column v-if="editDlg.status === 'confirmed'" :label="t('production.orders.status')" width="100">
                 <template #default="{ row }">
-                  <el-tag v-if="row.locked" type="warning" size="small">{{ row.lock_reason || '锁定' }}</el-tag>
-                  <el-tag v-else type="success" size="small">可改</el-tag>
+                  <el-tag v-if="row.locked" type="warning" size="small">{{ row.lock_reason || t('production.orders.lockReason') }}</el-tag>
+                  <el-tag v-else type="success" size="small">{{ t('production.orders.editable') }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column :label="t('production.orders.productSku')" min-width="280">
@@ -396,7 +396,7 @@
                     <el-option v-for="s in editDlg.skus" :key="s.id" :label="orderSkuOptionLabel(s)" :value="s.id">
                       <div class="leading-tight py-0.5">
                         <div>{{ orderSkuOptionLabel(s) }}</div>
-                        <div class="text-xs text-zinc-400">编码 {{ s.code }}</div>
+                        <div class="text-xs text-zinc-400">{{ t('production.orders.codeLabel') }} {{ s.code }}</div>
                       </div>
                     </el-option>
                   </el-select>
@@ -415,7 +415,7 @@
               <el-table-column :label="t('production.orders.subtotalLabel')" width="110" align="right">
                 <template #default="{ row }">{{ lineSubtotal(row) }}</template>
               </el-table-column>
-              <el-table-column label="行备注" min-width="100">
+              <el-table-column :label="t('production.orders.rowRemarkLabel')" min-width="100">
                 <template #default="{ row }">
                   <el-input v-model="row.remark" :placeholder="t('production.orders.remarkPlaceholder')" :disabled="row.locked" />
                 </template>
@@ -429,13 +429,13 @@
                     :disabled="editDlg.lines.length <= 1 || row.locked || editDlg.orderPlanLocked"
                     @click="removeEditLine($index)"
                   >
-                    删
+                    {{ t('production.orders.delete') }}
                   </el-button>
                 </template>
               </el-table-column>
             </el-table>
             <p v-if="editDlg.status === 'confirmed' || editDlg.status === 'producing'" class="mt-2 text-xs text-zinc-500">
-              已审核/生产中订单不可更换型号；未下发投产或未派工锁定前可改数量；已有工单时数量将同步任务。单价可随行修订，订单金额随之重算。
+              {{ t('production.orders.confirmedEditHint') }}
             </p>
             <p class="mt-2 text-right text-sm">
               {{ t('production.orders.amountTotal') }}：<span class="font-semibold">{{ money(editOrderTotal) }}</span>
@@ -557,12 +557,16 @@ const editOrderTotal = computed(() => sumLines(editDlg.lines))
 
 
 async function onReject(orderId: number) {
-  const reason = await ElMessageBox.prompt('请输入驳回原因', '驳回订单', { inputPattern: /.+/, inputErrorMessage: '请填写原因' })
+  const reason = await ElMessageBox.prompt(
+    t('production.orders.rejectReasonTitle'),
+    t('production.orders.rejectOrder'),
+    { inputPattern: /.+/, inputErrorMessage: t('production.orders.rejectReasonPlaceholder') },
+  )
     .then((r) => r.value)
     .catch(() => null)
   if (!reason) return
   await productionApi.rejectOrder(orderId, reason)
-  ElMessage.success('已驳回')
+  ElMessage.success(t('production.orders.rejected'))
   await reload(false)
 }
 
@@ -602,9 +606,11 @@ async function openDetail(orderId: number) {
 
 async function onConfirm(orderId: number) {
   if (confirmingId.value) return
-  const ok = await ElMessageBox.confirm('确认审核通过该订单？通过后可创建生产计划，在计划中齐套检查并下发投产。', '审核订单', {
-    type: 'warning',
-  })
+  const ok = await ElMessageBox.confirm(
+    t('production.orders.approveConfirm'),
+    t('production.orders.approveOrder'),
+    { type: 'warning' },
+  )
     .then(() => true)
     .catch(() => false)
   if (!ok) return
@@ -612,7 +618,11 @@ async function onConfirm(orderId: number) {
   try {
     const res = await productionApi.confirmOrder(orderId)
     const autoMsg = formatAutomationFeedback(res)
-    ElMessage.success(autoMsg ? `订单已审核。${autoMsg}` : '订单已审核，请前往生产计划排产并确认下发')
+    ElMessage.success(
+      autoMsg
+        ? `${t('production.orders.orderApprovedAuto')}${autoMsg}`
+        : t('production.orders.orderApproved'),
+    )
     await reload(false)
   } finally {
     confirmingId.value = null
@@ -653,7 +663,7 @@ function removeCreateLine(idx: number) {
 
 async function submitCreate() {
   if (!createDlg.form.customer_id) {
-    ElMessage.warning('请选择客户')
+    ElMessage.warning(t('production.orders.pleaseSelectCustomer'))
     return
   }
   const rows = createDlg.lines
@@ -668,7 +678,7 @@ async function submitCreate() {
       remark: row.remark?.trim() ? row.remark.trim() : undefined,
     }})
   if (!rows.length) {
-    ElMessage.warning('请至少填写一行型号与数量')
+    ElMessage.warning(t('production.orders.atLeastOneSku'))
     return
   }
   createDlg.saving = true
@@ -680,7 +690,7 @@ async function submitCreate() {
       remark: createDlg.form.remark?.trim() || undefined,
       items: rows,
     })
-    ElMessage.success('订单已创建（草稿）')
+    ElMessage.success(t('production.orders.orderCreatedDraft'))
     createDlg.open = false
     await reload(true)
   } finally {
@@ -690,7 +700,7 @@ async function submitCreate() {
 
 function openEdit(row: OrderOut) {
   if (row.status !== 'draft' && row.status !== 'confirmed' && row.status !== 'producing') {
-    ElMessage.warning('当前状态不可编辑')
+    ElMessage.warning(t('production.orders.currentStatusNotEditable'))
     return
   }
   editDlg.editId = row.id
@@ -709,7 +719,7 @@ async function loadEditOptions() {
     editDlg.customers = (opts.customers || []) as CustomerOut[]
     editDlg.skus = opts.skus || []
     if (ord.status !== 'draft' && ord.status !== 'confirmed' && ord.status !== 'producing') {
-      ElMessage.warning('当前订单状态不可编辑')
+      ElMessage.warning(t('production.orders.currentOrderStatusNotEditable'))
       editDlg.open = false
       return
     }
@@ -751,11 +761,11 @@ async function submitEdit() {
   if (!editDlg.form || !editDlg.editId) return
   if (editDlg.status === 'draft') {
     if (!editDlg.form.customer_id) {
-      ElMessage.warning('请选择客户')
+      ElMessage.warning(t('production.orders.pleaseSelectCustomer'))
       return
     }
     if (!editDlg.form.code.trim()) {
-      ElMessage.warning('请输入订单号')
+      ElMessage.warning(t('production.orders.pleaseInputOrderCode'))
       return
     }
   }
@@ -782,7 +792,7 @@ async function submitEdit() {
         }
       })
     if (!rows.length) {
-      ElMessage.warning('请至少填写一行型号与数量')
+      ElMessage.warning(t('production.orders.atLeastOneSku'))
       return
     }
     payload.items = rows
@@ -790,7 +800,7 @@ async function submitEdit() {
   editDlg.saving = true
   try {
     await productionApi.updateOrder(editDlg.editId, payload)
-    ElMessage.success('已保存')
+    ElMessage.success(t('production.orders.orderSaved'))
     editDlg.open = false
     await reload(false)
   } finally {
@@ -809,7 +819,7 @@ async function exportExcel() {
     a.download = `orders_${new Date().toISOString().slice(0, 10)}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
+    ElMessage.success(t('production.orders.exportSuccess'))
   } catch { /* http 已提示 */
   } finally { exporting.value = false }
 }

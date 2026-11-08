@@ -1,6 +1,8 @@
 # Copyright (C) 2026 CenkorMES Project
 # SPDX-License-Identifier: AGPL-3.0
 from datetime import datetime
+from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +37,19 @@ class CustomerUpdateIn(BaseModel):
 
 class CustomerProductsSetIn(BaseModel):
     product_ids: list[int] = Field(default_factory=list)
+
+
+class CustomerProductPricingIn(BaseModel):
+    """客户专属价目的一行；price 为该客户购买此产品的单价（按件计）。"""
+
+    product_id: int = Field(ge=1)
+    price: Decimal = Field(ge=0, le=Decimal("99999999.9999"))
+    min_qty: int = Field(default=1, ge=1, le=1_000_000)
+    currency: Literal["CNY", "USD", "EUR", "KRW", "JPY"] = "CNY"
+
+
+class CustomerProductsPricingSetIn(BaseModel):
+    items: list[CustomerProductPricingIn] = Field(default_factory=list)
 
 
 class CustomerOut(BaseModel):
