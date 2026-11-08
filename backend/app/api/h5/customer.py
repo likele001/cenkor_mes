@@ -3,7 +3,6 @@
 import csv
 import io
 from datetime import datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -17,6 +16,7 @@ from app.crud.after_sale import create_after_sale, list_after_sales, list_shipme
 from app.crud.approval_record import record_status
 from app.crud.customer import get_customer_by_user_id
 from app.crud.customer_product import get_customer_product_map, list_customer_product_ids
+from app.crud.customer_sku_price import get_customer_sku_price_map
 from app.crud.finance import get_statement_by_id, list_statements, update_statement_status
 from app.crud.kanban import build_order_progress_for_loaded_order, get_order_progress_summary
 from app.models.finance import StatementItem
@@ -29,7 +29,12 @@ from app.schemas.order import CustomerPlaceOrderIn
 from app.models.task import Task
 from app.models.user import User
 from app.models.work_order import WorkOrder
-from app.services.customer_pricing import CustomerPricingError, price_customer_order
+from app.services.customer_pricing import (
+    CustomerPricingError,
+    PriceRule,
+    price_customer_order,
+    resolve_price_rule,
+)
 from app.services.display_label import product_display_name, sku_display_name
 from app.services.sku_scope import apply_finished_product_sku_filter, is_material_product
 
@@ -58,16 +63,25 @@ def _product_public(p: Product) -> dict:
         "category": p.category,
     }
 
-def _catalog_price(cfg) -> dict:
-    """把客户价目配置转成前端可展示的纯值（金额用字符串避免 JS 浮点误差）。"""
-    if cfg is None:
-        return {"unit_price": "0", "min_qty": 1, "currency": "CNY", "priced": False}
-    price = Decimal(str(cfg.price or 0)).quantize(Decimal("0.0001"))
+def _catalog_price(rule: PriceRule | None) -> dict:
+    """把生效定价转成前端可展示的纯值（金额用字符串避免 JS 浮点误差）。
+
+    `price_source` 让前端/排查能看出这个价来自型号级覆盖还是产品级兼底。
+    """
+    if rule is None:
+        return {
+            "unit_price": "0",
+            "min_qty": 1,
+            "currency": "CNY",
+            "priced": False,
+            "price_source": "none",
+        }
     return {
-        "unit_price": str(price),
-        "min_qty": int(cfg.min_qty or 1),
-        "currency": str(cfg.currency or "CNY").upper(),
-        "priced": price > 0,
+        "unit_price": str(rule.unit_price),
+        "min_qty": rule.min_qty,
+        "currency": rule.currency,
+        "priced": True,
+        "price_source": rule.source,
     }
 
 @router.get("/catalog")
@@ -91,6 +105,7 @@ def catalog_api(
         })
 
     price_map = get_customer_product_map(db, customer_id=customer.id)
+    sku_price_map = get_customer_sku_price_map(db, customer_id=customer.id)
     sku_stmt = select(Sku).where(Sku.is_active.is_(True),
         Sku.product_id.in_(allowed_ids))
     sku_stmt = apply_finished_product_sku_filter(sku_stmt)
@@ -114,8 +129,20 @@ def catalog_api(
     products = [p for p in db.scalars(products_stmt).all() if not is_material_product(p)]
 
     return ok({
-        "items": [{**_sku_public(s), **_catalog_price(price_map.get(s.product_id))} for s in skus],
-        "products": [{**_product_public(p), **_catalog_price(price_map.get(p.id))} for p in products],
+        "items": [
+            {
+                **_sku_public(s),
+                **_catalog_price(resolve_price_rule(price_map.get(s.product_id), sku_price_map.get(s.id))),
+            }
+            for s in skus
+        ],
+        "products": [
+            {
+                **_product_public(p),
+                **_catalog_price(resolve_price_rule(price_map.get(p.id), None)),
+            }
+            for p in products
+        ],
     })
 
 def _ensure_customer_user(user: User) -> None:

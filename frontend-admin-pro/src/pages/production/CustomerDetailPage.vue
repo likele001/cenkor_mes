@@ -90,7 +90,36 @@ interface PricingRow {
 
 const pricingRows = ref<PricingRow[]>([])
 const pricingSaving = ref(false)
-const CURRENCY_OPTIONS = ['CNY', 'USD', 'EUR', 'KRW', 'JPY', 'HKD']
+/** 币种必须与后端 SUPPORTED_CURRENCIES、Pydantic CurrencyCode 三处一致 */
+const CURRENCY_OPTIONS = ['CNY', 'USD', 'EUR', 'KRW', 'JPY', 'HKD', 'GBP']
+
+/**
+ * 客户型号级价目（产品级之上的精细覆盖）：
+ * 留空 = 继承产品级，所以 sku_price 用空字符串、sku_min_qty / sku_currency 用 null 表示。
+ * 不能把「留空」当 0 发出去——0 在后端语义是「删除覆盖」。
+ */
+interface SkuPricingRow {
+  sku_id: number
+  sku_code: string
+  sku_name: string
+  product_id: number
+  product_name: string
+  product_price: string
+  product_min_qty: number
+  product_currency: string
+  sku_price: string
+  sku_min_qty: number | null
+  sku_currency: string | null
+  effective_unit_price: string
+  effective_min_qty: number
+  effective_currency: string
+  source: 'sku' | 'product' | 'none'
+  priced: boolean
+}
+
+const skuPricingRows = ref<SkuPricingRow[]>([])
+const skuPricingSaving = ref(false)
+const skuPricingLoading = ref(false)
 
 function productLabelById(id: number) {
   const p = allProducts.value.find((x) => x.id === id)
@@ -215,6 +244,58 @@ async function loadCustomerProducts() {
     }))
   } finally {
     productsLoading.value = false
+  }
+  // 产品级价目变了，型号级的生效值也会变，必须跟着刷新
+  await loadSkuPricing()
+}
+
+async function loadSkuPricing() {
+  skuPricingLoading.value = true
+  try {
+    const res = await productionApi.getCustomerSkusPricing(customerId.value)
+    skuPricingRows.value = (res.items ?? []).map((it) => ({
+      ...it,
+      // 用空字符串 / null 表示「未覆盖」，避免把 0 当成「已配 0 元」
+      sku_price: it.sku_price && Number(it.sku_price) > 0 ? String(it.sku_price) : '',
+      sku_min_qty: it.sku_min_qty ?? null,
+      sku_currency: it.sku_currency || null,
+    }))
+  } finally {
+    skuPricingLoading.value = false
+  }
+}
+
+async function saveSkuPricing() {
+  if (!skuPricingRows.value.length) {
+    ElMessage.warning(t('production.customers.skuPricingEmpty'))
+    return
+  }
+  for (const row of skuPricingRows.value) {
+    if (row.sku_price !== '' && (!Number.isFinite(Number(row.sku_price)) || Number(row.sku_price) < 0)) {
+      ElMessage.warning(t('production.customers.priceInvalid', { product: row.sku_code }))
+      return
+    }
+    if (row.sku_min_qty !== null && row.sku_min_qty < 1) {
+      ElMessage.warning(t('production.customers.minQtyInvalid', { product: row.sku_code }))
+      return
+    }
+  }
+  skuPricingSaving.value = true
+  try {
+    await productionApi.setCustomerSkusPricing(
+      customerId.value,
+      skuPricingRows.value.map((r) => ({
+        sku_id: r.sku_id,
+        // 留空 → 传 0，后端语义是删除覆盖、回落产品级
+        price: r.sku_price === '' ? '0' : r.sku_price,
+        min_qty: r.sku_min_qty ?? null,
+        currency: r.sku_currency ?? null,
+      })),
+    )
+    ElMessage.success(t('production.customers.pricingSaved'))
+    await loadSkuPricing()
+  } finally {
+    skuPricingSaving.value = false
   }
 }
 
@@ -703,6 +784,90 @@ onMounted(async () => {
             </el-table>
             <div v-else class="py-6 text-center text-sm text-zinc-400">
               {{ t('production.customers.pricingEmpty') }}
+            </div>
+
+            <el-divider />
+
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="text-sm font-medium">{{ t('production.customers.skuPricingTitle') }}</div>
+                <div class="text-xs text-zinc-500">{{ t('production.customers.skuPricingHint') }}</div>
+              </div>
+              <el-button
+                type="primary"
+                :loading="skuPricingSaving"
+                :disabled="!skuPricingRows.length"
+                @click="saveSkuPricing"
+              >{{ t('production.customers.saveSkuPricing') }}</el-button>
+            </div>
+
+            <el-table
+              v-if="skuPricingRows.length"
+              v-loading="skuPricingLoading"
+              :data="skuPricingRows"
+              border
+              size="small"
+              max-height="420"
+            >
+              <el-table-column :label="t('production.customers.colSku')" min-width="190">
+                <template #default="{ row }">
+                  <div class="text-sm">{{ row.sku_name }}</div>
+                  <div class="text-xs text-zinc-400">{{ row.sku_code }} · {{ row.product_name }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colSkuPrice')" width="180">
+                <template #default="{ row }">
+                  <el-input
+                    v-model="row.sku_price"
+                    :placeholder="`${row.product_price} (${t('production.customers.inherit')})`"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colSkuMinQty')" width="150">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.sku_min_qty"
+                    :min="1"
+                    :step="1"
+                    :precision="0"
+                    :placeholder="String(row.product_min_qty)"
+                    controls-position="right"
+                    style="width: 118px"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colSkuCurrency')" width="130">
+                <template #default="{ row }">
+                  <el-select
+                    v-model="row.sku_currency"
+                    clearable
+                    :placeholder="row.product_currency"
+                    style="width: 104px"
+                  >
+                    <el-option v-for="c in CURRENCY_OPTIONS" :key="c" :label="c" :value="c" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('production.customers.colEffective')" width="175">
+                <template #default="{ row }">
+                  <div class="text-sm">
+                    {{ row.effective_unit_price }} × {{ row.effective_min_qty }} {{ row.effective_currency }}
+                  </div>
+                  <el-tag
+                    :type="row.source === 'sku' ? 'success' : (row.priced ? 'info' : 'warning')"
+                    size="small"
+                  >
+                    {{
+                      row.source === 'sku'
+                        ? t('production.customers.sourceSku')
+                        : (row.priced ? t('production.customers.sourceProduct') : t('production.customers.unpriced'))
+                    }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div v-else-if="!skuPricingLoading" class="py-6 text-center text-sm text-zinc-400">
+              {{ t('production.customers.skuPricingEmpty') }}
             </div>
           </div>
         </el-tab-pane>

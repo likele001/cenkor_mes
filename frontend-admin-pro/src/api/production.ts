@@ -1238,6 +1238,53 @@ export const productionApi = {
       data: { items },
     })
   },
+  /** 读取客户型号级价目：同时返回型号级原始配置与合并后的生效值 */
+  getCustomerSkusPricing(customerId: number, productId?: number) {
+    return http.request<{
+      customer_id: number
+      items: {
+        sku_id: number
+        sku_code: string
+        sku_name: string
+        product_id: number
+        product_name: string
+        product_price: string
+        product_min_qty: number
+        product_currency: string
+        sku_price: string | null
+        sku_min_qty: number | null
+        sku_currency: string | null
+        effective_unit_price: string
+        effective_min_qty: number
+        effective_currency: string
+        source: 'sku' | 'product' | 'none'
+        priced: boolean
+      }[]
+    }>({
+      url: `/admin/production/customers/${customerId}/skus/pricing`,
+      method: 'GET',
+      params: productId ? { product_id: productId } : undefined,
+    })
+  },
+  /** 批量维护型号级价目：price 传 0 删除覆盖，min_qty / currency 传 null 继承产品级 */
+  setCustomerSkusPricing(
+    customerId: number,
+    items: {
+      sku_id: number
+      price: string | number
+      min_qty: number | null
+      currency: string | null
+    }[],
+  ) {
+    return http.request<{
+      customer_id: number
+      items: { sku_id: number; price: string; min_qty: number | null; currency: string | null }[]
+    }>({
+      url: `/admin/production/customers/${customerId}/skus/pricing`,
+      method: 'PUT',
+      data: { items },
+    })
+  },
   listCustomerContacts(customerId: number, params?: any) {
     return http.request<ListResp<CustomerContactOut>>({ url: `/admin/production/customers/${customerId}/contacts`, method: 'GET', params })
   },

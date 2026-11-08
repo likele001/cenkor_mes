@@ -18,6 +18,11 @@ from app.crud.customer_product import (
     set_customer_product_pricing,
     set_customer_products,
 )
+from app.crud.customer_sku_price import (
+    get_customer_sku_price_map,
+    list_customer_skus,
+    set_customer_sku_prices,
+)
 from app.crud.print_template import (
     get_print_template_by_code,
     get_print_template_by_id,
@@ -30,10 +35,12 @@ from app.schemas.customer import (
     CustomerCreateIn,
     CustomerProductsPricingSetIn,
     CustomerProductsSetIn,
+    CustomerSkuPricesSetIn,
     CustomerUpdateIn,
 )
 from app.services.code_generator import BizType, resolve_code
 from app.services.customer_account import ensure_customer_login_user
+from app.services.customer_pricing import resolve_price_rule
 from app.storage import get_active_storage
 
 router = APIRouter(
@@ -176,6 +183,86 @@ def set_customer_products_pricing_api(
             "price": str(r.price or 0),
             "min_qty": int(r.min_qty or 1),
             "currency": str(r.currency or "CNY"),
+        }
+        for r in rows
+    ]
+    db.commit()
+    return ok({"customer_id": c.id, "items": items})
+
+
+@router.get("/{customer_id}/skus/pricing", dependencies=[Depends(require_permissions(["customer.view"]))])
+def list_customer_skus_pricing_api(
+    customer_id: int,
+    product_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions)):
+    """列出客户白名单产品下全部型号的生效价目。
+
+    同时返回型号级原始配置与合并后的生效值，供管理端表格回显：
+    型号级留空的字段在 `sku_*` 里是 null，在 `effective_*` 里是继承来的产品级值。
+    """
+    c = _need_customer(db, customer_id)
+    product_map = get_customer_product_map(db, customer_id=c.id)
+    sku_price_map = get_customer_sku_price_map(db, customer_id=c.id)
+    products = {p.id: p for p in list_customer_products_with_detail(db, customer_id=c.id)}
+
+    items: list[dict] = []
+    for sku in list_customer_skus(db, customer_id=c.id, product_id=product_id):
+        product_cfg = product_map.get(sku.product_id)
+        sku_cfg = sku_price_map.get(sku.id)
+        rule = resolve_price_rule(product_cfg, sku_cfg)
+        product = products.get(sku.product_id)
+        items.append({
+            "sku_id": sku.id,
+            "sku_code": sku.code,
+            "sku_name": sku.name,
+            "product_id": sku.product_id,
+            "product_name": product.name if product else "",
+            "product_price": str(product_cfg.price or 0) if product_cfg else "0",
+            "product_min_qty": int(product_cfg.min_qty or 1) if product_cfg else 1,
+            "product_currency": str(product_cfg.currency or "CNY") if product_cfg else "CNY",
+            "sku_price": str(sku_cfg.price) if sku_cfg is not None else None,
+            "sku_min_qty": (
+                int(sku_cfg.min_qty) if sku_cfg is not None and sku_cfg.min_qty is not None else None
+            ),
+            "sku_currency": sku_cfg.currency if sku_cfg is not None else None,
+            "effective_unit_price": str(rule.unit_price) if rule else "0",
+            "effective_min_qty": rule.min_qty if rule else 1,
+            "effective_currency": rule.currency if rule else "CNY",
+            "source": rule.source if rule else "none",
+            "priced": rule is not None,
+        })
+    return ok({"customer_id": c.id, "items": items})
+
+
+@router.put("/{customer_id}/skus/pricing", dependencies=[Depends(require_permissions(["customer.manage"]))])
+def set_customer_skus_pricing_api(
+    customer_id: int,
+    payload: CustomerSkuPricesSetIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+    permission_codes: list[str] = Depends(get_current_permissions)):
+    """批量维护客户型号级价目（含显式 commit）。
+
+    `price` 传 0 表示删除该型号覆盖、回落产品级；`min_qty` / `currency` 传 null 表示继承产品级。
+    """
+    c = _need_customer(db, customer_id)
+    try:
+        rows = set_customer_sku_prices(
+            db,
+            customer_id=c.id,
+            items=[item.model_dump() for item in payload.items],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # commit 前先取纯值：expire_on_commit 之后再读 ORM 属性会触发额外查询
+    items = [
+        {
+            "sku_id": r.sku_id,
+            "price": str(r.price or 0),
+            "min_qty": int(r.min_qty) if r.min_qty is not None else None,
+            "currency": r.currency,
         }
         for r in rows
     ]

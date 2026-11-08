@@ -6,6 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+# 币种必须与 app.crud.customer_product.SUPPORTED_CURRENCIES、前端下拉三处一致，
+# 漏一个就会出现「下拉能选、保存 422」的隐蔽故障。
+CurrencyCode = Literal["CNY", "USD", "EUR", "KRW", "JPY", "HKD", "GBP"]
+
 
 class CustomerCreateIn(BaseModel):
     code: str | None = Field(default=None, max_length=64)
@@ -45,11 +49,28 @@ class CustomerProductPricingIn(BaseModel):
     product_id: int = Field(ge=1)
     price: Decimal = Field(ge=0, le=Decimal("99999999.9999"))
     min_qty: int = Field(default=1, ge=1, le=1_000_000)
-    currency: Literal["CNY", "USD", "EUR", "KRW", "JPY"] = "CNY"
+    currency: CurrencyCode = "CNY"
 
 
 class CustomerProductsPricingSetIn(BaseModel):
     items: list[CustomerProductPricingIn] = Field(default_factory=list)
+
+
+class CustomerSkuPricingIn(BaseModel):
+    """客户型号级价目的一行。
+
+    `price` 传 0 表示删除该型号的覆盖、回落到产品级价目；
+    `min_qty` / `currency` 传 null 表示继承产品级（不是取默认值）。
+    """
+
+    sku_id: int = Field(ge=1)
+    price: Decimal = Field(ge=0, le=Decimal("99999999.9999"))
+    min_qty: int | None = Field(default=None, ge=1, le=1_000_000)
+    currency: CurrencyCode | None = None
+
+
+class CustomerSkuPricesSetIn(BaseModel):
+    items: list[CustomerSkuPricingIn] = Field(default_factory=list)
 
 
 class CustomerOut(BaseModel):
