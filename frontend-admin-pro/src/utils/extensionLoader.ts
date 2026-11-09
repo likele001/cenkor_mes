@@ -55,10 +55,19 @@ declare global {
   }
 }
 
+interface LocaleEntry {
+  /** i18n 消息里的最小文本路径，如 ['menu', 'aiProcessDraft'] */
+  path: string[]
+  /** 注入前宿主是否已有该路径（否则卸载时删除） */
+  existed: boolean
+  /** 注入前宿主的原值，卸载时据此还原 */
+  prev: unknown
+}
+
 interface KeyState {
   routes: Array<{ name: string; path: string }>
   menus: Array<ExtensionMenu & { key: string }>
-  locales: Array<{ locale: string; namespaces: string[] }>
+  locales: Array<{ locale: string; entries: LocaleEntry[] }>
 }
 
 /** 已注册扩展的菜单项（响应式，AppMenu 消费） */
@@ -80,22 +89,92 @@ let bridgeInstalled = false
 let loadedOnce = false
 let loadingPromise: Promise<ExtensionLoadResult> | null = null
 
+/** 收集 i18n 消息对象里的最小文本路径（数组视为叶子） */
+function collectLeafPaths(
+  obj: Record<string, unknown>,
+  prefix: string[] = [],
+): string[][] {
+  const out: string[][] = []
+  for (const [key, val] of Object.entries(obj)) {
+    const path = [...prefix, key]
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+      out.push(...collectLeafPaths(val as Record<string, unknown>, path))
+    } else {
+      out.push(path)
+    }
+  }
+  return out
+}
+
+function getAt(obj: Record<string, unknown>, path: string[]): unknown {
+  let cur: unknown = obj
+  for (const key of path) {
+    if (cur === null || typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[key]
+  }
+  return cur
+}
+
+function setAt(obj: Record<string, unknown>, path: string[], value: unknown) {
+  let cur = obj
+  for (const key of path.slice(0, -1)) {
+    const next = cur[key]
+    if (next === null || typeof next !== 'object') cur[key] = {}
+    cur = cur[key] as Record<string, unknown>
+  }
+  cur[path[path.length - 1]] = value
+}
+
+function deleteAt(obj: Record<string, unknown>, path: string[]) {
+  let cur = obj
+  for (const key of path.slice(0, -1)) {
+    const next = cur[key]
+    if (next === null || typeof next !== 'object') return
+    cur = cur[key] as Record<string, unknown>
+  }
+  delete cur[path[path.length - 1]]
+}
+
+function cloneValue<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => cloneValue(v)) as unknown as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = cloneValue(val)
+    }
+    return out as T
+  }
+  return value
+}
+
 function mergeLocales(reg: ExtensionRegistration): KeyState['locales'] {
   const merge = i18n.global.mergeLocaleMessage as unknown as (
     locale: string,
     message: Record<string, unknown>,
   ) => void
+  const getLocaleMessage = i18n.global.getLocaleMessage as unknown as (
+    locale: string,
+  ) => Record<string, unknown>
   const tracked: KeyState['locales'] = []
   for (const [loc, msgs] of Object.entries(reg.locales ?? {})) {
     if (!msgs || typeof msgs !== 'object') continue
     const locale = LOCALE_ALIAS[loc] ?? loc
+    const current = getLocaleMessage(locale)
+    const entries: LocaleEntry[] = collectLeafPaths(msgs).map((path) => {
+      const prev = getAt(current, path)
+      return { path, existed: prev !== undefined, prev: cloneValue(prev) }
+    })
     merge(locale, msgs)
-    tracked.push({ locale, namespaces: Object.keys(msgs) })
+    tracked.push({ locale, entries })
   }
   return tracked
 }
 
-/** 清掉某扩展注入的顶层 locale 命名空间（不能整包重置，避免清掉宿主文案） */
+/**
+ * 只回收该扩展注入的文本键，宿主已有的其他键（如 menu.home 等）保持不动。
+ * 不能按顶层命名空间整块删除——插件常把菜单文案塞进宿主共用的 menu 命名空间，
+ * 整块删除会把宿主菜单文案一并清掉，导致菜单退化成裸 i18n key。
+ */
 function dropLocales(state: KeyState) {
   const getLocaleMessage = i18n.global.getLocaleMessage as unknown as (
     locale: string,
@@ -104,9 +183,18 @@ function dropLocales(state: KeyState) {
     locale: string,
     message: Record<string, unknown>,
   ) => void
-  for (const { locale, namespaces } of state.locales) {
-    const messages = { ...getLocaleMessage(locale) }
-    for (const ns of namespaces) delete messages[ns]
+  for (const { locale, entries } of state.locales) {
+    const current = getLocaleMessage(locale)
+    const messages = { ...current }
+    // 只深拷贝会被修改的顶层命名空间，避免改动 vue-i18n 内部共享对象
+    for (const ns of new Set(entries.map((e) => e.path[0]))) {
+      const val = current[ns]
+      if (val !== null && typeof val === 'object') messages[ns] = cloneValue(val)
+    }
+    for (const { path, existed, prev } of entries) {
+      if (existed) setAt(messages, path, prev)
+      else deleteAt(messages, path)
+    }
     setLocaleMessage(locale, messages)
   }
 }
