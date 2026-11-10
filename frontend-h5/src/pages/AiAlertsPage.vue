@@ -7,8 +7,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
-  batchHandleAlerts, getAnomalyOptions, getAnomalySummary, handleAlert, interpretAlert,
-  listAiAlerts, runAiAlerts, type AlertItem, type AnomalyOptionItem, type AnomalySummary,
+  batchHandleAlerts, getAlertDetail, getAnomalyOptions, getAnomalySummary,
+  handleAlert, interpretAlert, listAiAlerts, runAiAlerts,
+  type AlertItem, type AnomalyOptionItem, type AnomalySummary,
 } from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 import { useAuthStore } from '@/stores/auth'
@@ -27,14 +28,34 @@ const dim = ref('')
 const severity = ref('')
 const status = ref('all')
 const interpreting = ref(0)
+const pageLimit = ref(100)
 const batchMode = ref(false)
 const batching = ref(false)
 const selected = ref<number[]>([])
 
+// 详情弹层：列表项只带摘要字段，完整 facts / AI 解读 / 时间戳走 /alerts/{id}
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detail = ref<AlertItem | null>(null)
+const insight = ref('')
+const insightCached = ref(false)
+const interpretingDetail = ref(false)
+const handlingDetail = ref(false)
+
 const canManage = computed(() => auth.hasPermission('ext.ai_anomaly.manage'))
+const hasMore = computed(() => items.value.length >= pageLimit.value && pageLimit.value < 500)
+const factRows = computed(() => {
+  const f = detail.value?.facts
+  if (!f || typeof f !== 'object') return []
+  return Object.entries(f).map(([k, v]) => ({ k, v: String(v ?? '-') }))
+})
 
 const SEV_TYPE: Record<string, 'danger' | 'warning' | 'primary'> = { critical: 'danger', high: 'danger', warning: 'warning', mid: 'warning', info: 'primary', low: 'primary' }
 
+// 后端 _alert_out 输出 severity，早期前端类型写成 level；这里兼容两种，修掉严重度永远显示"信息"的问题
+function sevOf(a: AlertItem) {
+  return a.severity || a.level || ''
+}
 function sevText(s?: string) {
   const k = (s || '').toLowerCase()
   if (k === 'critical' || k === 'high') return t('ai.sevCritical')
@@ -45,6 +66,13 @@ function sevType(s?: string) {
   return SEV_TYPE[(s || '').toLowerCase()] || 'primary'
 }
 
+function statusLabel(st: string) {
+  if (st === 'acked') return t('ai.statusAckedLabel')
+  if (st === 'resolved') return t('ai.statusResolvedLabel')
+  if (st === 'ignored') return t('ai.statusIgnoredLabel')
+  return t('ai.statusOpen')
+}
+
 async function load() {
   loading.value = true
   try {
@@ -53,6 +81,7 @@ async function load() {
         dim: dim.value || undefined,
         severity: severity.value || undefined,
         status: status.value || undefined,
+        limit: pageLimit.value,
       }),
       getAnomalySummary().catch(() => null),
       getAnomalyOptions().catch(() => null),
@@ -74,17 +103,49 @@ async function load() {
   }
 }
 
+function resetLimit() {
+  pageLimit.value = 100
+}
+function loadMore() {
+  if (!hasMore.value) return
+  pageLimit.value = Math.min(500, pageLimit.value + 100)
+  void load()
+}
 function selectDim(key: string) {
   dim.value = key
+  resetLimit()
   void load()
 }
 function selectSeverity(key: string) {
   severity.value = key
+  resetLimit()
   void load()
 }
 function selectStatus(key: string) {
   status.value = key
+  resetLimit()
   void load()
+}
+
+function exportAlertsCsv() {
+  try {
+    const esc = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
+    const head = [t('ai.detailBasic'), t('ai.detailPhenomenon'), t('ai.dimension'), t('ai.filterSeverity'), t('ai.statusLabel'), t('ai.detailTimes')]
+    const rows = items.value.map((a) => [
+      a.title, a.detail || '', a.dim_label || '', sevText(sevOf(a)),
+      a.status_label || a.status || '', a.last_seen_at || '',
+    ].map(esc).join(','))
+    const csv = '\uFEFF' + [head.map(esc).join(','), ...rows].join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `alerts-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(t('ai.exportDone'))
+  } catch {
+    showToast(t('ai.exportFailed'))
+  }
 }
 
 async function scan() {
@@ -103,12 +164,58 @@ async function scan() {
 }
 
 async function openAlert(a: AlertItem) {
-  const lines = [
-    a.detail,
-    a.root_cause ? t('ai.rootCause', { v: a.root_cause }) : '',
-    a.suggestion ? t('ai.suggestion', { v: a.suggestion }) : '',
-  ].filter(Boolean).join('\n\n')
-  await showDialog({ title: a.title, message: lines || t('ai.detailEmpty'), confirmButtonText: t('ai.ok') })
+  detail.value = a
+  insight.value = ''
+  insightCached.value = false
+  detailOpen.value = true
+  detailLoading.value = true
+  try {
+    const r = await getAlertDetail(a.id)
+    if (r.found && r.alert) {
+      detail.value = r.alert
+      insight.value = r.alert.ai_insight || ''
+      insightCached.value = !!r.alert.ai_insight
+    }
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAlerts'))) {
+      showToast(e instanceof Error ? e.message : t('ai.detailLoadFailed'))
+    }
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+async function refreshInsight() {
+  if (!detail.value || interpretingDetail.value) return
+  interpretingDetail.value = true
+  try {
+    const r = await interpretAlert(detail.value.id, true)
+    insight.value = r.insight || r.hint || t('ai.noInterpret')
+    insightCached.value = !!r.cached
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAlerts'))) {
+      showToast(e instanceof Error ? e.message : t('ai.interpretFailed'))
+    }
+  } finally {
+    interpretingDetail.value = false
+  }
+}
+
+async function changeStatus(st: string) {
+  if (!detail.value || handlingDetail.value) return
+  handlingDetail.value = true
+  try {
+    await handleAlert(detail.value.id, st)
+    detail.value = { ...detail.value, status: st, status_label: statusLabel(st) }
+    showToast(t('ai.detailStatusChanged'))
+    await load()
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAlerts'))) {
+      showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+    }
+  } finally {
+    handlingDetail.value = false
+  }
 }
 
 async function interpret(a: AlertItem) {
@@ -148,16 +255,13 @@ function toggleSelect(id: number) {
   if (i >= 0) selected.value.splice(i, 1)
   else selected.value.push(id)
 }
-
 function toggleAll() {
   const ids = items.value.map((a) => a.id)
   selected.value = selected.value.length === ids.length ? [] : ids.slice(0, 50)
 }
-
 function clearSelection() {
   selected.value = []
 }
-
 function closeBatch() {
   batchMode.value = false
   selected.value = []
@@ -168,12 +272,10 @@ async function doBatch(st: string) {
     showToast(t('ai.batchEmpty'))
     return
   }
-  const label = st === 'acked' ? t('ai.statusAckedLabel')
-    : st === 'resolved' ? t('ai.statusResolvedLabel') : t('ai.statusIgnoredLabel')
   try {
     await showConfirmDialog({
       title: t('ai.batchMode'),
-      message: t('ai.batchConfirm', { n: selected.value.length, v: label }),
+      message: t('ai.batchConfirm', { n: selected.value.length, v: statusLabel(st) }),
       confirmButtonText: t('ai.ok'),
     })
   } catch {
@@ -245,30 +347,22 @@ onMounted(async () => {
         <div class="mb-1 text-[11px] text-zinc-400">{{ t('ai.filterSeverity') }}</div>
         <div class="flex gap-2 overflow-x-auto pb-1">
           <van-tag :plain="severity !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectSeverity('')">{{ t('ai.sevAll') }}</van-tag>
-          <van-tag
-            v-for="s in severities"
-            :key="s.key"
-            :plain="severity !== s.key"
-            :type="sevType(s.key)"
-            size="large"
-            class="shrink-0 cursor-pointer"
-            @click="selectSeverity(s.key)"
-          >{{ sevText(s.key) }}</van-tag>
+          <van-tag v-for="s in severities" :key="s.key" :plain="severity !== s.key" :type="sevType(s.key)" size="large" class="shrink-0 cursor-pointer" @click="selectSeverity(s.key)">{{ sevText(s.key) }}</van-tag>
         </div>
       </div>
       <div v-if="dimensions.length">
         <div class="mb-1 text-[11px] text-zinc-400">{{ t('ai.dimension') }}</div>
         <div class="flex gap-2 overflow-x-auto pb-1">
           <van-tag :plain="dim !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectDim('')">{{ t('ai.all') }}</van-tag>
-          <van-tag
-            v-for="d in dimensions"
-            :key="d.key"
-            :plain="dim !== d.key"
-            type="primary"
-            size="large"
-            class="shrink-0 cursor-pointer"
-            @click="selectDim(d.key)"
-          >{{ d.label }}</van-tag>
+          <van-tag v-for="d in dimensions" :key="d.key" :plain="dim !== d.key" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectDim(d.key)">{{ d.label }}</van-tag>
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2">
+        <span class="text-[11px] text-zinc-400">{{ t('ai.alertCount', { n: items.length, m: pageLimit }) }}</span>
+        <div class="flex gap-1">
+          <van-button size="mini" plain :disabled="!items.length" @click="exportAlertsCsv">{{ t('ai.exportCsv') }}</van-button>
+          <van-button v-if="hasMore" size="mini" plain type="primary" @click="loadMore">{{ t('ai.loadMore') }}</van-button>
+          <van-tag v-else-if="pageLimit >= 500 && items.length >= 500" plain type="warning">{{ t('ai.limitReached') }}</van-tag>
         </div>
       </div>
     </div>
@@ -290,7 +384,7 @@ onMounted(async () => {
           </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <van-tag :type="sevType(a.level)" plain>{{ sevText(a.level) }}</van-tag>
+              <van-tag :type="sevType(sevOf(a))" plain>{{ sevText(sevOf(a)) }}</van-tag>
               <span class="truncate text-sm font-medium text-zinc-800">{{ a.title }}</span>
             </div>
             <div v-if="a.detail" class="mt-1 line-clamp-2 text-xs text-zinc-500">{{ a.detail }}</div>
@@ -303,6 +397,7 @@ onMounted(async () => {
         </div>
         <div v-if="a.status !== 'resolved'" class="mt-2 flex justify-end gap-2">
           <van-button size="mini" plain :loading="interpreting === a.id" @click.stop="interpret(a)">{{ t('ai.aiInterpret') }}</van-button>
+          <van-button size="mini" plain @click.stop="openAlert(a)">{{ t('ai.detailTitle') }}</van-button>
           <van-button v-if="canManage" size="mini" plain @click.stop="resolveAlert(a)">{{ t('ai.resolve') }}</van-button>
         </div>
       </div>
@@ -312,11 +407,79 @@ onMounted(async () => {
       <van-button size="mini" plain @click="toggleAll">{{ t('ai.batchSelectAll') }}</van-button>
       <van-button size="mini" plain @click="clearSelection">{{ t('ai.batchClear') }}</van-button>
       <span class="text-xs text-zinc-600">{{ t('ai.batchSelected', { n: selected.length }) }}</span>
-      <div class="ml-auto flex gap-1">
+      <div class="ml-auto flex flex-wrap gap-1">
         <van-button size="mini" plain type="primary" :loading="batching" @click="doBatch('acked')">{{ t('ai.batchAck') }}</van-button>
         <van-button size="mini" plain type="success" :loading="batching" @click="doBatch('resolved')">{{ t('ai.batchResolve') }}</van-button>
         <van-button size="mini" plain :loading="batching" @click="doBatch('ignored')">{{ t('ai.batchIgnore') }}</van-button>
+        <van-button size="mini" plain :loading="batching" @click="doBatch('open')">{{ t('ai.batchReopen') }}</van-button>
       </div>
     </div>
+
+    <van-popup v-model:show="detailOpen" position="bottom" round class="pb-safe" :style="{ height: '80%' }">
+      <div class="flex h-full flex-col">
+        <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+          <div class="text-sm font-medium text-zinc-800">{{ t('ai.detailTitle') }}</div>
+          <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.close') }}</van-button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-4 py-3">
+          <div v-if="detailLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+          <template v-else-if="detail">
+            <div class="flex flex-wrap items-center gap-2">
+              <van-tag :type="sevType(sevOf(detail))" plain>{{ sevText(sevOf(detail)) }}</van-tag>
+              <van-tag plain type="primary">{{ detail.dim_label || detail.dim || '-' }}</van-tag>
+              <van-tag plain type="default">{{ detail.status_label || detail.status || t('ai.pending') }}</van-tag>
+            </div>
+            <div class="mt-2 text-base font-medium text-zinc-800">{{ detail.title }}</div>
+            <div class="mt-1 text-[11px] text-zinc-400">
+              {{ detail.code || '-' }} · {{ t('ai.statusLabel') }} {{ detail.score ?? '-' }}
+              <span v-if="detail.entity_name"> · {{ detail.entity_name }}</span>
+            </div>
+            <div class="mt-3 space-y-2">
+              <div v-if="detail.detail" class="rounded-lg bg-zinc-50 p-3">
+                <div class="text-xs font-medium text-zinc-600">{{ t('ai.detailPhenomenon') }}</div>
+                <div class="mt-1 whitespace-pre-wrap text-xs text-zinc-600">{{ detail.detail }}</div>
+              </div>
+              <div v-if="detail.root_cause" class="rounded-lg bg-zinc-50 p-3">
+                <div class="text-xs font-medium text-zinc-600">{{ t('ai.detailRootCause') }}</div>
+                <div class="mt-1 whitespace-pre-wrap text-xs text-zinc-600">{{ detail.root_cause }}</div>
+              </div>
+              <div v-if="detail.suggestion" class="rounded-lg bg-zinc-50 p-3">
+                <div class="text-xs font-medium text-zinc-600">{{ t('ai.detailSuggestion') }}</div>
+                <div class="mt-1 whitespace-pre-wrap text-xs text-zinc-600">{{ detail.suggestion }}</div>
+              </div>
+              <div v-if="factRows.length" class="rounded-lg bg-zinc-50 p-3">
+                <div class="text-xs font-medium text-zinc-600">{{ t('ai.detailFacts') }}</div>
+                <div v-for="f in factRows" :key="f.k" class="mt-1 text-xs text-zinc-600">{{ f.k }}：{{ f.v }}</div>
+              </div>
+              <div class="text-[11px] text-zinc-400">
+                {{ t('ai.detailTimes') }}：{{ detail.first_seen_at || '-' }} / {{ detail.last_seen_at || '-' }}
+              </div>
+            </div>
+            <div class="mt-4 border-t border-zinc-100 pt-3">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-medium text-zinc-700">{{ t('ai.detailAiInsight') }}</div>
+                <van-button size="mini" plain type="primary" :loading="interpretingDetail" @click="refreshInsight">
+                  {{ insight ? t('ai.detailRefresh') : t('ai.detailGenerate') }}
+                </van-button>
+              </div>
+              <div v-if="insightCached" class="mt-1 text-[10px] text-zinc-400">
+                {{ t('ai.detailInsightCached') }}<span v-if="detail.ai_insight_at"> · {{ detail.ai_insight_at }}</span>
+              </div>
+              <div v-if="insight" class="mt-2 whitespace-pre-wrap rounded-lg bg-indigo-50 p-3 text-xs leading-relaxed text-indigo-900">{{ insight }}</div>
+              <div v-else class="mt-2 text-xs text-zinc-400">{{ t('ai.noInterpret') }}</div>
+            </div>
+            <div v-if="canManage" class="mt-4 border-t border-zinc-100 pt-3">
+              <div class="mb-2 text-xs font-medium text-zinc-700">{{ t('ai.detailStatus') }}</div>
+              <div class="flex flex-wrap gap-2">
+                <van-button size="small" plain type="primary" :loading="handlingDetail" @click="changeStatus('acked')">{{ t('ai.detailAck') }}</van-button>
+                <van-button size="small" plain type="success" :loading="handlingDetail" @click="changeStatus('resolved')">{{ t('ai.detailResolve') }}</van-button>
+                <van-button size="small" plain :loading="handlingDetail" @click="changeStatus('ignored')">{{ t('ai.detailIgnore') }}</van-button>
+                <van-button v-if="detail.status !== 'open'" size="small" plain :loading="handlingDetail" @click="changeStatus('open')">{{ t('ai.detailReopen') }}</van-button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </van-popup>
   </div>
 </template>

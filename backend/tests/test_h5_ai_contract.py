@@ -269,3 +269,56 @@ def test_batch_handle_dedups_and_reports_missing(monkeypatch):
     assert "handled_at=NOW()" in first_sql
     assert db.execute.call_args_list[0][0][1] == {"s": "resolved", "i": 1}
     db.commit.assert_called_once()
+
+
+# ── 第五批：预警详情闭环 / 列表完整性 / 助手失败重试 ────────────────────────
+
+def test_h5_ai_contract_covers_batch5_capabilities():
+    """第五批防回退：类型字段、limit、详情弹层与失败重试入口都必须在。"""
+    src = AI_TS.read_text(encoding="utf-8")
+    assert "limit?: number" in src
+    assert "severity?: string" in src
+    assert "ai_insight?: string | null" in src
+    alerts = (REPO / "frontend-h5/src/pages/AiAlertsPage.vue").read_text(encoding="utf-8")
+    for marker in ("getAlertDetail(", "refreshInsight", "loadMore", "exportAlertsCsv",
+                   "doBatch('open')", "changeStatus(", "sevOf("):
+        assert marker in alerts, f"预警页缺少第五批能力: {marker}"
+    assist = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    for marker in ("retryFailed(", "autoNameIfNew(", "autoTitle("):
+        assert marker in assist, f"助手页缺少第五批能力: {marker}"
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_alert_detail_exposes_full_fields(monkeypatch):
+    """详情弹层依赖的完整字段必须真的由后端返回，且严重度字段是 severity。"""
+    mod = _anomaly()
+    db = MagicMock()
+    row = {
+        "id": 7, "dim": "quality", "code": "Q1", "severity": "critical", "score": 9.5,
+        "title": "缺陷率异常", "entity_type": "wo", "entity_id": 3, "entity_name": "WO-1",
+        "detail": "缺陷率上升", "root_cause": "设备偏移", "suggestion": "停机点检",
+        "facts_json": '{"defect_rate": 0.12}', "status": "open",
+        "ai_insight": "已缓存解读", "ai_insight_at": "2026-11-10 10:00",
+        "first_seen_at": "2026-11-09 08:00", "last_seen_at": "2026-11-10 09:00",
+    }
+    monkeypatch.setattr(mod, "_rows", lambda *a, **k: [row])
+    out = mod.alert_detail(7, db=db)["data"]
+    assert out["found"] is True
+    a = out["alert"]
+    assert a["severity"] == "critical" and "level" not in a
+    assert a["facts"] == {"defect_rate": 0.12}
+    assert a["ai_insight"] == "已缓存解读"
+    assert a["first_seen_at"] and a["last_seen_at"]
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_batch_handle_reopen_clears_handled_at(monkeypatch):
+    """批量恢复待处理（status=open）必须清掉 handled_at，否则状态与时间自相矛盾。"""
+    mod = _anomaly()
+    db = MagicMock()
+    monkeypatch.setattr(mod, "_rows", lambda *a, **k: [{"id": 4}])
+    out = mod.batch_handle(mod.BatchHandleIn(ids=[4], status="open"), db=db)["data"]
+    assert out["ok"] is True and out["status"] == "open"
+    sql = str(db.execute.call_args_list[0][0][0])
+    assert "handled_at=NULL" in sql
+    assert db.execute.call_args_list[0][0][1] == {"s": "open", "i": 4}

@@ -30,7 +30,17 @@ export type AlertItem = {
   status?: string
   status_label?: string
   dim_label?: string
+  dim?: string
+  code?: string
+  severity?: string
+  score?: number
+  entity_type?: string
+  entity_id?: number | string | null
   entity_name?: string
+  facts?: { [key: string]: string | number | null } | null
+  ai_insight?: string | null
+  ai_insight_at?: string | null
+  first_seen_at?: string
   last_seen_at?: string
 }
 
@@ -159,7 +169,7 @@ export function analyzeInsight(axis: string, days = 30) {
 
 // ── 异常预警 ───────────────────────────────────────────────────────────────
 
-export function listAiAlerts(params: { dim?: string; severity?: string; status?: string } = {}) {
+export function listAiAlerts(params: { dim?: string; severity?: string; status?: string; limit?: number } = {}) {
   return apiGet<{
     items?: AlertItem[]
     total_active?: number

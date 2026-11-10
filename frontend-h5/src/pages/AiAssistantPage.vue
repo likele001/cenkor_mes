@@ -19,7 +19,7 @@ const quickQuestions = computed(() => [t('ai.q1'), t('ai.q2'), t('ai.q3'), t('ai
 const input = ref('')
 const sending = ref(false)
 const locked = ref(false)
-const messages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+const messages = ref<Array<{ role: 'user' | 'assistant'; content: string; failed?: boolean }>>([])
 const listEl = ref<HTMLElement | null>(null)
 
 const convId = ref<number | null>(null)
@@ -145,10 +145,38 @@ async function removeConversation(id: number) {
   }
 }
 
+// 后端默认用消息前 30 字做标题，多行/长文本会很难看；新建会话时用首句生成干净标题
+function autoTitle(msg: string) {
+  const flat = msg.replace(/\s+/g, ' ').trim()
+  const first = flat.split(/[。！？!?.;；]/)[0].trim()
+  const base = first || flat
+  return base.length > 24 ? base.slice(0, 24) + '…' : base
+}
+
+async function autoNameIfNew(wasNew: boolean, msg: string) {
+  if (!wasNew || !convId.value) return
+  const title = autoTitle(msg)
+  if (!title) return
+  try {
+    await renameAssistantConversation(convId.value, title)
+    void loadConversations()
+  } catch {
+    // 自动命名失败不打断对话，用户仍可手动重命名
+  }
+}
+
+function retryFailed(index: number) {
+  const m = messages.value[index]
+  if (!m?.failed || sending.value) return
+  messages.value.splice(index, 1)
+  void send(m.content)
+}
+
 async function send(text?: string) {
   const msg = (text ?? input.value).trim()
   if (!msg || sending.value || locked.value) return
   input.value = ''
+  const wasNew = convId.value === null
   messages.value.push({ role: 'user', content: msg })
   sending.value = true
   void scrollBottom()
@@ -160,8 +188,11 @@ async function send(text?: string) {
       content: res.reply || res.hint || t('ai.unavailable'),
     })
     void loadConversations()
+    void autoNameIfNew(wasNew, msg)
   } catch (e: unknown) {
-    messages.value.pop()
+    // 发送失败时保留用户消息并标记，可一键重发，不再把输入悄悄丢掉
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'user') last.failed = true
     if (handleExtensionLocked(e, t('ai.nameAssistant'))) {
       locked.value = true
     } else if (isAccessDenied(e)) {
@@ -274,6 +305,9 @@ onMounted(() => { void loadConversations() })
           {{ m.content }}
           <div v-if="m.role === 'assistant'" class="mt-1 text-right">
             <van-button size="mini" plain @click.stop="copyText(m.content)">{{ t('ai.copy') }}</van-button>
+          </div>
+          <div v-if="m.failed" class="mt-1 text-right">
+            <van-button size="mini" plain type="danger" @click.stop="retryFailed(i)">{{ t('ai.retrySend') }}</van-button>
           </div>
         </div>
       </div>
