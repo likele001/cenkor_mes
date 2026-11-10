@@ -751,19 +751,19 @@ def test_knowledge_list_docs_applies_sort_and_vectorized_filter(monkeypatch):
     monkeypatch.setattr(mod, "_safe_rows", fake_rows)
     db, user = MagicMock(), MagicMock(id=3)
 
-    mod.list_docs(q=None, scope=None, sort="updated", vectorized=0,
+    mod.list_docs(q=None, scope=None, sort="updated", vectorized=0, source=None,
                   page=1, page_size=20, db=db, user=user)
     sql = captured["sql"]
     assert "ORDER BY d.updated_at DESC, d.id DESC" in sql
     assert "(d.vectorized = 0 OR d.vectorized IS NULL)" in sql
 
-    mod.list_docs(q=None, scope=None, sort=None, vectorized=1,
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=1, source=None,
                   page=1, page_size=20, db=db, user=user)
     sql = captured["sql"]
     assert "ORDER BY d.id DESC" in sql
     assert "AND d.vectorized = 1" in sql
 
-    mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=None, source=None,
                   page=1, page_size=20, db=db, user=user)
     sql = captured["sql"]
     where = sql.split(" WHERE ", 1)[1].split(" ORDER BY ", 1)[0]
@@ -813,4 +813,56 @@ def test_h5_ai_contract_covers_batch16_capabilities():
     for key in ("hubOverview", "hubMetricHealth", "hubMetricActive", "hubMetricRuns"):
         for loc in ("zh-CN", "en-US", "ko-KR"):
             pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+# ── 第十七批：同来源资料 / 全部会话导出 ────────────────────────────────────
+
+def test_knowledge_list_docs_filters_by_source(monkeypatch):
+    """按来源筛要落到 SQL（同一份制度拆多篇时才有用），不传时不能加条件。"""
+    mod = _knowledge()
+    monkeypatch.setattr(mod, "_is_manager", lambda user, db: False)
+    monkeypatch.setattr(mod, "_visibility", lambda db, user, manage: ("1=1", {}))
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+
+    captured = {}
+
+    def fake_rows(db, sql, **kw):
+        captured["sql"] = sql
+        captured["args"] = kw
+        return []
+
+    monkeypatch.setattr(mod, "_safe_rows", fake_rows)
+    db, user = MagicMock(), MagicMock(id=3)
+
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+                  source=" 安全管理制度 ", page=1, page_size=20, db=db, user=user)
+    assert "AND d.source LIKE :src" in captured["sql"]
+    assert captured["args"]["src"] == "%安全管理制度%"
+
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+                  source=None, page=1, page_size=20, db=db, user=user)
+    where = captured["sql"].split(" WHERE ", 1)[1].split(" ORDER BY ", 1)[0]
+    assert "source" not in where
+
+
+def test_h5_ai_contract_covers_batch17_capabilities():
+    """同来源筛选与全部会话导出都要真的接上。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    assert "source?: string" in ai
+
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    for marker in ("const activeSource = ref('')", "source: activeSource.value || undefined",
+                   "function filterBySource(", "function clearSource("):
+        assert marker in docs, f"资料页缺少同来源筛选: {marker}"
+
+    chat = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    for marker in ("import { downloadText } from '@/utils/download'",
+                   "const EXPORT_LIMIT = 30", "async function exportAllChats(",
+                   '@click="exportAllChats"'):
+        assert marker in chat, f"助手页缺少全部导出: {marker}"
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("docsSameSource", "exportAll", "exportAllPartial"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"

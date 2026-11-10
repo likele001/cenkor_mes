@@ -798,7 +798,7 @@ export type KnowledgeDocItem = {
 export function listKnowledgeDocs(
   params: {
     q?: string; scope?: string; page?: number; page_size?: number
-    sort?: string; vectorized?: number
+    sort?: string; vectorized?: number; source?: string
   } = {},
 ) {
   return apiGet<{ items?: KnowledgeDocItem[]; total?: number; page?: number; page_size?: number }>(

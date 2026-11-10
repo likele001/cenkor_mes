@@ -29,6 +29,7 @@ const scopes = ref<string[]>([])
 // 排序与向量化筛选都下沉到后端：本地重排会让分页错位（第 2 页接不上第 1 页的顺序）
 const sortMode = ref('new')
 const vecMode = ref('')
+const activeSource = ref('')
 
 const RECENT_KEY = 'cenkormes_h5_ai_docs_recent'
 type RecentDoc = { id: number; title: string; at: string }
@@ -110,6 +111,7 @@ async function load(reset = true) {
       scope: activeScope.value || undefined,
       sort: sortMode.value,
       vectorized: vecMode.value === '' ? undefined : Number(vecMode.value),
+      source: activeSource.value || undefined,
       page: page.value,
       page_size: 20,
     })
@@ -140,6 +142,21 @@ async function loadMore() {
 
 function pickScope(s: string) {
   activeScope.value = activeScope.value === s ? '' : s
+  void load()
+}
+
+// 从详情里「看同一来源」，比让用户自己截图记住文件名再回来搜靠谱
+function clearSource() {
+  if (!activeSource.value) return
+  activeSource.value = ''
+  void load()
+}
+
+function filterBySource() {
+  const src = (detail.value?.source || '').trim()
+  if (!src) return
+  activeSource.value = src
+  detailOpen.value = false
   void load()
 }
 
@@ -273,6 +290,11 @@ watch(() => [route.query.doc, route.query.q], () => {
         />
         <van-button size="small" type="primary" plain @click="load()">{{ t('ai.docsSearch') }}</van-button>
       </div>
+      <div v-if="activeSource" class="mt-2">
+        <van-tag plain type="primary" closeable @close="clearSource">
+          {{ t('ai.docsSourceChip', { v: activeSource }) }}
+        </van-tag>
+      </div>
       <div v-if="total" class="mt-2 text-[11px] text-zinc-400">{{ t('ai.docsTotal', { n: total }) }}</div>
       <div v-if="recent.length" class="mt-2 border-t border-zinc-100 pt-2">
         <div class="flex items-center justify-between">
@@ -372,6 +394,7 @@ watch(() => [route.query.doc, route.query.q], () => {
       <div class="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
         <div class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800">{{ detail?.title || t('ai.docsDetail') }}</div>
         <div class="flex shrink-0 gap-1">
+          <van-button size="mini" plain :disabled="!detail?.source" @click="filterBySource">{{ t('ai.docsSameSource') }}</van-button>
           <van-button size="mini" plain :disabled="!detail?.content" @click="copyDetail">{{ t('ai.copy') }}</van-button>
           <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.ok') }}</van-button>
         </div>

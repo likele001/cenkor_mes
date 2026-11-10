@@ -11,6 +11,7 @@ import {
   listAssistantConversations, renameAssistantConversation, type AssistantConversation,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
+import { downloadText } from '@/utils/download'
 import { handleExtensionLocked, isAccessDenied, showAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -236,6 +237,46 @@ async function copyText(text: string) {
   showToast(done ? t('ai.copied') : t('ai.copyFailed'))
 }
 
+// 全部会话导出：交接 / 存档时不用一个个开、一个个复制
+const EXPORT_LIMIT = 30
+const exportingAll = ref(false)
+
+async function exportAllChats() {
+  if (exportingAll.value) return
+  const list = conversations.value
+  if (!list.length) return showToast(t('ai.exportAllEmpty'))
+  exportingAll.value = true
+  try {
+    const parts: string[] = [
+      `# ${t('ai.exportAllTitle')}`,
+      '',
+      t('ai.exportedAt', { v: new Date().toLocaleString() }),
+    ]
+    // 串行拉取：一次并发几十个请求既容易打到网关限流，也没必要
+    for (const c of list.slice(0, EXPORT_LIMIT)) {
+      const r = await getAssistantConversation(c.id)
+      const items = (r.items || []).filter((m) => m.role === 'user' || m.role === 'assistant')
+      if (!items.length) continue
+      parts.push('', `## ${c.title || t('ai.convTitle', { n: c.id })}`, '')
+      for (const m of items) {
+        parts.push(`**${m.role === 'user' ? t('ai.roleUser') : t('ai.roleAssistant')}**`, '', m.content, '')
+      }
+    }
+    if (parts.length <= 3) return showToast(t('ai.exportAllEmpty'))
+    const okDone = downloadText(`ai-chats-${new Date().toISOString().slice(0, 10)}.md`, parts.join('\n'))
+    if (!okDone) return showToast(t('ai.exportFailed'))
+    showToast(
+      list.length > EXPORT_LIMIT
+        ? t('ai.exportAllPartial', { n: EXPORT_LIMIT })
+        : t('ai.exported'),
+    )
+  } catch {
+    showToast(t('ai.exportFailed'))
+  } finally {
+    exportingAll.value = false
+  }
+}
+
 function exportChat() {
   try {
     const lines = [
@@ -322,7 +363,10 @@ onMounted(() => { void loadConversations() })
       <div class="flex h-full flex-col">
       <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
         <div class="text-sm font-medium text-zinc-800">{{ t('ai.history') }}</div>
-        <van-button size="mini" plain @click="loadConversations">{{ t('ai.refresh') }}</van-button>
+        <div class="flex gap-1">
+          <van-button size="mini" plain :loading="exportingAll" @click="exportAllChats">{{ t('ai.exportAll') }}</van-button>
+          <van-button size="mini" plain @click="loadConversations">{{ t('ai.refresh') }}</van-button>
+        </div>
       </div>
       <div class="shrink-0 px-3 pt-2">
         <van-field
