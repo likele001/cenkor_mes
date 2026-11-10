@@ -988,3 +988,19 @@ def test_h5_ai_contract_covers_batch20_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("agentMode", "agentConfirmDo", "agentTraceShow", "agentActDone"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+def test_h5_ai_contract_covers_batch21_capabilities():
+    """未授权要给出可行动的权限码，而不是一句「无权限」。"""
+    hub = (REPO / "frontend-h5/src/pages/AiHubPage.vue").read_text(encoding="utf-8")
+    for marker in ("function permOf(", "async function explainDenied(",
+                   "await copyToClipboard(perm)", "void explainDenied(e)",
+                   "s?.permission"):
+        assert marker in hub, f"智能中心缺可行动门控: {marker}"
+    # 后端下发的 permission 才是真实校验用的那条，不能被前端常量覆盖
+    assert "e.perm || s?.permission || ''" in hub
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("hubDeniedTitle", "hubDeniedMsg", "hubDeniedCopy", "hubDeniedCopied"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

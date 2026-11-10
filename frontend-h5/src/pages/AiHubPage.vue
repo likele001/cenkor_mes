@@ -6,12 +6,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { showToast } from 'vant'
+import { showConfirmDialog, showToast } from 'vant'
 import { useAuthStore } from '@/stores/auth'
 import {
   employeeOverview, getAiExtensionStatus, getAnomalySummary,
   type AiExtensionStatus,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 
 type Entry = {
   path: string
@@ -168,6 +169,31 @@ function blockedState(e: Entry): BlockState {
   return localLocked(e) ? 'local' : ''
 }
 
+// 拿「到底缺哪条权限」：优先后端下发的 permission（与真实校验一致），退回落本地常量
+function permOf(e: Entry): string {
+  const s = e.ext ? statuses.value[e.ext] : undefined
+  return e.perm || s?.permission || ''
+}
+
+// 未授权不该只回一句「无权限」：把权限码摆出来并支持一键复制，员工才能一句话发给管理员
+async function explainDenied(e: Entry) {
+  const perm = permOf(e)
+  try {
+    await showConfirmDialog({
+      title: t('ai.hubDeniedTitle'),
+      message: perm ? t('ai.hubDeniedMsg', { v: perm }) : t('ai.hubLockedDenied'),
+      confirmButtonText: perm ? t('ai.hubDeniedCopy') : t('ai.ok'),
+      cancelButtonText: t('ai.ok'),
+    })
+  } catch {
+    // 点了取消：不复制，免得剪贴板被悄悄改写
+    return
+  }
+  if (!perm) return
+  const done = await copyToClipboard(perm)
+  showToast(done ? t('ai.hubDeniedCopied') : t('ai.copyFailed'))
+}
+
 function tagText(e: Entry): string {
   const s = blockedState(e)
   if (s === 'missing') return t('ai.hubStatusMissing')
@@ -185,7 +211,7 @@ function go(e: Entry) {
   const s = blockedState(e)
   if (s === 'missing') return showToast(t('ai.hubLockedMissing'))
   if (s === 'disabled') return showToast(t('ai.hubLockedDisabled'))
-  if (s === 'denied' || s === 'local') return showToast(t('ai.hubLockedDenied'))
+  if (s === 'denied' || s === 'local') return void explainDenied(e)
   pushRecent(e.path)
   void router.push(e.path)
 }
@@ -274,6 +300,10 @@ onMounted(async () => {
         <div :class="['text-2xl', e.color]">{{ e.icon }}</div>
         <div class="mt-2 text-sm font-medium text-zinc-800">{{ e.title }}</div>
         <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">{{ e.desc }}</div>
+        <div
+          v-if="blockedState(e) === 'denied' || blockedState(e) === 'local'"
+          class="mt-1 truncate text-[9px] text-zinc-400"
+        >{{ permOf(e) }}</div>
       </div>
     </div>
   </div>
