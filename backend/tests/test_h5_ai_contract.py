@@ -671,3 +671,28 @@ def test_h5_ai_contract_covers_batch12_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("recentDocs", "recentClear", "helpCopySnippet"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第十三批：AI 用量可见（模型 / token）────────────────────────────────────
+
+def test_h5_ai_contract_covers_batch13_capabilities():
+    """用量要真的从接口透到页面：类型丢字段会让 ts 报错，这里再兜一层防回退。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    assert "  tokens_in?: number | null" in ai
+    assert "tokens_in: r.tokens_in," in ai
+
+    chat = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    assert "tokens?: { i: number; o: number }" in chat
+    assert "t('ai.usageTokens', { i: m.tokens.i, o: m.tokens.o })" in chat
+
+    help_page = (REPO / "frontend-h5/src/pages/HelpPage.vue").read_text(encoding="utf-8")
+    assert "const usage = ref<{ i: number; o: number; m: string } | null>(null)" in help_page
+    assert "t('ai.usageModel', { m: usage.m })" in help_page
+
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    assert "const askUsage = ref<{ i: number; o: number } | null>(null)" in docs
+    assert "t('ai.usageTokens', { i: askUsage.i, o: askUsage.o })" in docs
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("usageTokens", "usageModel"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

@@ -27,6 +27,7 @@ const notice = ref('')
 const mode = ref('')
 const hits = ref<KnowledgeHit[]>([])
 const docCount = ref<number | null>(null)
+const usage = ref<{ i: number; o: number; m: string } | null>(null)
 
 const HISTORY_KEY = 'cenkormes_h5_ai_help_history'
 type HelpHistoryItem = { q: string; a: string; mode: string; at: string }
@@ -63,6 +64,7 @@ function replay(h: HelpHistoryItem) {
   question.value = h.q
   answer.value = h.a
   mode.value = h.mode || ''
+  usage.value = null
   hits.value = []
   notice.value = ''
   searched.value = true
@@ -148,6 +150,7 @@ async function ask() {
   hits.value = []
   notice.value = ''
   mode.value = ''
+  usage.value = null
   try {
     if (basicMode.value) {
       await fallback(q)
@@ -172,11 +175,23 @@ async function ask() {
     const list = res.hits || []
     hits.value = list
     mode.value = res.mode || ''
-    const askRes = res as unknown as { answer?: string; note?: string; ai_unavailable?: boolean; ai_hint?: string; ai_disabled?: boolean }
+    const askRes = res as unknown as {
+      answer?: string
+      note?: string
+      ai_unavailable?: boolean
+      ai_hint?: string
+      ai_disabled?: boolean
+      tokens_in?: number | null
+      tokens_out?: number | null
+      ai_model?: string
+    }
     if (useLlm.value) {
       answer.value = askRes.answer || askRes.note || t('ai.helpNoResult')
       if (askRes.ai_unavailable) notice.value = t('ai.helpDegraded')
       if (askRes.ai_hint) notice.value = t('ai.helpAiHint', { v: askRes.ai_hint })
+      if (askRes.tokens_in || askRes.tokens_out) {
+        usage.value = { i: askRes.tokens_in ?? 0, o: askRes.tokens_out ?? 0, m: askRes.ai_model || '' }
+      }
     } else {
       answer.value = renderSearchHits(list)
       if (list.length) notice.value = t('ai.helpAiDisabled')
@@ -224,6 +239,9 @@ async function ask() {
     <div v-if="searched && !loading && answer" class="rounded-xl bg-white p-4 shadow-sm">
       <div class="mb-2 text-sm font-medium text-zinc-700">{{ t('ai.helpAnswer') }}</div>
       <div class="whitespace-pre-wrap text-sm text-zinc-600">{{ answer }}</div>
+      <div v-if="usage" class="mt-2 text-[10px] text-zinc-400">
+        <span v-if="usage.m">{{ t('ai.usageModel', { m: usage.m }) }} · </span>{{ t('ai.usageTokens', { i: usage.i, o: usage.o }) }}
+      </div>
       <div v-if="hits.length" class="mt-3 border-t border-zinc-100 pt-3">
         <div class="mb-1 text-xs text-zinc-500">{{ t('ai.helpSources') }}</div>
         <div v-for="(h, i) in hits" :key="i" class="mb-2 rounded-lg bg-zinc-50 p-2">

@@ -72,6 +72,7 @@ const askAnswer = ref('')
 const askNote = ref('')
 const askHits = ref(0)
 const askFallback = ref(false)
+const askUsage = ref<{ i: number; o: number } | null>(null)
 
 function resetAsk() {
   askText.value = ''
@@ -80,6 +81,7 @@ function resetAsk() {
   askNote.value = ''
   askHits.value = 0
   askFallback.value = false
+  askUsage.value = null
 }
 
 // 业务域标签由后端按文档聚合下发（逗号分隔），这里只做展示用的去重收集
@@ -167,6 +169,7 @@ async function askDoc() {
   askNote.value = ''
   askHits.value = 0
   askFallback.value = false
+  askUsage.value = null
   try {
     const r = await knowledgeAsk(q, true, 5, doc.id)
     if (r.ok === false) {
@@ -176,6 +179,9 @@ async function askDoc() {
     askAnswer.value = r.answer || ''
     askHits.value = r.hits?.length || 0
     askFallback.value = !!r.ai_unavailable
+    askUsage.value = (r.tokens_in || r.tokens_out)
+      ? { i: r.tokens_in ?? 0, o: r.tokens_out ?? 0 }
+      : null
     askNote.value = r.ai_hint || r.note || ''
   } catch (e: unknown) {
     if (!handleExtensionLocked(e, t('ai.nameKnowledge'))) {
@@ -343,7 +349,10 @@ watch(() => [route.query.doc, route.query.q], () => {
             </div>
             <div v-if="askAnswer" class="mt-2 rounded-lg bg-white p-2">
               <div class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-700">{{ askAnswer }}</div>
-              <div class="mt-1 text-[10px] text-zinc-400">{{ t('ai.docsAskHits', { n: askHits }) }}</div>
+              <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-zinc-400">
+                <span>{{ t('ai.docsAskHits', { n: askHits }) }}</span>
+                <span v-if="askUsage">{{ t('ai.usageTokens', { i: askUsage.i, o: askUsage.o }) }}</span>
+              </div>
               <div v-if="askFallback" class="mt-1 text-[10px] text-amber-600">{{ t('ai.docsAskFallback') }}</div>
             </div>
             <div v-else-if="askNote" class="mt-2 text-[11px] leading-relaxed text-amber-600">{{ askNote }}</div>

@@ -17,6 +17,8 @@ export type AiChatOut = {
   degraded?: boolean
   error?: boolean
   hint?: string
+  tokens_in?: number | null
+  tokens_out?: number | null
 }
 
 export type AlertItem = {
@@ -122,7 +124,13 @@ export function aiChat(data: {
   model_code?: string
   kind?: string
 }) {
-  return apiPost<{ reply?: string | null; conversation_id: number; hint?: string }>(
+  return apiPost<{
+    reply?: string | null
+    conversation_id: number
+    hint?: string
+    tokens_in?: number | null
+    tokens_out?: number | null
+  }>(
     '/extensions/ai_assistant/chat',
     {
       message: data.message,
@@ -134,6 +142,8 @@ export function aiChat(data: {
   ).then<AiChatOut>((r) => ({
     conversation_id: r.conversation_id,
     reply: r.reply || r.hint || '暂无回复',
+    tokens_in: r.tokens_in,
+    tokens_out: r.tokens_out,
   }))
 }
 

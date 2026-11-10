@@ -493,5 +493,7 @@ export default {
     recentDocs: "최근 본 문서",
     recentClear: "지우기",
     helpCopySnippet: "조각 복사",
+    usageTokens: "입력 {i} / 출력 {o} tokens",
+    usageModel: "모델 {m}",
   },
 }

@@ -20,7 +20,12 @@ const quickQuestions = computed(() => [t('ai.q1'), t('ai.q2'), t('ai.q3'), t('ai
 const input = ref('')
 const sending = ref(false)
 const locked = ref(false)
-const messages = ref<Array<{ role: 'user' | 'assistant'; content: string; failed?: boolean }>>([])
+const messages = ref<Array<{
+  role: 'user' | 'assistant'
+  content: string
+  failed?: boolean
+  tokens?: { i: number; o: number }
+}>>([])
 const listEl = ref<HTMLElement | null>(null)
 
 const convId = ref<number | null>(null)
@@ -197,6 +202,10 @@ async function send(text?: string) {
     messages.value.push({
       role: 'assistant',
       content: res.reply || res.hint || t('ai.unavailable'),
+      // 成本可见：这次回答花了多少 token，降级/失败时不显示
+      tokens: (res.tokens_in || res.tokens_out)
+        ? { i: res.tokens_in ?? 0, o: res.tokens_out ?? 0 }
+        : undefined,
     })
     void loadConversations()
     void autoNameIfNew(wasNew, msg)
@@ -290,7 +299,10 @@ onMounted(() => { void loadConversations() })
           :class="m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-zinc-700'"
         >
           {{ m.content }}
-          <div v-if="m.role === 'assistant'" class="mt-1 text-right">
+          <div v-if="m.role === 'assistant'" class="mt-1 flex items-center justify-end gap-2">
+            <span v-if="m.tokens" class="text-[10px] text-zinc-400">
+              {{ t('ai.usageTokens', { i: m.tokens.i, o: m.tokens.o }) }}
+            </span>
             <van-button size="mini" plain @click.stop="copyText(m.content)">{{ t('ai.copy') }}</van-button>
           </div>
           <div v-if="m.failed" class="mt-1 text-right">

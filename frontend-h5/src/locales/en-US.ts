@@ -493,5 +493,7 @@ export default {
     recentDocs: "Recently viewed",
     recentClear: "Clear",
     helpCopySnippet: "Copy snippet",
+    usageTokens: "{i} in / {o} out tokens",
+    usageModel: "Model {m}",
   },
 }
