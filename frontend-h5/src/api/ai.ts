@@ -551,7 +551,7 @@ export type EmployeeLog = {
   created_at?: string
 }
 
-export function listEmployeeLogs(params: { tool?: string; limit?: number; offset?: number } = {}) {
+export function listEmployeeLogs(params: { tool?: string; status?: string; limit?: number; offset?: number } = {}) {
   return apiGet<{ items?: EmployeeLog[]; count?: number; total?: number }>(
     '/extensions/ai_employee/logs',
     { params },
@@ -716,4 +716,36 @@ export type BatchHandleOut = {
 /** 批量处置预警（最多 50 条），不存在的 id 通过 missing 回传 */
 export function batchHandleAlerts(ids: number[], status: string) {
   return apiPost<BatchHandleOut>('/extensions/ai_anomaly/alerts/batch-handle', { ids, status })
+}
+
+// ── 第六批：知识库个人留痕 / 洞察跑批删除 ──────────────────────────────────
+
+export type KnowledgeLog = {
+  id: number
+  query_text: string
+  mode?: string
+  hit_count?: number
+  scope?: string
+  answered?: number
+  ai_unavailable?: number
+  ai_model?: string
+  tokens_in?: number | null
+  tokens_out?: number | null
+  created_at?: string
+}
+
+export function listKnowledgeLogs(params: { mine?: number; page?: number; page_size?: number } = {}) {
+  return apiGet<{
+    items?: KnowledgeLog[]
+    total?: number
+    page?: number
+    page_size?: number
+    mine?: boolean
+  }>('/extensions/ai_knowledge/logs', { params })
+}
+
+export function deleteInsightRun(id: number) {
+  return apiDelete<{ ok: boolean; id?: number; deleted?: boolean; error?: string }>(
+    `/extensions/ai_insight/runs/${id}`,
+  )
 }

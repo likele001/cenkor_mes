@@ -21,10 +21,13 @@ const running = ref('')
 const totalRuns = ref(0)
 const runs24h = ref(0)
 const toggleEnabled = ref<boolean | null>(null)
+const instruction = ref('')
 
 const logsOpen = ref(false)
 const logsLoading = ref(false)
 const logs = ref<EmployeeLog[]>([])
+const logTool = ref('')
+const logStatus = ref('')
 
 async function load() {
   loading.value = true
@@ -51,11 +54,14 @@ async function load() {
   }
 }
 
-async function openLogs() {
-  logsOpen.value = true
+async function reloadLogs() {
   logsLoading.value = true
   try {
-    const r = await listEmployeeLogs({ limit: 30 })
+    const r = await listEmployeeLogs({
+      limit: 30,
+      tool: logTool.value || undefined,
+      status: logStatus.value || undefined,
+    })
     logs.value = r.items || []
   } catch {
     logs.value = []
@@ -64,11 +70,16 @@ async function openLogs() {
   }
 }
 
+async function openLogs() {
+  logsOpen.value = true
+  await reloadLogs()
+}
+
 async function run(tool: EmployeeTool) {
   if (running.value) return
   running.value = tool.code
   try {
-    const r = await executeEmployeeTool(tool.code)
+    const r = await executeEmployeeTool(tool.code, instruction.value.trim() || undefined)
     await showDialog({
       title: tool.name,
       message: r.report || r.rule_summary || r.error || t('ai.noOutput'),
@@ -110,6 +121,13 @@ onMounted(load)
         </div>
         <van-button class="ml-auto" size="mini" plain @click="openLogs">{{ t('ai.logs') }}</van-button>
       </div>
+      <van-field
+        v-model="instruction"
+        :label="t('ai.instructionLabel')"
+        :placeholder="t('ai.instructionPlaceholder')"
+        maxlength="200"
+        class="!px-0"
+      />
     </div>
 
     <div v-if="loading" class="py-10 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
@@ -138,9 +156,22 @@ onMounted(load)
     <van-popup v-model:show="logsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
       <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
         <div class="text-sm font-medium text-zinc-800">{{ t('ai.logs') }}</div>
-        <van-button size="mini" plain @click="openLogs">{{ t('ai.refresh') }}</van-button>
+        <van-button size="mini" plain @click="reloadLogs">{{ t('ai.refresh') }}</van-button>
       </div>
-      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+      <div class="flex gap-2 border-b border-zinc-100 px-3 py-2">
+        <select v-model="logTool" class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs" @change="reloadLogs">
+          <option value="">{{ t('ai.logFilterTool') }}</option>
+          <option v-for="item in tools" :key="item.code" :value="item.code">{{ item.name }}</option>
+        </select>
+        <select v-model="logStatus" class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs" @change="reloadLogs">
+          <option value="">{{ t('ai.logFilterStatus') }}</option>
+          <option value="ok">ok</option>
+          <option value="degraded">degraded</option>
+          <option value="error">error</option>
+          <option value="locked">locked</option>
+        </select>
+      </div>
+      <div class="h-[calc(100%-93px)] overflow-y-auto px-3 py-2">
         <div v-if="logsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
         <van-empty v-else-if="!logs.length" :description="t('ai.noLogs')" />
         <div v-else class="space-y-2">

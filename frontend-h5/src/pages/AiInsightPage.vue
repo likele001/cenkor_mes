@@ -5,11 +5,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { showDialog, showToast } from 'vant'
+import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
-  analyzeInsight, getInsightRun, listAiInsight, listInsightAxes, listInsightRuns,
+  analyzeInsight, deleteInsightRun, getInsightRun, listAiInsight, listInsightAxes, listInsightRuns,
   type AiInsightItem, type InsightAxis, type InsightRun,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -83,6 +84,49 @@ async function openRun(id: number) {
     if (!handleExtensionLocked(e, t('ai.nameInsight'))) {
       showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
     }
+  }
+}
+
+async function copyRun(id: number) {
+  try {
+    const r = await getInsightRun(id)
+    const text = joinLines([
+      r.summary || r.rule_summary || r.report,
+      r.risks?.length ? `${t('ai.risks')}：${r.risks.join('；')}` : '',
+      r.suggestions?.length ? `${t('ai.suggestions')}：${r.suggestions.join('；')}` : '',
+    ])
+    if (!text) {
+      showToast(t('ai.noAnalysis'))
+      return
+    }
+    const done = await copyToClipboard(text)
+    showToast(done ? t('ai.copied') : t('ai.copyFailed'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
+  }
+}
+
+async function removeRun(id: number) {
+  try {
+    await showConfirmDialog({
+      title: t('ai.runDelete'),
+      message: t('ai.runDeleteConfirm'),
+      confirmButtonText: t('ai.delete'),
+    })
+  } catch {
+    return
+  }
+  try {
+    const r = await deleteInsightRun(id)
+    if (r.ok === false) {
+      showToast(r.error || t('ai.actionFailed'))
+      return
+    }
+    showToast(t('ai.runDeleted'))
+    await openRuns()
+    await load()
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
   }
 }
 
@@ -162,7 +206,11 @@ onMounted(load)
                 <div class="truncate text-sm text-zinc-800">{{ r.axis_name || r.axis }}</div>
                 <div v-if="r.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ r.excerpt }}</div>
               </div>
-              <van-tag plain type="primary">{{ t('ai.view') }}</van-tag>
+              <div class="flex shrink-0 flex-col gap-1">
+                <van-button size="mini" plain @click.stop="openRun(r.id)">{{ t('ai.view') }}</van-button>
+                <van-button size="mini" plain @click.stop="copyRun(r.id)">{{ t('ai.runCopy') }}</van-button>
+                <van-button size="mini" plain type="danger" @click.stop="removeRun(r.id)">{{ t('ai.runDelete') }}</van-button>
+              </div>
             </div>
             <div class="mt-1 text-[10px] text-zinc-400">{{ r.created_at || '' }}</div>
           </div>

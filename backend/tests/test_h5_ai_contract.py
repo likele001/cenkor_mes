@@ -322,3 +322,79 @@ def test_batch_handle_reopen_clears_handled_at(monkeypatch):
     sql = str(db.execute.call_args_list[0][0][0])
     assert "handled_at=NULL" in sql
     assert db.execute.call_args_list[0][0][1] == {"s": "open", "i": 4}
+
+
+# ── 第六批：个人留痕隔离 / 洞察历史治理 / 巡检指令 ──────────────────────────
+
+def test_h5_ai_contract_covers_batch6_capabilities():
+    """第六批防回退：个人留痕走 mine、洞察历史可删可复制、员工可下指令、文书可筛可复制。"""
+    src = AI_TS.read_text(encoding="utf-8")
+    for marker in ("mine?: number", "listKnowledgeLogs", "deleteInsightRun("):
+        assert marker in src, f"ai.ts 缺少第六批封装: {marker}"
+
+    clip = (REPO / "frontend-h5/src/utils/clipboard.ts").read_text(encoding="utf-8")
+    assert "export async function copyText" in clip
+
+    help_page = (REPO / "frontend-h5/src/pages/HelpPage.vue").read_text(encoding="utf-8")
+    for marker in ("listKnowledgeLogs({ mine: 1", "replayServer(", "helpServerHistory"):
+        assert marker in help_page, f"帮助页缺少第六批能力: {marker}"
+
+    insight = (REPO / "frontend-h5/src/pages/AiInsightPage.vue").read_text(encoding="utf-8")
+    for marker in ("copyRun(", "removeRun(", "deleteInsightRun("):
+        assert marker in insight, f"洞察页缺少第六批能力: {marker}"
+
+    emp = (REPO / "frontend-h5/src/pages/AiEmployeesPage.vue").read_text(encoding="utf-8")
+    for marker in ("instruction.value.trim() || undefined", "reloadLogs(", "logTool", "logStatus"):
+        assert marker in emp, f"员工页缺少第六批能力: {marker}"
+
+    scene = (REPO / "frontend-h5/src/pages/AiScenePage.vue").read_text(encoding="utf-8")
+    for marker in ("copyDoc(", "docType.value || undefined", "loadMoreDocs("):
+        assert marker in scene, f"文书页缺少第六批能力: {marker}"
+
+
+def _knowledge():
+    try:
+        return importlib.import_module("extensions.ai_knowledge.router")
+    except ModuleNotFoundError:
+        pytest.skip("ai_knowledge 扩展未安装（源码在私有仓库 mes-extensions）")
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_knowledge_logs_mine_scoped_to_current_user(monkeypatch):
+    """mine=1 必须按 created_by 过滤，否则员工端能看到别人的提问。"""
+    mod = _knowledge()
+    seen = {}
+
+    def fake_rows(_db, sql, **params):
+        seen["sql"], seen["params"] = sql, params
+        return []
+
+    monkeypatch.setattr(mod, "_rows", fake_rows)
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+    monkeypatch.setattr(mod, "_has_ai_model_col", lambda _db: True)
+    user = MagicMock()
+    user.id = 42
+    out = mod.list_logs(page=1, page_size=20, mine=1, db=MagicMock(), user=user)["data"]
+    assert out["mine"] is True and out["items"] == []
+    assert "created_by = :uid" in seen["sql"]
+    assert seen["params"]["uid"] == 42
+    assert seen["params"]["lim"] == 20
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_knowledge_logs_default_keeps_global_view(monkeypatch):
+    """管理端/后台仍要能看全局留痕：不带 mine 时不得加 created_by 条件。"""
+    mod = _knowledge()
+    seen = {}
+
+    def fake_rows(_db, sql, **params):
+        seen["sql"], seen["params"] = sql, params
+        return []
+
+    monkeypatch.setattr(mod, "_rows", fake_rows)
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+    monkeypatch.setattr(mod, "_has_ai_model_col", lambda _db: True)
+    out = mod.list_logs(page=1, page_size=20, mine=0, db=MagicMock(), user=MagicMock())["data"]
+    assert out["mine"] is False
+    assert "created_by" not in seen["sql"]
+    assert "uid" not in seen["params"]

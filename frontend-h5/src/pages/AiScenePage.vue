@@ -10,6 +10,7 @@ import {
   deleteSceneDoc, generateSceneDoc, getSceneDoc, listSceneDocs, listSceneScenarios,
   previewSceneDoc, type SceneDocItem, type SceneScenario,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -24,6 +25,10 @@ const values = ref<Record<string, Record<string, string>>>({})
 const docsOpen = ref(false)
 const docsLoading = ref(false)
 const docs = ref<SceneDocItem[]>([])
+const docType = ref('')
+const docPage = ref(1)
+const docTotal = ref(0)
+const docLoadingMore = ref(false)
 
 function collectParams(s: SceneScenario): Record<string, unknown> {
   const params: Record<string, unknown> = {}
@@ -39,13 +44,28 @@ function joinLines(parts: Array<string | undefined>) {
   return parts.filter(Boolean).join('\n\n')
 }
 
-async function loadDocs() {
+async function loadDocs(reset = true) {
+  if (reset) docPage.value = 1
   try {
-    const r = await listSceneDocs({ page_size: 30 })
-    docs.value = r.items || []
+    const r = await listSceneDocs({
+      page: docPage.value,
+      page_size: 20,
+      type: docType.value || undefined,
+    })
+    const items = r.items || []
+    docs.value = reset ? items : [...docs.value, ...items]
+    docTotal.value = r.total || 0
   } catch {
-    docs.value = []
+    if (reset) docs.value = []
   }
+}
+
+async function loadMoreDocs() {
+  if (docLoadingMore.value || docs.value.length >= docTotal.value) return
+  docLoadingMore.value = true
+  docPage.value += 1
+  await loadDocs(false)
+  docLoadingMore.value = false
 }
 
 async function openDocs() {
@@ -124,6 +144,27 @@ async function openDoc(id: number) {
     if (!handleExtensionLocked(e, t('ai.nameScene'))) {
       showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
     }
+  }
+}
+
+async function copyDoc(id: number) {
+  try {
+    const r = await getSceneDoc(id)
+    const facts = Object.entries(r.facts || {}).map(([k, v]) => `${k}：${String(v)}`).join('\n')
+    const text = joinLines([
+      r.report || r.summary || r.rule_summary,
+      facts ? `${t('ai.facts')}：\n${facts}` : '',
+      r.risks?.length ? `${t('ai.risks')}：${r.risks.join('；')}` : '',
+      r.suggestions?.length ? `${t('ai.suggestions')}：${r.suggestions.join('；')}` : '',
+    ])
+    if (!text) {
+      showToast(t('ai.noContent'))
+      return
+    }
+    const done = await copyToClipboard(text)
+    showToast(done ? t('ai.docCopied') : t('ai.docCopyFailed'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
   }
 }
 
@@ -241,24 +282,38 @@ onMounted(load)
 
     <van-popup v-model:show="docsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
       <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
-        <div class="text-sm font-medium text-zinc-800">{{ t('ai.docs') }}</div>
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.docs') }}<span v-if="docTotal" class="ml-1 text-[11px] text-zinc-400">/ {{ docTotal }}</span></div>
         <van-button size="mini" plain @click="openDocs">{{ t('ai.refresh') }}</van-button>
       </div>
-      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+      <div class="border-b border-zinc-100 px-3 py-2">
+        <select v-model="docType" class="w-full rounded border border-zinc-200 px-2 py-1 text-xs" @change="loadDocs()">
+          <option value="">{{ t('ai.docFilterType') }}</option>
+          <option v-for="s in scenarios" :key="s.code" :value="s.code">{{ s.name }}</option>
+        </select>
+      </div>
+      <div class="h-[calc(100%-93px)] overflow-y-auto px-3 py-2">
         <div v-if="docsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
         <van-empty v-else-if="!docs.length" :description="t('ai.noDocs')" />
-        <div v-else class="space-y-2">
-          <div v-for="d in docs" :key="d.id" class="rounded-xl bg-zinc-50 p-3" @click="openDoc(d.id)">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-sm text-zinc-800">{{ d.title }}</div>
-                <div v-if="d.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ d.excerpt }}</div>
-                <div class="mt-1 text-[10px] text-zinc-400">{{ d.type_name || d.doc_type }} · {{ d.created_at || '' }}</div>
+        <template v-else>
+          <div class="space-y-2">
+            <div v-for="d in docs" :key="d.id" class="rounded-xl bg-zinc-50 p-3" @click="openDoc(d.id)">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm text-zinc-800">{{ d.title }}</div>
+                  <div v-if="d.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ d.excerpt }}</div>
+                  <div class="mt-1 text-[10px] text-zinc-400">{{ d.type_name || d.doc_type }} · {{ d.created_at || '' }}</div>
+                </div>
+                <div class="flex shrink-0 flex-col gap-1">
+                  <van-button size="mini" plain @click.stop="copyDoc(d.id)">{{ t('ai.copy') }}</van-button>
+                  <van-button size="mini" plain type="danger" @click.stop="removeDoc(d.id)">{{ t('ai.delete') }}</van-button>
+                </div>
               </div>
-              <van-button size="mini" plain type="danger" @click.stop="removeDoc(d.id)">{{ t('ai.delete') }}</van-button>
             </div>
           </div>
-        </div>
+          <div v-if="docs.length < docTotal" class="py-2 text-center">
+            <van-button size="mini" plain :loading="docLoadingMore" @click="loadMoreDocs">{{ t('ai.loadMore') }}</van-button>
+          </div>
+        </template>
       </div>
     </van-popup>
   </div>

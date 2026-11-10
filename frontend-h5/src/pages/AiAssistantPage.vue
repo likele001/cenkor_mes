@@ -10,6 +10,7 @@ import {
   aiChat, deleteAssistantConversation, getAssistantConversation,
   listAssistantConversations, renameAssistantConversation, type AssistantConversation,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied, showAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -212,32 +213,8 @@ function retry() {
 }
 
 async function copyText(text: string) {
-  const done = () => showToast(t('ai.copied'))
-  const legacy = () => {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.opacity = '0'
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    done()
-  }
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      done()
-    } else {
-      legacy()
-    }
-  } catch {
-    try {
-      legacy()
-    } catch {
-      showToast(t('ai.copyFailed'))
-    }
-  }
+  const done = await copyToClipboard(text)
+  showToast(done ? t('ai.copied') : t('ai.copyFailed'))
 }
 
 function exportChat() {

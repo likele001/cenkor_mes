@@ -7,8 +7,8 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showToast } from 'vant'
 import {
-  aiHelp, getKnowledgeStatus, knowledgeAsk, knowledgeSearch,
-  type KnowledgeHit, type KnowledgeAskOut, type KnowledgeSearchOut,
+  aiHelp, getKnowledgeStatus, knowledgeAsk, knowledgeSearch, listKnowledgeLogs,
+  type KnowledgeHit, type KnowledgeAskOut, type KnowledgeLog, type KnowledgeSearchOut,
 } from '@/api/ai'
 import { isAccessDenied } from '@/utils/extension-gate'
 
@@ -28,6 +28,9 @@ const docCount = ref<number | null>(null)
 const HISTORY_KEY = 'cenkormes_h5_ai_help_history'
 type HelpHistoryItem = { q: string; a: string; mode: string; at: string }
 const history = ref<HelpHistoryItem[]>([])
+const serverOpen = ref(false)
+const serverLoading = ref(false)
+const serverLogs = ref<KnowledgeLog[]>([])
 
 function loadHistory() {
   try {
@@ -70,6 +73,27 @@ function clearHistory() {
     // 忽略
   }
   showToast(t('ai.helpHistoryCleared'))
+}
+
+// 服务端只留问题与命中数（无答案），换设备也能看到自己问过什么
+async function openServerHistory() {
+  serverOpen.value = true
+  serverLoading.value = true
+  try {
+    const r = await listKnowledgeLogs({ mine: 1, page_size: 20 })
+    serverLogs.value = r.items || []
+  } catch {
+    serverLogs.value = []
+  } finally {
+    serverLoading.value = false
+  }
+}
+
+async function replayServer(l: KnowledgeLog) {
+  serverOpen.value = false
+  question.value = l.query_text || ''
+  if (!question.value) return
+  await ask()
 }
 
 onMounted(() => {
@@ -202,7 +226,10 @@ async function ask() {
     <div v-if="history.length" class="rounded-xl bg-white p-4 shadow-sm">
       <div class="flex items-center justify-between gap-2">
         <div class="text-sm font-medium text-zinc-700">{{ t('ai.helpHistory') }}</div>
-        <van-button size="mini" plain @click="clearHistory">{{ t('ai.helpHistoryClear') }}</van-button>
+        <div class="flex gap-1">
+          <van-button size="mini" plain @click="openServerHistory">{{ t('ai.helpServerHistory') }}</van-button>
+          <van-button size="mini" plain @click="clearHistory">{{ t('ai.helpHistoryClear') }}</van-button>
+        </div>
       </div>
       <div class="mt-1 text-[10px] text-zinc-400">{{ t('ai.helpHistoryLocal') }}</div>
       <div class="mt-2 space-y-2">
@@ -218,5 +245,33 @@ async function ask() {
         </div>
       </div>
     </div>
+    <van-popup v-model:show="serverOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
+      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.helpServerHistory') }}</div>
+        <van-button size="mini" plain @click="openServerHistory">{{ t('ai.refresh') }}</van-button>
+      </div>
+      <div class="px-4 pb-1 pt-2 text-[10px] leading-relaxed text-zinc-400">{{ t('ai.helpServerHistoryHint') }}</div>
+      <div class="h-[calc(100%-80px)] overflow-y-auto px-3 py-2">
+        <div v-if="serverLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+        <van-empty v-else-if="!serverLogs.length" :description="t('ai.helpServerEmpty')" />
+        <div v-else class="space-y-2">
+          <div
+            v-for="l in serverLogs"
+            :key="l.id"
+            class="cursor-pointer rounded-xl bg-zinc-50 p-3 active:bg-zinc-100"
+            @click="replayServer(l)"
+          >
+            <div class="truncate text-xs text-zinc-800">{{ l.query_text }}</div>
+            <div class="mt-1 flex items-center gap-2 text-[10px] text-zinc-400">
+              <span>{{ l.created_at || '' }}</span>
+              <span v-if="l.mode">· {{ l.mode }}</span>
+              <span>· {{ t('ai.helpHitCount', { n: l.hit_count ?? 0 }) }}</span>
+              <span class="ml-auto text-indigo-500">{{ t('ai.helpReplay') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
+
   </div>
 </template>
