@@ -190,8 +190,24 @@ export function executeEmployeeTool(tool: string, instruction?: string) {
 
 // ── 场景文书 ───────────────────────────────────────────────────────────────
 
+export type SceneField = {
+  key: string
+  label: string
+  type: string
+  placeholder?: string
+  default?: string | number
+  options?: string[]
+}
+
+export type SceneScenario = {
+  code: string
+  name: string
+  desc: string
+  fields?: SceneField[]
+}
+
 export function listSceneScenarios() {
-  return apiGet<{ scenarios: Array<{ code: string; name: string; desc: string }> }>(
+  return apiGet<{ scenarios: SceneScenario[]; enabled?: boolean; note?: string; defaults?: Record<string, unknown> }>(
     '/extensions/ai_scene_reports/scenarios',
   )
 }
