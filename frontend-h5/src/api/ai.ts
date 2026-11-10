@@ -871,3 +871,46 @@ export function batchDeleteInsightRuns(ids: number[]) {
     { ids },
   )
 }
+
+
+export type AgentToolItem = {
+  name: string
+  description?: string
+  read_only?: boolean
+  confirm_required?: boolean
+  require_permissions?: string[]
+  available?: boolean
+}
+
+// 助手能力清单：只列当前角色真的能调的（available 由后端按权限与网关状态算）
+export function listAgentTools() {
+  return apiGet<{ items?: AgentToolItem[]; total?: number; available_count?: number }>(
+    '/extensions/ai_assistant/tools',
+  )
+}
+
+export type EmployeeConversationItem = {
+  conversation_id: number
+  runs?: number
+  last_at?: string
+  tools?: string
+}
+
+// 数字员工的「委托会话」：一次委托会串起多条技能执行记录
+export function listEmployeeConversations() {
+  return apiGet<{ items?: EmployeeConversationItem[]; count?: number }>(
+    '/extensions/ai_employee/conversations',
+  )
+}
+
+export function getEmployeeConversation(id: number) {
+  return apiGet<{ conversation_id?: number; items?: EmployeeLog[]; found?: boolean }>(
+    `/extensions/ai_employee/conversations/${id}`,
+  )
+}
+
+export function deleteEmployeeConversation(id: number) {
+  return apiDelete<{ deleted?: boolean; found?: boolean; removed?: number }>(
+    `/extensions/ai_employee/conversations/${id}`,
+  )
+}

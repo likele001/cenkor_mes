@@ -8,7 +8,8 @@ import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showToast } from 'vant'
 import {
   aiChat, deleteAssistantConversation, getAssistantConversation,
-  listAssistantConversations, renameAssistantConversation, type AssistantConversation,
+  listAgentTools, listAssistantConversations, renameAssistantConversation,
+  type AgentToolItem, type AssistantConversation,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { downloadText } from '@/utils/download'
@@ -32,6 +33,27 @@ const listEl = ref<HTMLElement | null>(null)
 const convId = ref<number | null>(null)
 const conversations = ref<AssistantConversation[]>([])
 const historyOpen = ref(false)
+// 「能做什么」：把后端 /tools 的清单摆出来，员工才知道能问什么、哪些要确认
+const agentTools = ref<AgentToolItem[]>([])
+const toolsOpen = ref(false)
+const toolsLoading = ref(false)
+const availableTools = computed(() => agentTools.value.filter((x) => x.available).length)
+
+async function openTools() {
+  toolsOpen.value = true
+  toolsLoading.value = true
+  try {
+    const r = await listAgentTools()
+    agentTools.value = r.items || []
+  } catch (e: unknown) {
+    agentTools.value = []
+    if (!handleExtensionLocked(e, t('ai.nameAssistant'))) {
+      showToast(e instanceof Error ? e.message : t('ai.agentToolsLoadFailed'))
+    }
+  } finally {
+    toolsLoading.value = false
+  }
+}
 const historyLoading = ref(false)
 const renamingId = ref<number | null>(null)
 const renameText = ref('')
@@ -331,6 +353,9 @@ onMounted(() => { void loadConversations() })
           {{ q }}
         </van-tag>
       </div>
+      <div class="mt-3">
+        <span class="cursor-pointer text-[11px] text-indigo-600" @click="openTools">{{ t('ai.agentToolsLink') }}</span>
+      </div>
     </div>
 
     <div v-else ref="listEl" class="flex-1 space-y-3 overflow-y-auto pb-2">
@@ -404,6 +429,44 @@ onMounted(() => { void loadConversations() })
           </div>
         </div>
       </div>
+      </div>
+    </van-popup>
+
+    <van-popup v-model:show="toolsOpen" position="bottom" round class="pb-safe" :style="{ height: '65%' }">
+      <div class="flex h-full flex-col">
+        <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
+          <div class="text-sm font-medium text-zinc-800">{{ t('ai.agentToolsTitle') }}</div>
+          <van-button size="mini" plain @click="toolsOpen = false">{{ t('ai.ok') }}</van-button>
+        </div>
+        <div class="shrink-0 px-4 pt-2 text-[11px] leading-relaxed text-zinc-500">
+          {{ t('ai.agentToolsDesc') }}
+        </div>
+        <div v-if="toolsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+        <div v-else class="flex-1 overflow-y-auto px-3 py-2">
+          <van-empty v-if="!agentTools.length" :description="t('ai.agentToolsEmpty')" />
+          <template v-else>
+            <div class="mb-2 text-[10px] text-zinc-400">
+              {{ t('ai.agentToolsCount', { n: agentTools.length, m: availableTools }) }}
+            </div>
+            <div class="space-y-2">
+              <div v-for="tool in agentTools" :key="tool.name" class="rounded-xl bg-zinc-50 p-3">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0 flex-1">
+                    <div class="truncate text-sm font-medium text-zinc-800">{{ tool.name }}</div>
+                    <div class="mt-1 text-[11px] leading-relaxed text-zinc-600">{{ tool.description }}</div>
+                  </div>
+                  <van-tag plain :type="tool.available ? 'success' : 'default'" class="shrink-0">
+                    {{ tool.available ? t('ai.agentToolsAvailable') : t('ai.agentToolsUnavailable') }}
+                  </van-tag>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-1">
+                  <van-tag v-if="tool.read_only" plain type="primary">{{ t('ai.agentToolsReadOnly') }}</van-tag>
+                  <van-tag v-else-if="tool.confirm_required" plain type="warning">{{ t('ai.agentToolsConfirm') }}</van-tag>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
       </div>
     </van-popup>
   </div>

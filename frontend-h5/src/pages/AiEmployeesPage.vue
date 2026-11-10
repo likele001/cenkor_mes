@@ -5,10 +5,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { showDialog, showToast } from 'vant'
+import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
-  employeeOverview, executeEmployeeTool, getEmployeeLog, getEmployeeToggle, listEmployeeLogs,
-  listEmployeeTools, type EmployeeLog, type EmployeeLogDetail, type EmployeeTool,
+  deleteEmployeeConversation, employeeOverview, executeEmployeeTool, getEmployeeConversation,
+  getEmployeeLog, getEmployeeToggle, listEmployeeConversations, listEmployeeLogs,
+  listEmployeeTools,
+  type EmployeeConversationItem, type EmployeeLog, type EmployeeLogDetail, type EmployeeTool,
 } from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
@@ -32,6 +34,80 @@ const logStatus = ref('')
 const logOpen = ref(false)
 const logLoading = ref(false)
 const logDetail = ref<EmployeeLogDetail | null>(null)
+
+// 委托会话：一次委托串起多条技能记录，比逐条翻日志更容易还原当时的来龙去脉
+const convOpen = ref(false)
+const convLoading = ref(false)
+const convs = ref<EmployeeConversationItem[]>([])
+const convDetailOpen = ref(false)
+const convDetailLoading = ref(false)
+const convDetailId = ref(0)
+const convNotes = ref<Array<EmployeeLog & { instruction?: string }>>([])
+
+async function loadConversations() {
+  convLoading.value = true
+  try {
+    const r = await listEmployeeConversations()
+    convs.value = r.items || []
+  } catch (e: unknown) {
+    convs.value = []
+    if (!handleExtensionLocked(e, t('ai.employeesTitle'))) {
+      showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+    }
+  } finally {
+    convLoading.value = false
+  }
+}
+
+function openConversations() {
+  convOpen.value = true
+  void loadConversations()
+}
+
+async function openConvDetail(id: number) {
+  convDetailId.value = id
+  convDetailOpen.value = true
+  convDetailLoading.value = true
+  convNotes.value = []
+  try {
+    const r = await getEmployeeConversation(id)
+    convNotes.value = r.items || []
+    if (!r.found) showToast(t('ai.empConvNotFound'))
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.employeesTitle'))) {
+      showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+    }
+  } finally {
+    convDetailLoading.value = false
+  }
+}
+
+async function removeConv(id: number, runs: number) {
+  try {
+    await showConfirmDialog({
+      title: t('ai.empConvDelete'),
+      message: t('ai.empConvDeleteConfirm', { n: runs }),
+      confirmButtonText: t('ai.ok'),
+      cancelButtonText: t('common.cancel'),
+    })
+  } catch {
+    return
+  }
+  try {
+    const r = await deleteEmployeeConversation(id)
+    if (!r.found) {
+      showToast(t('ai.empConvNotFound'))
+    } else {
+      showToast(t('ai.empConvDeleted', { n: r.removed || 0 }))
+    }
+    if (convDetailId.value === id) convDetailOpen.value = false
+    await loadConversations()
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.employeesTitle'))) {
+      showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+    }
+  }
+}
 
 // facts 可能是几十个键，长文本截断展示，避免弹层被一条 SQL 结果撑爆
 const factEntries = computed(() => {
@@ -155,7 +231,8 @@ onMounted(load)
           <div class="text-lg font-bold text-indigo-600">{{ runs24h }}</div>
           <div class="text-[11px] text-zinc-500">{{ t('ai.runs24h') }}</div>
         </div>
-        <van-button class="ml-auto" size="mini" plain @click="openLogs">{{ t('ai.logs') }}</van-button>
+        <van-button class="ml-auto" size="mini" plain @click="openConversations">{{ t('ai.empConversations') }}</van-button>
+        <van-button size="mini" plain @click="openLogs">{{ t('ai.logs') }}</van-button>
       </div>
       <van-field
         v-model="instruction"
@@ -274,6 +351,79 @@ onMounted(load)
               <div v-else class="mt-1 text-[11px] text-zinc-400">{{ t('ai.logNoFacts') }}</div>
             </div>
           </template>
+        </div>
+      </div>
+    </van-popup>
+
+    <van-popup v-model:show="convOpen" position="bottom" round class="pb-safe" :style="{ height: '65%' }">
+      <div class="flex h-full flex-col">
+        <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
+          <div class="text-sm font-medium text-zinc-800">{{ t('ai.empConversations') }}</div>
+          <div class="flex shrink-0 gap-1">
+            <van-button size="mini" plain @click="loadConversations">{{ t('ai.refresh') }}</van-button>
+            <van-button size="mini" plain @click="convOpen = false">{{ t('ai.ok') }}</van-button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto px-3 py-2">
+          <div v-if="convLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+          <van-empty v-else-if="!convs.length" :description="t('ai.empConversationsEmpty')" />
+          <div v-else class="space-y-2">
+            <div
+              v-for="c in convs"
+              :key="c.conversation_id"
+              class="rounded-xl bg-zinc-50 p-3 active:bg-zinc-100"
+              @click="openConvDetail(c.conversation_id)"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium text-zinc-800">#{{ c.conversation_id }}</div>
+                  <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.empConvRuns', { n: c.runs || 0 }) }}</div>
+                  <div v-if="c.tools" class="mt-1 truncate text-[10px] text-zinc-400">
+                    {{ t('ai.empConvTools', { v: c.tools }) }}
+                  </div>
+                  <div class="mt-1 text-[10px] text-zinc-400">{{ c.last_at || '' }}</div>
+                </div>
+                <van-button
+                  size="mini"
+                  plain
+                  type="danger"
+                  @click.stop="removeConv(c.conversation_id, c.runs || 0)"
+                >{{ t('ai.empConvDelete') }}</van-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
+
+    <van-popup v-model:show="convDetailOpen" position="bottom" round class="pb-safe" :style="{ height: '70%' }">
+      <div class="flex h-full flex-col">
+        <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
+          <div class="text-sm font-medium text-zinc-800">
+            {{ t('ai.empConvDetail') }} <span class="text-zinc-400">#{{ convDetailId }}</span>
+          </div>
+          <van-button size="mini" plain @click="convDetailOpen = false">{{ t('ai.ok') }}</van-button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-3 py-2">
+          <div v-if="convDetailLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+          <van-empty v-else-if="!convNotes.length" :description="t('ai.empConvNotFound')" />
+          <div v-else class="space-y-2">
+            <div v-for="n in convNotes" :key="n.id" class="rounded-xl bg-zinc-50 p-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium text-zinc-800">{{ n.tool_name || n.tool_code }}</div>
+                  <div v-if="n.instruction" class="mt-1 text-[11px] text-zinc-600">{{ n.instruction }}</div>
+                  <div v-if="n.summary" class="mt-1 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-zinc-500">
+                    {{ n.summary }}
+                  </div>
+                  <div class="mt-1 text-[10px] text-zinc-400">{{ n.created_at || '' }}</div>
+                </div>
+                <van-tag plain :type="n.status === 'ok' ? 'success' : n.status === 'error' ? 'danger' : 'warning'" class="shrink-0">
+                  {{ n.status }}
+                </van-tag>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </van-popup>

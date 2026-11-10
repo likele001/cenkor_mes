@@ -940,3 +940,30 @@ def test_h5_ai_contract_covers_batch18_capabilities():
         for key in ("docsCreate", "docsEdit", "docsMineOnly", "docsMine",
                     "docsEditVectorize", "docsSavedVectorized"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+def test_h5_ai_contract_covers_batch19_capabilities():
+    """助手能力清单与委托会话回看，前后端都要真的接上。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    for marker in ("export function listAgentTools(", "export function listEmployeeConversations(",
+                   "export function getEmployeeConversation(", "export function deleteEmployeeConversation("):
+        assert marker in ai, f"api/ai.ts 缺 {marker}"
+
+    assist = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    for marker in ("listAgentTools,", "async function openTools(",
+                   "const availableTools = computed(", '@click="openTools"',
+                   'v-model:show="toolsOpen"'):
+        assert marker in assist, f"助手页缺少能力清单: {marker}"
+
+    emp = (REPO / "frontend-h5/src/pages/AiEmployeesPage.vue").read_text(encoding="utf-8")
+    for marker in ("listEmployeeConversations,", "async function loadConversations(",
+                   "async function openConvDetail(", "async function removeConv(",
+                   '@click="openConversations"', 'v-model:show="convOpen"',
+                   'v-model:show="convDetailOpen"'):
+        assert marker in emp, f"数字员工页缺少委托会话: {marker}"
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("agentToolsTitle", "agentToolsCount", "empConversations",
+                    "empConvDeleteConfirm", "empConvNotFound"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"
