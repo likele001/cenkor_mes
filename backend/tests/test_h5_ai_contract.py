@@ -187,3 +187,85 @@ def test_conversation_creates_new_when_missing(monkeypatch):
     assert mod._ensure_conversation(db, 7, "hi", "assistant", None) == 99
     assert db.execute.call_count == 1
     db.commit.assert_called_once()
+
+
+# ── 第四批：扩展状态预检查 / 预警批量处置 ──────────────────────────────────
+
+def test_h5_ai_contract_covers_batch4_capabilities():
+    """第四批新增的两个封装必须留在 ai.ts，防止功能被回退掉。"""
+    calls = {(m, p) for m, p in _frontend_calls()}
+    assert ("post", "/extensions/ai_anomaly/alerts/batch-handle") in calls
+    assert "'/h5/ai/extensions'" in AI_TS.read_text(encoding="utf-8")
+
+
+def test_h5_ai_extension_status_route_wired():
+    """H5 状态接口必须真的挂进 /h5 路由，且只按登录用户返回三态。"""
+    src = (BACKEND / "app/api/h5/ai_extensions.py").read_text(encoding="utf-8")
+    assert 'prefix="/ai/extensions"' in src
+    assert '@router.get("")' in src
+    assert "runtime.is_enabled" in src
+    assert "get_user_permission_codes(db, user.id)" in src
+    assert "status_list" not in src  # 不暴露管理端完整状态
+    router_src = (BACKEND / "app/api/h5/router.py").read_text(encoding="utf-8")
+    assert "h5_ai_extensions_router" in router_src
+
+
+def test_ai_extension_status_three_states(monkeypatch):
+    """未安装 / 已停用 / 已授权三态同时成立，且不依赖商业扩展源码。"""
+    try:
+        from app.api.h5 import ai_extensions as mod
+    except Exception as e:  # noqa: BLE001 - 干净检出缺依赖时降级为跳过
+        pytest.skip(f"H5 状态模块导入失败: {e}")
+    db = MagicMock()
+    monkeypatch.setattr(mod.runtime, "installed", {"ai_assistant": {}, "ai_insight": {}})
+    monkeypatch.setattr(mod.runtime, "is_enabled", lambda key: key == "ai_assistant")
+    monkeypatch.setattr(mod, "get_user_permission_codes",
+                        lambda _db, uid: ["ext.ai_assistant.view"])
+    out = mod.list_ai_extensions(db=db, user=MagicMock(id=3))["data"]
+    items = {x["key"]: x for x in out["items"]}
+    assert out["installed_total"] == 2
+    assert items["ai_assistant"]["enabled"] is True
+    assert items["ai_assistant"]["granted"] is True
+    assert items["ai_insight"]["installed"] is True and items["ai_insight"]["enabled"] is False
+    assert items["ai_anomaly"]["installed"] is False
+
+
+def _anomaly():
+    try:
+        return importlib.import_module("extensions.ai_anomaly.router")
+    except ModuleNotFoundError:
+        pytest.skip("ai_anomaly 扩展未安装（源码在私有仓库 mes-extensions）")
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_batch_handle_rejects_invalid_status():
+    mod = _anomaly()
+    db = MagicMock()
+    out = mod.batch_handle(mod.BatchHandleIn(ids=[1, 2], status="bogus"), db=db)["data"]
+    assert out["ok"] is False and out["total"] == 0
+    db.execute.assert_not_called()
+    db.commit.assert_not_called()
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_batch_handle_dedups_and_reports_missing(monkeypatch):
+    mod = _anomaly()
+    db = MagicMock()
+    seen = {}
+
+    def fake_rows(_db, sql, **params):
+        seen["sql"], seen["params"] = sql, params
+        return [{"id": 1}, {"id": 3}]
+
+    monkeypatch.setattr(mod, "_rows", fake_rows)
+    out = mod.batch_handle(
+        mod.BatchHandleIn(ids=[1, 1, 2, 3], status="resolved"), db=db)["data"]
+    assert out["ok"] is True and out["total"] == 2
+    assert out["succeeded"] == [1, 3]
+    assert out["missing"] == [2]
+    assert seen["params"] == {"i0": 1, "i1": 2, "i2": 3}
+    assert db.execute.call_count == 2
+    first_sql = str(db.execute.call_args_list[0][0][0])
+    assert "handled_at=NOW()" in first_sql
+    assert db.execute.call_args_list[0][0][1] == {"s": "resolved", "i": 1}
+    db.commit.assert_called_once()

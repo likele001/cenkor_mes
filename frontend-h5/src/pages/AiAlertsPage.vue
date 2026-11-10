@@ -7,8 +7,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
-  getAnomalyOptions, getAnomalySummary, handleAlert, interpretAlert, listAiAlerts, runAiAlerts,
-  type AlertItem, type AnomalyOptionItem, type AnomalySummary,
+  batchHandleAlerts, getAnomalyOptions, getAnomalySummary, handleAlert, interpretAlert,
+  listAiAlerts, runAiAlerts, type AlertItem, type AnomalyOptionItem, type AnomalySummary,
 } from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 import { useAuthStore } from '@/stores/auth'
@@ -27,6 +27,9 @@ const dim = ref('')
 const severity = ref('')
 const status = ref('all')
 const interpreting = ref(0)
+const batchMode = ref(false)
+const batching = ref(false)
+const selected = ref<number[]>([])
 
 const canManage = computed(() => auth.hasPermission('ext.ai_anomaly.manage'))
 
@@ -140,6 +143,63 @@ async function resolveAlert(a: AlertItem) {
   }
 }
 
+function toggleSelect(id: number) {
+  const i = selected.value.indexOf(id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(id)
+}
+
+function toggleAll() {
+  const ids = items.value.map((a) => a.id)
+  selected.value = selected.value.length === ids.length ? [] : ids.slice(0, 50)
+}
+
+function clearSelection() {
+  selected.value = []
+}
+
+function closeBatch() {
+  batchMode.value = false
+  selected.value = []
+}
+
+async function doBatch(st: string) {
+  if (!selected.value.length) {
+    showToast(t('ai.batchEmpty'))
+    return
+  }
+  const label = st === 'acked' ? t('ai.statusAckedLabel')
+    : st === 'resolved' ? t('ai.statusResolvedLabel') : t('ai.statusIgnoredLabel')
+  try {
+    await showConfirmDialog({
+      title: t('ai.batchMode'),
+      message: t('ai.batchConfirm', { n: selected.value.length, v: label }),
+      confirmButtonText: t('ai.ok'),
+    })
+  } catch {
+    return
+  }
+  batching.value = true
+  try {
+    const r = await batchHandleAlerts(selected.value, st)
+    if (!r.ok) {
+      showToast(r.error || t('ai.batchFailed'))
+      return
+    }
+    showToast(r.missing?.length
+      ? t('ai.batchPartial', { n: r.total, m: r.missing.length })
+      : t('ai.batchDone', { n: r.total }))
+    closeBatch()
+    await load()
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAlerts'))) {
+      showToast(e instanceof Error ? e.message : t('ai.batchFailed'))
+    }
+  } finally {
+    batching.value = false
+  }
+}
+
 onMounted(async () => {
   if (!auth.permissions.length) await auth.fetchMe()
   await load()
@@ -154,7 +214,12 @@ onMounted(async () => {
           <div class="text-sm font-medium text-zinc-800">{{ t('ai.alertsTitle') }}</div>
           <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.alertsSubtitle') }}</div>
         </div>
-        <van-button v-if="canManage" size="small" type="primary" plain :loading="scanning" :disabled="locked" @click="scan">{{ t('ai.scan') }}</van-button>
+        <div v-if="canManage" class="flex shrink-0 gap-1">
+          <van-button size="small" plain :disabled="locked || !items.length" @click="batchMode ? closeBatch() : (batchMode = true)">
+            {{ batchMode ? t('ai.batchExit') : t('ai.batchMode') }}
+          </van-button>
+          <van-button size="small" type="primary" plain :loading="scanning" :disabled="locked" @click="scan">{{ t('ai.scan') }}</van-button>
+        </div>
         <van-tag v-else plain type="warning">{{ t('ai.manageOnly') }}</van-tag>
       </div>
       <div v-if="summary" class="mt-3 grid grid-cols-4 gap-2 text-center">
@@ -220,6 +285,9 @@ onMounted(async () => {
     <div v-else class="space-y-2">
       <div v-for="a in items" :key="a.id" class="rounded-xl bg-white p-3 shadow-sm" @click="openAlert(a)">
         <div class="flex items-start justify-between gap-2">
+          <div v-if="batchMode" class="shrink-0 pt-1" @click.stop="toggleSelect(a.id)">
+            <van-checkbox :model-value="selected.includes(a.id)" />
+          </div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <van-tag :type="sevType(a.level)" plain>{{ sevText(a.level) }}</van-tag>
@@ -237,6 +305,17 @@ onMounted(async () => {
           <van-button size="mini" plain :loading="interpreting === a.id" @click.stop="interpret(a)">{{ t('ai.aiInterpret') }}</van-button>
           <van-button v-if="canManage" size="mini" plain @click.stop="resolveAlert(a)">{{ t('ai.resolve') }}</van-button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="batchMode" class="sticky bottom-2 z-10 flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-lg">
+      <van-button size="mini" plain @click="toggleAll">{{ t('ai.batchSelectAll') }}</van-button>
+      <van-button size="mini" plain @click="clearSelection">{{ t('ai.batchClear') }}</van-button>
+      <span class="text-xs text-zinc-600">{{ t('ai.batchSelected', { n: selected.length }) }}</span>
+      <div class="ml-auto flex gap-1">
+        <van-button size="mini" plain type="primary" :loading="batching" @click="doBatch('acked')">{{ t('ai.batchAck') }}</van-button>
+        <van-button size="mini" plain type="success" :loading="batching" @click="doBatch('resolved')">{{ t('ai.batchResolve') }}</van-button>
+        <van-button size="mini" plain :loading="batching" @click="doBatch('ignored')">{{ t('ai.batchIgnore') }}</van-button>
       </div>
     </div>
   </div>

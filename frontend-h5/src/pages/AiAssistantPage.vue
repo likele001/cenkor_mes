@@ -155,7 +155,10 @@ async function send(text?: string) {
   try {
     const res = await aiChat({ message: msg, conversation_id: convId.value })
     convId.value = res.conversation_id
-    messages.value.push({ role: 'assistant', content: res.reply })
+    messages.value.push({
+      role: 'assistant',
+      content: res.reply || res.hint || t('ai.unavailable'),
+    })
     void loadConversations()
   } catch (e: unknown) {
     messages.value.pop()
@@ -177,6 +180,54 @@ function retry() {
   locked.value = false
 }
 
+async function copyText(text: string) {
+  const done = () => showToast(t('ai.copied'))
+  const legacy = () => {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    done()
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      done()
+    } else {
+      legacy()
+    }
+  } catch {
+    try {
+      legacy()
+    } catch {
+      showToast(t('ai.copyFailed'))
+    }
+  }
+}
+
+function exportChat() {
+  try {
+    const lines = [
+      `# ${currentTitle.value}`,
+      '',
+      ...messages.value.map((m) => `**${m.role === 'user' ? t('ai.roleUser') : t('ai.roleAssistant')}**\n\n${m.content}`),
+    ]
+    const url = URL.createObjectURL(new Blob([lines.join('\n\n')], { type: 'text/markdown;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ai-chat-${convId.value || 'new'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(t('ai.exported'))
+  } catch {
+    showToast(t('ai.exportFailed'))
+  }
+}
+
 onMounted(() => { void loadConversations() })
 </script>
 
@@ -184,6 +235,7 @@ onMounted(() => { void loadConversations() })
   <div class="flex min-h-[70vh] flex-col">
     <div class="mb-2 flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm">
       <span class="min-w-0 flex-1 truncate text-xs text-zinc-600">{{ currentTitle }}</span>
+      <van-button v-if="messages.length" size="mini" plain @click="exportChat">{{ t('ai.exportChat') }}</van-button>
       <van-button v-if="convId" size="mini" plain @click="renameCurrent">{{ t('ai.rename') }}</van-button>
       <van-button size="mini" plain @click="openHistory">{{ t('ai.history') }}</van-button>
       <van-button size="mini" plain type="primary" @click="newChat">{{ t('ai.newChat') }}</van-button>
@@ -218,7 +270,12 @@ onMounted(() => { void loadConversations() })
         <div
           class="max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-relaxed shadow-sm"
           :class="m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-zinc-700'"
-        >{{ m.content }}</div>
+        >
+          {{ m.content }}
+          <div v-if="m.role === 'assistant'" class="mt-1 text-right">
+            <van-button size="mini" plain @click.stop="copyText(m.content)">{{ t('ai.copy') }}</van-button>
+          </div>
+        </div>
       </div>
       <div v-if="sending" class="text-xs text-zinc-400">{{ t('ai.thinking') }}</div>
     </div>

@@ -25,7 +25,55 @@ const mode = ref('')
 const hits = ref<KnowledgeHit[]>([])
 const docCount = ref<number | null>(null)
 
+const HISTORY_KEY = 'cenkormes_h5_ai_help_history'
+type HelpHistoryItem = { q: string; a: string; mode: string; at: string }
+const history = ref<HelpHistoryItem[]>([])
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    history.value = Array.isArray(parsed) ? parsed.slice(0, 20) : []
+  } catch {
+    history.value = []
+  }
+}
+
+// 问答历史只落在本人浏览器，避免服务端 /logs 里的全局日志跨账号可见
+function pushHistory(q: string, a: string) {
+  const item: HelpHistoryItem = {
+    q, a, mode: mode.value, at: new Date().toLocaleString(),
+  }
+  const next = [item, ...history.value.filter((h) => h.q !== q)].slice(0, 20)
+  history.value = next
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  } catch {
+    // 隐私模式 / 配额不足：内存里仍可用，忽略持久化失败
+  }
+}
+
+function replay(h: HelpHistoryItem) {
+  question.value = h.q
+  answer.value = h.a
+  mode.value = h.mode || ''
+  hits.value = []
+  notice.value = ''
+  searched.value = true
+}
+
+function clearHistory() {
+  history.value = []
+  try {
+    localStorage.removeItem(HISTORY_KEY)
+  } catch {
+    // 忽略
+  }
+  showToast(t('ai.helpHistoryCleared'))
+}
+
 onMounted(() => {
+  loadHistory()
   void getKnowledgeStatus()
     .then((r) => { docCount.value = typeof r.docs === 'number' ? r.docs : null })
     .catch(() => { /* 知识库扩展未开通时静默，提问时再降级 */ })
@@ -96,6 +144,7 @@ async function ask() {
     showToast(e instanceof Error ? e.message : t('ai.helpAskFailed'))
   } finally {
     loading.value = false
+    if (answer.value) pushHistory(q, answer.value)
   }
 }
 </script>
@@ -148,6 +197,26 @@ async function ask() {
     </div>
     <div v-else-if="!searched && !loading" class="rounded-xl bg-white p-6 text-center text-xs text-zinc-400 shadow-sm">
       {{ t('ai.helpEmpty') }}
+    </div>
+
+    <div v-if="history.length" class="rounded-xl bg-white p-4 shadow-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div class="text-sm font-medium text-zinc-700">{{ t('ai.helpHistory') }}</div>
+        <van-button size="mini" plain @click="clearHistory">{{ t('ai.helpHistoryClear') }}</van-button>
+      </div>
+      <div class="mt-1 text-[10px] text-zinc-400">{{ t('ai.helpHistoryLocal') }}</div>
+      <div class="mt-2 space-y-2">
+        <div
+          v-for="(h, i) in history"
+          :key="i"
+          class="cursor-pointer rounded-lg bg-zinc-50 p-2 active:bg-zinc-100"
+          @click="replay(h)"
+        >
+          <div class="truncate text-xs text-zinc-700">{{ h.q }}</div>
+          <div class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ h.a }}</div>
+          <div class="mt-1 text-[10px] text-zinc-400">{{ h.at }}</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>

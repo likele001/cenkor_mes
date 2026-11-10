@@ -12,7 +12,11 @@ export type AiHelpOut = {
 
 export type AiChatOut = {
   conversation_id: number
-  reply: string
+  reply: string | null
+  available?: boolean
+  degraded?: boolean
+  error?: boolean
+  hint?: string
 }
 
 export type AlertItem = {
@@ -672,4 +676,34 @@ export function getKnowledgeStatus() {
     llm_note?: string
     degrade_reason?: string
   }>('/extensions/ai_knowledge/status')
+}
+
+// ── 第四批：扩展状态预检查 / 预警批量处置 ──────────────────────────────────
+
+export type AiExtensionStatus = {
+  key: string
+  installed: boolean
+  enabled: boolean
+  granted: boolean
+  permission: string
+}
+
+/** 智能中心首页一次性拿到各扩展「已安装 / 已启用 / 已授权」三态，避免逐页撞 403 */
+export function getAiExtensionStatus() {
+  return apiGet<{ items: AiExtensionStatus[]; installed_total: number }>('/h5/ai/extensions')
+}
+
+export type BatchHandleOut = {
+  ok: boolean
+  error?: string
+  status?: string
+  status_label?: string
+  succeeded: number[]
+  missing: number[]
+  total: number
+}
+
+/** 批量处置预警（最多 50 条），不存在的 id 通过 missing 回传 */
+export function batchHandleAlerts(ids: number[], status: string) {
+  return apiPost<BatchHandleOut>('/extensions/ai_anomaly/alerts/batch-handle', { ids, status })
 }
