@@ -117,6 +117,21 @@ function allowed(path: string) {
   return !!e && !blockedState(e)
 }
 
+// 现场 AI：拍照计数 / 缺陷分类 / 语音报工 / 报工校验 / 交班摘要都是嵌在报工流程里的，
+// 不是独立页面。智能中心至少要说清「在哪」，否则员工根本不知道厂里有这些能力。
+type FieldAi = { icon: string; name: string; desc: string; path: string }
+const fieldAiItems = computed<FieldAi[]>(() => [
+  { icon: '📷', name: t('ai.fieldAiCountName'), desc: t('ai.fieldAiCountDesc'), path: '/report' },
+  { icon: '🔍', name: t('ai.fieldAiDefectName'), desc: t('ai.fieldAiDefectDesc'), path: '/report' },
+  { icon: '🎤', name: t('ai.fieldAiVoiceName'), desc: t('ai.fieldAiVoiceDesc'), path: '/report' },
+  { icon: '🧮', name: t('ai.fieldAiCheckName'), desc: t('ai.fieldAiCheckDesc'), path: '/report-unit' },
+  { icon: '🌙', name: t('ai.fieldAiShiftName'), desc: t('ai.fieldAiShiftDesc'), path: '/home' },
+])
+
+function goFieldAi(item: FieldAi) {
+  void router.push(item.path)
+}
+
 function goPath(path: string) {
   const e = entryOf(path)
   if (e) go(e)
@@ -304,6 +319,26 @@ onMounted(async () => {
           v-if="blockedState(e) === 'denied' || blockedState(e) === 'local'"
           class="mt-1 truncate text-[9px] text-zinc-400"
         >{{ permOf(e) }}</div>
+      </div>
+    </div>
+
+    <div class="rounded-xl bg-white p-3 shadow-sm">
+      <div class="text-sm font-medium text-zinc-800">{{ t('ai.fieldAiTitle') }}</div>
+      <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">{{ t('ai.fieldAiSubtitle') }}</div>
+      <div class="mt-2 space-y-2">
+        <div
+          v-for="f in fieldAiItems"
+          :key="f.name"
+          class="flex items-center gap-2 rounded-lg bg-zinc-50 p-2 active:bg-zinc-100"
+          @click="goFieldAi(f)"
+        >
+          <span class="text-lg">{{ f.icon }}</span>
+          <div class="min-w-0 flex-1">
+            <div class="truncate text-[13px] font-medium text-zinc-800">{{ f.name }}</div>
+            <div class="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">{{ f.desc }}</div>
+          </div>
+          <span class="shrink-0 text-[11px] text-indigo-600">{{ t('ai.fieldAiGo') }}</span>
+        </div>
       </div>
     </div>
   </div>

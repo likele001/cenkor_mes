@@ -1004,3 +1004,20 @@ def test_h5_ai_contract_covers_batch21_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("hubDeniedTitle", "hubDeniedMsg", "hubDeniedCopy", "hubDeniedCopied"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+def test_h5_ai_contract_covers_batch23_capabilities():
+    """智能中心要点明「现场 AI 在哪」，否则员工根本不知道厂里有这些能力。"""
+    hub = (REPO / "frontend-h5/src/pages/AiHubPage.vue").read_text(encoding="utf-8")
+    for marker in ("const fieldAiItems = computed<FieldAi[]>(", "function goFieldAi(",
+                   '@click="goFieldAi(f)"', "photoAiCount" if False else "fieldAiItems"):
+        assert marker in hub, f"智能中心缺现场 AI 分区: {marker}"
+    # 五个能力都要有落点：报工页 / 逐件报工页 / 首页
+    for path in ("'/report'", "'/report-unit'", "'/home'"):
+        assert path in hub, f"现场 AI 缺少跳转路径 {path}"
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("fieldAiTitle", "fieldAiCountName", "fieldAiDefectName",
+                    "fieldAiVoiceName", "fieldAiCheckName", "fieldAiShiftName"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"
