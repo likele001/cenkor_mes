@@ -481,5 +481,8 @@ export default {
     runColExcerpt: "Excerpt",
     helpOpenDoc: "Open full text",
     alertFindDocs: "Find related docs",
+    convSearchPlaceholder: "Search conversation titles",
+    convSearchEmpty: "No matching conversations",
+    runFilterAll: "All",
   },
 }

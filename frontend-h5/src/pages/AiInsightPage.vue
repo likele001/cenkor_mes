@@ -28,6 +28,7 @@ const runsLoading = ref(false)
 const runs = ref<InsightRun[]>([])
 const selectMode = ref(false)
 const selected = ref<number[]>([])
+const runAxis = ref('')
 
 function descOf(code: string) {
   return axes.value.find((a) => a.code === code)?.desc || ''
@@ -61,7 +62,7 @@ async function openRuns() {
   runsOpen.value = true
   runsLoading.value = true
   try {
-    const r = await listInsightRuns({ page_size: 30 })
+    const r = await listInsightRuns({ axis: runAxis.value || undefined, page_size: 30 })
     runs.value = r.items || []
   } catch {
     runs.value = []
@@ -160,6 +161,12 @@ function exportRuns() {
   } catch {
     showToast(t('ai.exportFailed'))
   }
+}
+
+function pickRunAxis(code: string) {
+  runAxis.value = runAxis.value === code ? '' : code
+  selected.value = []
+  void openRuns()
 }
 
 function toggleSelectMode() {
@@ -273,7 +280,8 @@ onMounted(load)
     </div>
 
     <van-popup v-model:show="runsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
-      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+      <div class="flex h-full flex-col">
+      <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
         <div class="text-sm font-medium text-zinc-800">{{ t('ai.runs') }}</div>
         <div class="flex shrink-0 gap-1">
           <van-button size="mini" plain @click="toggleSelectMode">
@@ -283,9 +291,23 @@ onMounted(load)
           <van-button size="mini" plain @click="openRuns">{{ t('ai.refresh') }}</van-button>
         </div>
       </div>
+      <div v-if="axes.length" class="flex shrink-0 flex-wrap gap-1 border-b border-zinc-100 px-4 py-2">
+        <span
+          class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"
+          :class="runAxis === '' ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
+          @click="pickRunAxis('')"
+        >{{ t('ai.runFilterAll') }}</span>
+        <span
+          v-for="a in axes"
+          :key="a.code"
+          class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"
+          :class="runAxis === a.code ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
+          @click="pickRunAxis(a.code)"
+        >{{ a.name }}</span>
+      </div>
       <div
         v-if="selectMode"
-        class="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-2 text-[11px] text-zinc-500"
+        class="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-4 py-2 text-[11px] text-zinc-500"
       >
         <span class="cursor-pointer text-indigo-600" @click="toggleAll">
           {{ selected.length === runs.length && runs.length ? t('ai.selectNone') : t('ai.selectAll') }}
@@ -295,10 +317,7 @@ onMounted(load)
           {{ t('ai.runBatchDelete') }}
         </van-button>
       </div>
-      <div
-        class="overflow-y-auto px-3 py-2"
-        :class="selectMode ? 'h-[calc(100%-93px)]' : 'h-[calc(100%-49px)]'"
-      >
+      <div class="flex-1 overflow-y-auto px-3 py-2">
         <div v-if="runsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
         <van-empty v-else-if="!runs.length" :description="t('ai.noRuns')" />
         <div v-else class="space-y-2">
@@ -329,6 +348,7 @@ onMounted(load)
             <div class="mt-1 text-[10px] text-zinc-400">{{ r.created_at || '' }}</div>
           </div>
         </div>
+      </div>
       </div>
     </van-popup>
   </div>

@@ -481,5 +481,8 @@ export default {
     runColExcerpt: "요약",
     helpOpenDoc: "전문 열기",
     alertFindDocs: "관련 문서 찾기",
+    convSearchPlaceholder: "대화 제목 검색",
+    convSearchEmpty: "일치하는 대화가 없습니다",
+    runFilterAll: "전체",
   },
 }

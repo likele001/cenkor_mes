@@ -547,3 +547,22 @@ def test_h5_ai_contract_covers_batch9_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("helpOpenDoc", "alertFindDocs"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第十批：会话搜索与洞察历史维度筛选 ──────────────────────────────────────
+
+def test_h5_ai_contract_covers_batch10_capabilities():
+    """筛选要真的带进请求、列表要真的用过滤结果，否则界面点着没反应。"""
+    chat = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    assert "const filteredConversations = computed" in chat
+    assert 'v-for="c in filteredConversations"' in chat
+    assert "historyKeyword.trim() ? t('ai.convSearchEmpty')" in chat
+
+    insight = (REPO / "frontend-h5/src/pages/AiInsightPage.vue").read_text(encoding="utf-8")
+    assert "const runAxis = ref('')" in insight
+    assert "listInsightRuns({ axis: runAxis.value || undefined, page_size: 30 })" in insight
+    assert "function pickRunAxis(code: string)" in insight
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("convSearchPlaceholder", "convSearchEmpty", "runFilterAll"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

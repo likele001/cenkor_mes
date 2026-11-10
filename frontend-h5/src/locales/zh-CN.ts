@@ -481,5 +481,8 @@ export default {
     runColExcerpt: "摘要",
     helpOpenDoc: "打开全文",
     alertFindDocs: "查相关制度",
+    convSearchPlaceholder: "搜索会话标题",
+    convSearchEmpty: "没有匹配的会话",
+    runFilterAll: "全部",
   },
 }

@@ -30,6 +30,16 @@ const historyLoading = ref(false)
 const renamingId = ref<number | null>(null)
 const renameText = ref('')
 const renaming = ref(false)
+const historyKeyword = ref('')
+
+// 会话多了靠翻是找不着「上次问设备那次」的，标题过滤最省事
+const filteredConversations = computed(() => {
+  const kw = historyKeyword.value.trim().toLowerCase()
+  if (!kw) return conversations.value
+  return conversations.value.filter(
+    (c) => (c.title || t('ai.convTitle', { n: c.id })).toLowerCase().includes(kw),
+  )
+})
 
 const currentTitle = computed(() => {
   if (!convId.value) return t('ai.newChat')
@@ -297,15 +307,27 @@ onMounted(() => { void loadConversations() })
     </div>
 
     <van-popup v-model:show="historyOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
-      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+      <div class="flex h-full flex-col">
+      <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3">
         <div class="text-sm font-medium text-zinc-800">{{ t('ai.history') }}</div>
         <van-button size="mini" plain @click="loadConversations">{{ t('ai.refresh') }}</van-button>
       </div>
-      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+      <div class="shrink-0 px-3 pt-2">
+        <van-field
+          v-model="historyKeyword"
+          :placeholder="t('ai.convSearchPlaceholder')"
+          clearable
+          class="!px-0"
+        />
+      </div>
+      <div class="flex-1 overflow-y-auto px-3 py-2">
         <div v-if="historyLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
-        <van-empty v-else-if="!conversations.length" :description="t('ai.noHistory')" />
+        <van-empty
+          v-else-if="!filteredConversations.length"
+          :description="historyKeyword.trim() ? t('ai.convSearchEmpty') : t('ai.noHistory')"
+        />
         <div v-else class="space-y-2">
-          <div v-for="c in conversations" :key="c.id" class="rounded-xl bg-zinc-50 p-3" @click="openConversation(c.id)">
+          <div v-for="c in filteredConversations" :key="c.id" class="rounded-xl bg-zinc-50 p-3" @click="openConversation(c.id)">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm text-zinc-800">{{ c.title || t('ai.convTitle', { n: c.id }) }}</div>
@@ -325,6 +347,7 @@ onMounted(() => { void loadConversations() })
             </div>
           </div>
         </div>
+      </div>
       </div>
     </van-popup>
   </div>
