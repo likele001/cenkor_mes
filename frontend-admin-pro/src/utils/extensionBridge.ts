@@ -12,27 +12,42 @@
  *
  * 接口契约：HTTP 200 + body.code（成功 200）。业务失败必须 reject，
  * 不能把错误体当成功数据吞掉——否则页面只会显示「共 0 条」而无任何提示。
+ *
+ * 标签解析：插件常以 h("el-table-column") 之类的字符串写标签，而 Vue 的 h()
+ * 只把字符串当原生元素（不做组件名解析）。元素型 vnode 的 slots 对象会在
+ * normalizeChildren 里被无参调用 slot()，形如 ({ row }) => ... 的列插槽因此抛
+ * Cannot destructure property 'row' of 'undefined'，见下方 extH。
  */
 import * as Vue from 'vue'
 import axios from 'axios'
 import {
-  ElButton, ElDatePicker, ElDialog, ElForm, ElFormItem, ElInput,
-  ElInputNumber, ElMessage, ElOption, ElRadioButton, ElRadioGroup,
-  ElSelect, ElTable, ElTableColumn,
+  ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem,
+  ElDialog, ElDrawer, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage,
+  ElOption, ElPagination, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch,
+  ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
 } from 'element-plus'
+import 'element-plus/es/components/alert/style/css'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/date-picker/style/css'
+import 'element-plus/es/components/descriptions/style/css'
+import 'element-plus/es/components/descriptions-item/style/css'
 import 'element-plus/es/components/dialog/style/css'
+import 'element-plus/es/components/drawer/style/css'
 import 'element-plus/es/components/form/style/css'
 import 'element-plus/es/components/form-item/style/css'
 import 'element-plus/es/components/input/style/css'
 import 'element-plus/es/components/input-number/style/css'
 import 'element-plus/es/components/option/style/css'
+import 'element-plus/es/components/pagination/style/css'
 import 'element-plus/es/components/radio-button/style/css'
 import 'element-plus/es/components/radio-group/style/css'
 import 'element-plus/es/components/select/style/css'
+import 'element-plus/es/components/switch/style/css'
+import 'element-plus/es/components/tab-pane/style/css'
 import 'element-plus/es/components/table/style/css'
 import 'element-plus/es/components/table-column/style/css'
+import 'element-plus/es/components/tabs/style/css'
+import 'element-plus/es/components/tag/style/css'
 import { clearToken, getToken } from '@/utils/token'
 
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -157,12 +172,56 @@ function extToast(message: string, type: string = 'info') {
   ElMessage({ message: String(message), type: t })
 }
 
+/** 插件可用 h("el-xxx") 字符串标签 → 真实组件；未注册的标签保持原生元素并告警一次 */
+const EXT_TAGS: Record<string, Vue.Component> = {
+  'el-alert': ElAlert,
+  'el-button': ElButton,
+  'el-date-picker': ElDatePicker,
+  'el-descriptions': ElDescriptions,
+  'el-descriptions-item': ElDescriptionsItem,
+  'el-dialog': ElDialog,
+  'el-drawer': ElDrawer,
+  'el-form': ElForm,
+  'el-form-item': ElFormItem,
+  'el-input': ElInput,
+  'el-input-number': ElInputNumber,
+  'el-option': ElOption,
+  'el-pagination': ElPagination,
+  'el-radio-button': ElRadioButton,
+  'el-radio-group': ElRadioGroup,
+  'el-select': ElSelect,
+  'el-switch': ElSwitch,
+  'el-tab-pane': ElTabPane,
+  'el-table': ElTable,
+  'el-table-column': ElTableColumn,
+  'el-tabs': ElTabs,
+  'el-tag': ElTag,
+}
+
+const warnedTags = new Set<string>()
+function resolveExtTag(type: unknown) {
+  if (typeof type !== 'string' || !type.startsWith('el-')) return type
+  const component = EXT_TAGS[type]
+  if (component) return component
+  if (!warnedTags.has(type)) {
+    warnedTags.add(type)
+    console.warn(`[extensions] 宿主桥未暴露组件 ${type}，请在 extensionBridge.ts 注册后重新打包`)
+  }
+  return type
+}
+
+/** 替插件兜住「字符串当组件」的写法：字符串标签按 EXT_TAGS 解析，其余原样交给 Vue.h */
+const extH = ((type: any, props?: any, children?: any) =>
+  Vue.h(resolveExtTag(type) as Vue.Component, props, children)) as typeof Vue.h
+
 /** 插件通过 window.Vue 取 h/ref/... 与 Element Plus 组件 */
 const sharedVue = {
   ...Vue,
-  ElButton, ElTable, ElTableColumn, ElInput, ElInputNumber,
-  ElSelect, ElOption, ElDialog, ElForm, ElFormItem,
-  ElRadioGroup, ElRadioButton, ElDatePicker,
+  h: extH,
+  ElAlert, ElButton, ElDatePicker, ElDescriptions, ElDescriptionsItem,
+  ElDialog, ElDrawer, ElForm, ElFormItem, ElInput, ElInputNumber,
+  ElOption, ElPagination, ElRadioButton, ElRadioGroup, ElSelect, ElSwitch,
+  ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
 }
 
 /** 在 app.mount 之前调用；插件注入发生在登录后的 ensureExtensionsLoaded() */

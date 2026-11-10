@@ -151,8 +151,8 @@
       <div v-loading="agingLoading">
         <div class="mb-2">
           <el-radio-group v-model="agingDirection" size="small" @change="loadAging">
-            <el-radio-button label="ar">{{ t('finance.aging.ar') }}</el-radio-button>
-            <el-radio-button label="ap">{{ t('finance.aging.ap') }}</el-radio-button>
+            <el-radio-button value="ar">{{ t('finance.aging.ar') }}</el-radio-button>
+            <el-radio-button value="ap">{{ t('finance.aging.ap') }}</el-radio-button>
           </el-radio-group>
         </div>
         <div class="text-xs text-el-placeholder mb-3">{{ t('finance.aging.asOf') }} {{ aging.as_of }}</div>

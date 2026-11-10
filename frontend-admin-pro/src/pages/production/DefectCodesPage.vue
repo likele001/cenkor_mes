@@ -124,59 +124,23 @@ onMounted(load)
 
     <div class="mt-4" v-loading="loading">
       <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
+        <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
+          <el-option label="全部行业" value="" />
+          <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
+        </el-select>
+      </div>
     <el-table class="hidden lg:block w-full" :data="items" border>
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column prop="id" label="ID" width="70" />
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column prop="code" :label="t('production.defectCodes.code')" width="140" />
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column prop="name" :label="t('production.defectCodes.name')" min-width="180" />
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column label="严重程度" width="120">
           <template #default="{ row }">
             <el-tag :type="severityType(row.severity)">{{ severityLabel(row.severity) }}</el-tag>
           </template>
         </el-table-column>
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column prop="description" :label="t('production.defectCodes.description')" min-width="200">
           <template #default="{ row }">{{ row.description || '—' }}</template>
         </el-table-column>
-        <div style="margin-bottom:15px">
-      <el-select v-model="industryFilter" placeholder="全部行业" clearable style="width:140px" @change="load">
-        <el-option label="全部行业" value="" />
-        <el-option v-for="ind in activeIndustries" :key="ind.code" :label="ind.name" :value="ind.code" />
-      </el-select>
-    </div>
     <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="openEdit(row)">{{ t('production.defectCodes.edit') }}</el-button>
