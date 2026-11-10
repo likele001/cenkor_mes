@@ -792,3 +792,25 @@ def test_h5_ai_contract_covers_batch15_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("docsSortUpdated", "docsVecNone", "hubRecent"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+# ── 第十六批：首页今日概览 ──────────────────────────────────────────────────
+
+def test_h5_ai_contract_covers_batch16_capabilities():
+    """概览只允许向「当前用户能进」的扩展取数，且失败不能拖垮首页。"""
+    hub = (REPO / "frontend-h5/src/pages/AiHubPage.vue").read_text(encoding="utf-8")
+
+    for marker in ("getAnomalySummary", "employeeOverview"):
+        assert marker in hub, f"首页概览缺少数据源: {marker}"
+
+    # 取数前必须过 allowed()（扩展未开通 / 停用 / 未授权时不发请求）
+    assert "if (allowed('/ai-alerts'))" in hub
+    assert "if (allowed('/ai-employees'))" in hub
+    # 任一接口失败只少一项，不许抛到调用方
+    assert hub.count("} catch {") >= 2
+    assert "overview.value = { health: null, active: null, runs: null }" in hub, "刷新前必须清空旧值"
+
+    for key in ("hubOverview", "hubMetricHealth", "hubMetricActive", "hubMetricRuns"):
+        for loc in ("zh-CN", "en-US", "ko-KR"):
+            pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

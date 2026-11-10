@@ -8,7 +8,10 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { showToast } from 'vant'
 import { useAuthStore } from '@/stores/auth'
-import { getAiExtensionStatus, type AiExtensionStatus } from '@/api/ai'
+import {
+  employeeOverview, getAiExtensionStatus, getAnomalySummary,
+  type AiExtensionStatus,
+} from '@/api/ai'
 
 type Entry = {
   path: string
@@ -86,6 +89,66 @@ const recentEntries = computed<Entry[]>(() =>
     .filter((e): e is Entry => !!e && !blockedState(e)),
 )
 
+// 今日概览：只向「当前用户确实能进」的扩展取数；任一接口失败就当作没这项，
+// 不能让某个扩展挂掉把首页拖成白屏（员工端最需要的是能点进去，而不是看指标）
+const overview = ref<{ health: number | null; active: number | null; runs: number | null }>({
+  health: null,
+  active: null,
+  runs: null,
+})
+
+const hasOverview = computed(
+  () => overview.value.health !== null || overview.value.active !== null || overview.value.runs !== null,
+)
+
+function healthTone(score: number) {
+  if (score >= 80) return 'text-emerald-600'
+  if (score >= 60) return 'text-amber-600'
+  return 'text-rose-600'
+}
+
+function entryOf(path: string) {
+  return entries.value.find((x) => x.path === path)
+}
+
+function allowed(path: string) {
+  const e = entryOf(path)
+  return !!e && !blockedState(e)
+}
+
+function goPath(path: string) {
+  const e = entryOf(path)
+  if (e) go(e)
+}
+
+async function loadOverview() {
+  // 先清空：权限被收回后不能还留着上一次的数字
+  overview.value = { health: null, active: null, runs: null }
+  const jobs: Promise<void>[] = []
+  if (allowed('/ai-alerts')) {
+    jobs.push((async () => {
+      try {
+        const sum = await getAnomalySummary()
+        overview.value.health = typeof sum.health_score === 'number' ? sum.health_score : null
+        overview.value.active = typeof sum.total_active === 'number' ? sum.total_active : null
+      } catch {
+        // 预警扩展不可用：概览少一项，不影响进入
+      }
+    })())
+  }
+  if (allowed('/ai-employees')) {
+    jobs.push((async () => {
+      try {
+        const o = await employeeOverview()
+        overview.value.runs = typeof o.runs_last_24h === 'number' ? o.runs_last_24h : null
+      } catch {
+        // 数字员工扩展不可用：同上
+      }
+    })())
+  }
+  await Promise.all(jobs)
+}
+
 // 后端状态不可用时退回本地权限判断，避免接口异常把整页卡死
 function localLocked(e: Entry) {
   return !!e.perm && auth.permissions.length > 0 && !auth.hasPermission(e.perm)
@@ -135,6 +198,7 @@ async function check() {
     for (const it of r.items || []) map[it.key] = it
     statuses.value = map
     checked.value = true
+    await loadOverview()
   } catch {
     checked.value = false
   } finally {
@@ -159,6 +223,28 @@ onMounted(async () => {
         <span class="shrink-0 cursor-pointer underline opacity-90" @click="check">
           {{ checking ? t('ai.loading') : t('ai.hubStatusRefresh') }}
         </span>
+      </div>
+    </div>
+    <div v-if="hasOverview" class="rounded-xl bg-white p-3 shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] text-zinc-400">{{ t('ai.hubOverview') }}</span>
+        <span class="cursor-pointer text-[10px] text-zinc-400" @click="check">
+          {{ checking ? t('ai.loading') : t('ai.hubStatusRefresh') }}
+        </span>
+      </div>
+      <div class="mt-2 grid grid-cols-3 gap-2 text-center">
+        <div v-if="overview.health !== null">
+          <div class="text-lg font-semibold" :class="healthTone(overview.health)">{{ overview.health }}</div>
+          <div class="text-[10px] text-zinc-400">{{ t('ai.hubMetricHealth') }}</div>
+        </div>
+        <div v-if="overview.active !== null" class="cursor-pointer" @click="goPath('/ai-alerts')">
+          <div class="text-lg font-semibold text-orange-600">{{ overview.active }}</div>
+          <div class="text-[10px] text-zinc-400">{{ t('ai.hubMetricActive') }}</div>
+        </div>
+        <div v-if="overview.runs !== null" class="cursor-pointer" @click="goPath('/ai-employees')">
+          <div class="text-lg font-semibold text-emerald-600">{{ overview.runs }}</div>
+          <div class="text-[10px] text-zinc-400">{{ t('ai.hubMetricRuns') }}</div>
+        </div>
       </div>
     </div>
     <div v-if="recentEntries.length" class="rounded-xl bg-white p-3 shadow-sm">
