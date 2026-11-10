@@ -3,8 +3,9 @@
   SPDX-License-Identifier: AGPL-3.0
 -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import {
   getKnowledgeDoc, knowledgeAsk, listKnowledgeDocs,
@@ -14,6 +15,7 @@ import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
+const route = useRoute()
 
 const loading = ref(true)
 const locked = ref(false)
@@ -167,8 +169,21 @@ const detailMeta = computed(() => {
   ].filter(Boolean).join(' · ')
 })
 
+// 从问答 / 预警跳过来时带 ?doc=<id> 直接开全文、?q=<词> 预填搜索
+async function applyQuery() {
+  const q = typeof route.query.q === 'string' ? route.query.q : ''
+  const docId = Number(route.query.doc || 0)
+  if (q) keyword.value = q
+  await load()
+  if (docId > 0) await openDoc(docId)
+}
+
 onMounted(() => {
-  void load()
+  void applyQuery()
+})
+
+watch(() => [route.query.doc, route.query.q], () => {
+  void applyQuery()
 })
 </script>
 

@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import {
   aiHelp, getKnowledgeStatus, knowledgeAsk, knowledgeSearch, listKnowledgeLogs,
@@ -13,6 +14,7 @@ import {
 import { isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const question = ref('')
 const loading = ref(false)
@@ -117,6 +119,12 @@ async function fallback(q: string) {
   }
 }
 
+// 依据来源直达全文：答案里的《文档名》要能点开，不然还得自己去资料页翻
+function openSourceDoc(h: KnowledgeHit) {
+  if (!h.doc_id) return
+  void router.push({ name: 'aiDocs', query: { doc: String(h.doc_id) } })
+}
+
 function renderSearchHits(list: KnowledgeHit[]) {
   if (!list.length) return t('ai.helpNoResult')
   return list.map((h, i) => `${i + 1}. 《${h.title}》：${h.excerpt || h.text || ''}`).join('\n\n')
@@ -215,7 +223,12 @@ async function ask() {
             <span class="shrink-0 text-[10px] text-zinc-400">{{ t('ai.helpScore', { v: (h.score ?? 0).toFixed(2) }) }}</span>
           </div>
           <div v-if="h.excerpt || h.text" class="mt-1 line-clamp-3 text-[11px] text-zinc-500">{{ h.excerpt || h.text }}</div>
-          <div class="mt-1 text-[10px] text-zinc-400">{{ t('ai.helpSeq', { n: h.seq }) }}<span v-if="h.scope"> · {{ h.scope }}</span></div>
+          <div class="mt-1 flex items-center justify-between gap-2">
+            <div class="text-[10px] text-zinc-400">{{ t('ai.helpSeq', { n: h.seq }) }}<span v-if="h.scope"> · {{ h.scope }}</span></div>
+            <van-button v-if="h.doc_id" size="mini" plain type="primary" @click="openSourceDoc(h)">
+              {{ t('ai.helpOpenDoc') }}
+            </van-button>
+          </div>
         </div>
       </div>
     </div>

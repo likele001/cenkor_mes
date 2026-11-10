@@ -520,3 +520,30 @@ def test_h5_ai_contract_covers_batch8_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("docsAskTitle", "docsAskFallback", "runExport", "runColExcerpt"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第九批：跨页溯源（问答依据 → 全文、预警 → 相关制度）─────────────────────
+
+def test_h5_ai_contract_covers_batch9_capabilities():
+    """答案里的《文档名》要能点开、预警要能直接查制度；跳转参数与落地页必须对得上。"""
+    help_page = (REPO / "frontend-h5/src/pages/HelpPage.vue").read_text(encoding="utf-8")
+    assert "function openSourceDoc(h: KnowledgeHit)" in help_page
+    assert "void router.push({ name: 'aiDocs', query: { doc: String(h.doc_id) } })" in help_page
+    assert "v-if=\"h.doc_id\"" in help_page  # 基础帮助的 sources 没有 doc_id，不能给死链
+
+    docs_page = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    assert "const docId = Number(route.query.doc || 0)" in docs_page
+    assert "if (docId > 0) await openDoc(docId)" in docs_page
+    assert "watch(() => [route.query.doc, route.query.q]" in docs_page
+
+    alerts_page = (REPO / "frontend-h5/src/pages/AiAlertsPage.vue").read_text(encoding="utf-8")
+    assert "function findDocs()" in alerts_page
+    assert "detail.value?.dim_label || detail.value?.title" in alerts_page
+
+    # 落地页路由名必须是 aiDocs，否则三处 router.push 全成死链
+    router = (REPO / "frontend-h5/src/router/index.ts").read_text(encoding="utf-8")
+    assert re.search(r"name: 'aiDocs'[^}]*AiDocsPage", router) or "aiDocs" in router
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("helpOpenDoc", "alertFindDocs"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

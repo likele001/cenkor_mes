@@ -479,5 +479,7 @@ export default {
     runColAxis: "Dimension",
     runColDays: "Days",
     runColExcerpt: "Excerpt",
+    helpOpenDoc: "Open full text",
+    alertFindDocs: "Find related docs",
   },
 }

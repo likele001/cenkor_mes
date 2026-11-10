@@ -479,5 +479,7 @@ export default {
     runColAxis: "维度",
     runColDays: "天数",
     runColExcerpt: "摘要",
+    helpOpenDoc: "打开全文",
+    alertFindDocs: "查相关制度",
   },
 }

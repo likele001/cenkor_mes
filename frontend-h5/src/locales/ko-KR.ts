@@ -479,5 +479,7 @@ export default {
     runColAxis: "항목",
     runColDays: "일수",
     runColExcerpt: "요약",
+    helpOpenDoc: "전문 열기",
+    alertFindDocs: "관련 문서 찾기",
   },
 }

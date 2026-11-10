@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
   batchHandleAlerts, getAlertDetail, getAnomalyOptions, getAnomalySummary,
@@ -15,6 +16,7 @@ import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const router = useRouter()
 const auth = useAuthStore()
 
 const loading = ref(true)
@@ -146,6 +148,13 @@ function exportAlertsCsv() {
   } catch {
     showToast(t('ai.exportFailed'))
   }
+}
+
+// 预警 → 相关制度：拿维度名（没有就用标题）去资料页搜，别让用户自己猜关键词
+function findDocs() {
+  const q = (detail.value?.dim_label || detail.value?.title || '').trim()
+  detailOpen.value = false
+  void router.push({ name: 'aiDocs', query: q ? { q } : {} })
 }
 
 async function scan() {
@@ -419,7 +428,10 @@ onMounted(async () => {
       <div class="flex h-full flex-col">
         <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
           <div class="text-sm font-medium text-zinc-800">{{ t('ai.detailTitle') }}</div>
-          <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.close') }}</van-button>
+          <div class="flex shrink-0 gap-1">
+            <van-button size="mini" plain type="primary" @click="findDocs">{{ t('ai.alertFindDocs') }}</van-button>
+            <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.close') }}</van-button>
+          </div>
         </div>
         <div class="flex-1 overflow-y-auto px-4 py-3">
           <div v-if="detailLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
