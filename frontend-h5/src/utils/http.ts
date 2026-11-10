@@ -86,6 +86,10 @@ export function apiPut<T>(url: string, data?: any, config?: AxiosRequestConfig) 
   return http.put<any, T>(url, data, config)
 }
 
+export function apiPatch<T>(url: string, data?: any, config?: AxiosRequestConfig) {
+  return http.patch<any, T>(url, data, config)
+}
+
 export function apiDelete<T>(url: string, config?: AxiosRequestConfig) {
   return http.delete<any, T>(url, config)
 }

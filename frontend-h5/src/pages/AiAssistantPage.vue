@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showToast } from 'vant'
 import {
   aiChat, deleteAssistantConversation, getAssistantConversation,
-  listAssistantConversations, type AssistantConversation,
+  listAssistantConversations, renameAssistantConversation, type AssistantConversation,
 } from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied, showAccessDenied } from '@/utils/extension-gate'
 
@@ -26,6 +26,9 @@ const convId = ref<number | null>(null)
 const conversations = ref<AssistantConversation[]>([])
 const historyOpen = ref(false)
 const historyLoading = ref(false)
+const renamingId = ref<number | null>(null)
+const renameText = ref('')
+const renaming = ref(false)
 
 const currentTitle = computed(() => {
   if (!convId.value) return t('ai.newChat')
@@ -80,6 +83,46 @@ function newChat() {
   convId.value = null
   historyOpen.value = false
   locked.value = false
+  renamingId.value = null
+}
+
+function startRename(id: number) {
+  const hit = conversations.value.find((c) => c.id === id)
+  renamingId.value = id
+  renameText.value = hit?.title || ''
+}
+
+async function renameCurrent() {
+  const id = convId.value
+  if (!id) return
+  historyOpen.value = true
+  historyLoading.value = true
+  await loadConversations()
+  historyLoading.value = false
+  startRename(id)
+}
+
+async function submitRename(id: number) {
+  const title = renameText.value.trim()
+  if (!title) {
+    showToast(t('ai.renameRequired'))
+    return
+  }
+  renaming.value = true
+  try {
+    const r = await renameAssistantConversation(id, title)
+    if (!r.ok) {
+      showToast(r.error || t('ai.renameFailed'))
+      return
+    }
+    renamingId.value = null
+    await loadConversations()
+    showToast(t('ai.renamed'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.renameFailed'))
+  } finally {
+    renaming.value = false
+  }
 }
 
 async function removeConversation(id: number) {
@@ -141,6 +184,7 @@ onMounted(() => { void loadConversations() })
   <div class="flex min-h-[70vh] flex-col">
     <div class="mb-2 flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm">
       <span class="min-w-0 flex-1 truncate text-xs text-zinc-600">{{ currentTitle }}</span>
+      <van-button v-if="convId" size="mini" plain @click="renameCurrent">{{ t('ai.rename') }}</van-button>
       <van-button size="mini" plain @click="openHistory">{{ t('ai.history') }}</van-button>
       <van-button size="mini" plain type="primary" @click="newChat">{{ t('ai.newChat') }}</van-button>
     </div>
@@ -201,7 +245,15 @@ onMounted(() => { void loadConversations() })
                   {{ t('ai.msgCount', { n: c.message_count ?? 0 }) }}<span v-if="c.updated_at"> · {{ c.updated_at }}</span>
                 </div>
               </div>
-              <van-button size="mini" plain type="danger" @click.stop="removeConversation(c.id)">{{ t('ai.delete') }}</van-button>
+              <div class="flex shrink-0 gap-1">
+                <van-button size="mini" plain @click.stop="startRename(c.id)">{{ t('ai.rename') }}</van-button>
+                <van-button size="mini" plain type="danger" @click.stop="removeConversation(c.id)">{{ t('ai.delete') }}</van-button>
+              </div>
+            </div>
+            <div v-if="renamingId === c.id" class="mt-2 flex items-center gap-2" @click.stop>
+              <van-field v-model="renameText" :placeholder="t('ai.renamePlaceholder')" maxlength="120" />
+              <van-button size="mini" type="primary" :loading="renaming" @click.stop="submitRename(c.id)">{{ t('ai.ok') }}</van-button>
+              <van-button size="mini" plain @click.stop="renamingId = null">{{ t('ai.close') }}</van-button>
             </div>
           </div>
         </div>

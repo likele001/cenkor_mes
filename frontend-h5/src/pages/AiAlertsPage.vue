@@ -22,7 +22,10 @@ const scanning = ref(false)
 const items = ref<AlertItem[]>([])
 const summary = ref<AnomalySummary | null>(null)
 const dimensions = ref<AnomalyOptionItem[]>([])
+const severities = ref<AnomalyOptionItem[]>([])
 const dim = ref('')
+const severity = ref('')
+const status = ref('all')
 const interpreting = ref(0)
 
 const canManage = computed(() => auth.hasPermission('ext.ai_anomaly.manage'))
@@ -43,13 +46,18 @@ async function load() {
   loading.value = true
   try {
     const [list, sum, opts] = await Promise.all([
-      listAiAlerts({ dim: dim.value || undefined }),
+      listAiAlerts({
+        dim: dim.value || undefined,
+        severity: severity.value || undefined,
+        status: status.value || undefined,
+      }),
       getAnomalySummary().catch(() => null),
       getAnomalyOptions().catch(() => null),
     ])
     items.value = list.items || []
     summary.value = sum
     dimensions.value = opts?.dimensions || []
+    severities.value = opts?.severities || []
     locked.value = false
   } catch (e: unknown) {
     items.value = []
@@ -65,6 +73,14 @@ async function load() {
 
 function selectDim(key: string) {
   dim.value = key
+  void load()
+}
+function selectSeverity(key: string) {
+  severity.value = key
+  void load()
+}
+function selectStatus(key: string) {
+  status.value = key
   void load()
 }
 
@@ -149,17 +165,47 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="dimensions.length" class="flex gap-2 overflow-x-auto pb-1">
-      <van-tag :plain="dim !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectDim('')">{{ t('ai.all') }}</van-tag>
-      <van-tag
-        v-for="d in dimensions"
-        :key="d.key"
-        :plain="dim !== d.key"
-        type="primary"
-        size="large"
-        class="shrink-0 cursor-pointer"
-        @click="selectDim(d.key)"
-      >{{ d.label }}</van-tag>
+    <div class="space-y-2 rounded-xl bg-white p-3 shadow-sm">
+      <div>
+        <div class="mb-1 text-[11px] text-zinc-400">{{ t('ai.filterStatus') }}</div>
+        <div class="flex gap-2 overflow-x-auto pb-1">
+          <van-tag :plain="status !== 'all'" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectStatus('all')">{{ t('ai.statusAll') }}</van-tag>
+          <van-tag :plain="status !== 'open'" type="warning" size="large" class="shrink-0 cursor-pointer" @click="selectStatus('open')">{{ t('ai.statusOpen') }}</van-tag>
+          <van-tag :plain="status !== 'acked'" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectStatus('acked')">{{ t('ai.statusAcked') }}</van-tag>
+          <van-tag :plain="status !== 'resolved'" type="success" size="large" class="shrink-0 cursor-pointer" @click="selectStatus('resolved')">{{ t('ai.statusResolved') }}</van-tag>
+          <van-tag :plain="status !== 'ignored'" type="default" size="large" class="shrink-0 cursor-pointer" @click="selectStatus('ignored')">{{ t('ai.statusIgnored') }}</van-tag>
+        </div>
+      </div>
+      <div v-if="severities.length">
+        <div class="mb-1 text-[11px] text-zinc-400">{{ t('ai.filterSeverity') }}</div>
+        <div class="flex gap-2 overflow-x-auto pb-1">
+          <van-tag :plain="severity !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectSeverity('')">{{ t('ai.sevAll') }}</van-tag>
+          <van-tag
+            v-for="s in severities"
+            :key="s.key"
+            :plain="severity !== s.key"
+            :type="sevType(s.key)"
+            size="large"
+            class="shrink-0 cursor-pointer"
+            @click="selectSeverity(s.key)"
+          >{{ sevText(s.key) }}</van-tag>
+        </div>
+      </div>
+      <div v-if="dimensions.length">
+        <div class="mb-1 text-[11px] text-zinc-400">{{ t('ai.dimension') }}</div>
+        <div class="flex gap-2 overflow-x-auto pb-1">
+          <van-tag :plain="dim !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectDim('')">{{ t('ai.all') }}</van-tag>
+          <van-tag
+            v-for="d in dimensions"
+            :key="d.key"
+            :plain="dim !== d.key"
+            type="primary"
+            size="large"
+            class="shrink-0 cursor-pointer"
+            @click="selectDim(d.key)"
+          >{{ d.label }}</van-tag>
+        </div>
+      </div>
     </div>
 
     <div v-if="loading" class="py-10 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>

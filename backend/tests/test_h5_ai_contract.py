@@ -31,8 +31,8 @@ AI_TS = REPO / "frontend-h5" / "src" / "api" / "ai.ts"
 EXT_DIR = BACKEND / "extensions"
 HAS_EXT = EXT_DIR.is_dir() and any(EXT_DIR.glob("*/router.py"))
 
-METHOD = {"apiGet": "get", "apiPost": "post", "apiPut": "put", "apiDelete": "delete"}
-CALL_RE = re.compile(r"api(Get|Post|Put|Delete)(?:<[^>]*>)?\(\s*(['\x60\"])([^'\x60\"]+)\2", re.S)
+METHOD = {"apiGet": "get", "apiPost": "post", "apiPut": "put", "apiPatch": "patch", "apiDelete": "delete"}
+CALL_RE = re.compile(r"api(Get|Post|Put|Patch|Delete)(?:<[^>]*>)?\(\s*(['\x60\"])([^'\x60\"]+)\2", re.S)
 ROUTE_RE = re.compile(r"@router\.(get|post|put|patch|delete)\(\s*['\x22]([^'\x22]+)['\x22]")
 
 
@@ -88,6 +88,62 @@ def test_h5_ai_contract_covers_new_capabilities():
     missing = sorted(required - calls)
     assert not missing, "缺少第二批能力封装: " + ", ".join(missing)
 
+
+
+def test_h5_ai_contract_covers_batch3_capabilities():
+    """第三批接入的能力必须真的在 ai.ts 里有封装，防止功能被回退掉。"""
+    calls = {(m, p) for m, p in _frontend_calls()}
+    required = {
+        ("patch", "/extensions/ai_assistant/conversations/{}"),
+        ("post", "/extensions/ai_knowledge/search"),
+        ("post", "/extensions/ai_knowledge/ask"),
+        ("get", "/extensions/ai_knowledge/status"),
+    }
+    missing = sorted(required - calls)
+    assert not missing, "缺少第三批能力封装: " + ", ".join(f"{m} {p}" for m, p in missing)
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_rename_conversation_rejects_blank(monkeypatch):
+    mod = _assistant()
+    db = MagicMock()
+    body = mod.ConversationRenameIn(title="   ")
+    out = mod.rename_conversation(7, body, db=db, user=MagicMock(id=3))["data"]
+    assert out["ok"] is False and out["updated"] is False
+    db.execute.assert_not_called()
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_rename_conversation_scoped_to_current_user(monkeypatch):
+    mod = _assistant()
+    db = MagicMock()
+    seen = {}
+
+    def fake_rows(_db, sql, **params):
+        seen["sql"], seen["params"] = sql, params
+        return []
+
+    monkeypatch.setattr(mod, "_rows", fake_rows)
+    body = mod.ConversationRenameIn(title="新标题")
+    out = mod.rename_conversation(7, body, db=db, user=MagicMock(id=3))["data"]
+    assert out["found"] is False and out["updated"] is False
+    assert "user_id=:uid" in seen["sql"]
+    assert seen["params"]["uid"] == 3 and seen["params"]["cid"] == 7
+    db.execute.assert_not_called()
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_rename_conversation_updates_owned(monkeypatch):
+    mod = _assistant()
+    db = MagicMock()
+    monkeypatch.setattr(mod, "_rows", lambda *a, **k: [{"id": 7}])
+    body = mod.ConversationRenameIn(title="  交接班问题  ")
+    out = mod.rename_conversation(7, body, db=db, user=MagicMock(id=3))["data"]
+    assert out["ok"] is True and out["title"] == "交接班问题"
+    sql, params = db.execute.call_args[0][0], db.execute.call_args[0][1]
+    assert "UPDATE ext_ai_conversations SET title=:t" in str(sql)
+    assert params["t"] == "交接班问题" and params["cid"] == 7
+    db.commit.assert_called_once()
 
 def _assistant():
     try:

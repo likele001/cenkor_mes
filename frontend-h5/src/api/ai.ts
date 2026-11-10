@@ -1,7 +1,7 @@
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
 // H5 侧 AI 能力统一走付费扩展 /extensions/*（飞书为核心免费能力，见 api/feishu.ts）
-import { apiDelete, apiGet, apiPost } from '@/utils/http'
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/utils/http'
 
 const AI_TIMEOUT_MS = 120_000
 
@@ -155,8 +155,14 @@ export function analyzeInsight(axis: string, days = 30) {
 
 // ── 异常预警 ───────────────────────────────────────────────────────────────
 
-export function listAiAlerts(params: { dim?: string; severity?: string } = {}) {
-  return apiGet<{ items?: AlertItem[]; total_active?: number }>(
+export function listAiAlerts(params: { dim?: string; severity?: string; status?: string } = {}) {
+  return apiGet<{
+    items?: AlertItem[]
+    total_active?: number
+    by_status?: { [key: string]: number }
+    by_severity?: { [key: string]: number }
+    status_labels?: { [key: string]: string }
+  }>(
     '/extensions/ai_anomaly/alerts',
     { params: { status: 'all', limit: 100, ...params }, timeout: 30_000 },
   )
@@ -582,4 +588,88 @@ export function previewSceneDoc(type: string, params: Record<string, unknown> = 
     suggestions?: string[]
     generated_at?: string
   }>('/extensions/ai_scene_reports/preview', { params: { type, ...params }, timeout: AI_TIMEOUT_MS })
+}
+
+// ── 第三批：会话重命名 / 知识库问答 / 预警筛选 ──────────────────────────────
+
+export function renameAssistantConversation(id: number, title: string) {
+  return apiPatch<{
+    ok: boolean
+    updated?: boolean
+    found?: boolean
+    id?: number
+    title?: string
+    error?: string
+  }>(`/extensions/ai_assistant/conversations/${id}`, { title })
+}
+
+export type KnowledgeHit = {
+  doc_id: number
+  title: string
+  seq: number
+  score: number
+  excerpt?: string
+  text?: string
+  scope?: string
+}
+
+export type KnowledgeSearchOut = {
+  ok: boolean
+  locked?: boolean
+  error?: string
+  query?: string
+  mode?: string
+  top_k?: number
+  hits?: KnowledgeHit[]
+  note?: string
+  degrade_reason?: string
+  searched_at?: string
+}
+
+export type KnowledgeAskOut = {
+  ok: boolean
+  locked?: boolean
+  error?: string
+  answered?: boolean
+  mode?: string
+  answer?: string
+  hits?: KnowledgeHit[]
+  ai_unavailable?: boolean
+  ai_model?: string
+  ai_disabled?: boolean
+  ai_hint?: string
+  note?: string
+  tokens_in?: number | null
+  tokens_out?: number | null
+  asked_at?: string
+}
+
+export function knowledgeSearch(query: string, topK = 5) {
+  return apiPost<KnowledgeSearchOut>(
+    '/extensions/ai_knowledge/search',
+    { query, top_k: topK },
+    { timeout: AI_TIMEOUT_MS },
+  )
+}
+
+export function knowledgeAsk(query: string, useLlm = true, topK = 5) {
+  return apiPost<KnowledgeAskOut>(
+    '/extensions/ai_knowledge/ask',
+    { query, use_llm: useLlm, top_k: topK },
+    { timeout: AI_TIMEOUT_MS },
+  )
+}
+
+export function getKnowledgeStatus() {
+  return apiGet<{
+    ok?: boolean
+    enabled?: boolean
+    docs?: number
+    vectorized?: number
+    chunks?: number
+    vectorized_docs?: number
+    mode_note?: string
+    llm_note?: string
+    degrade_reason?: string
+  }>('/extensions/ai_knowledge/status')
 }
