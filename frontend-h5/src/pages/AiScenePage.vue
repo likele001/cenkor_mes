@@ -5,8 +5,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { showDialog, showToast } from 'vant'
-import { generateSceneDoc, listSceneScenarios, type SceneScenario } from '@/api/ai'
+import { showConfirmDialog, showDialog, showToast } from 'vant'
+import {
+  deleteSceneDoc, generateSceneDoc, getSceneDoc, listSceneDocs, listSceneScenarios,
+  previewSceneDoc, type SceneDocItem, type SceneScenario,
+} from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -14,8 +17,43 @@ const { t } = useI18n()
 const loading = ref(true)
 const locked = ref(false)
 const running = ref('')
+const previewing = ref('')
 const scenarios = ref<SceneScenario[]>([])
 const values = ref<Record<string, Record<string, string>>>({})
+
+const docsOpen = ref(false)
+const docsLoading = ref(false)
+const docs = ref<SceneDocItem[]>([])
+
+function collectParams(s: SceneScenario): Record<string, unknown> {
+  const params: Record<string, unknown> = {}
+  for (const f of s.fields || []) {
+    const raw = (values.value[s.code]?.[f.key] ?? '').trim()
+    if (!raw) continue
+    params[f.key] = f.type === 'number' ? Number(raw) : raw
+  }
+  return params
+}
+
+function joinLines(parts: Array<string | undefined>) {
+  return parts.filter(Boolean).join('\n\n')
+}
+
+async function loadDocs() {
+  try {
+    const r = await listSceneDocs({ page_size: 30 })
+    docs.value = r.items || []
+  } catch {
+    docs.value = []
+  }
+}
+
+async function openDocs() {
+  docsOpen.value = true
+  docsLoading.value = true
+  await loadDocs()
+  docsLoading.value = false
+}
 
 async function load() {
   loading.value = true
@@ -44,14 +82,73 @@ async function load() {
   }
 }
 
+async function preview(s: SceneScenario) {
+  if (previewing.value) return
+  previewing.value = s.code
+  try {
+    const r = await previewSceneDoc(s.code, collectParams(s))
+    if (r.ok === false) {
+      showToast(r.error || t('ai.previewFailed'))
+      return
+    }
+    const facts = Object.entries(r.facts || {}).map(([k, v]) => `${k}：${String(v)}`).join('\n')
+    const text = joinLines([
+      r.rule_summary,
+      facts ? `${t('ai.facts')}：\n${facts}` : '',
+      r.risks?.length ? `${t('ai.risks')}：${r.risks.join('；')}` : '',
+    ]) || t('ai.noContent')
+    await showDialog({ title: t('ai.previewResult'), message: text, confirmButtonText: t('ai.ok') })
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameScene'))) {
+      showToast(e instanceof Error ? e.message : t('ai.previewFailed'))
+    }
+  } finally {
+    previewing.value = ''
+  }
+}
+
+async function openDoc(id: number) {
+  try {
+    const r = await getSceneDoc(id)
+    if (r.ok === false) {
+      showToast(r.error || t('ai.noContent'))
+      return
+    }
+    const text = joinLines([
+      r.report || r.summary || r.rule_summary,
+      r.risks?.length ? `${t('ai.risks')}：${r.risks.join('；')}` : '',
+      r.suggestions?.length ? `${t('ai.suggestions')}：${r.suggestions.join('；')}` : '',
+    ]) || t('ai.noContent')
+    await showDialog({ title: t('ai.docDetail'), message: text, confirmButtonText: t('ai.ok') })
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameScene'))) {
+      showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
+    }
+  }
+}
+
+async function removeDoc(id: number) {
+  try {
+    await showConfirmDialog({
+      title: t('ai.delete'),
+      message: t('ai.deleteDocConfirm'),
+      confirmButtonText: t('ai.ok'),
+    })
+  } catch {
+    return
+  }
+  try {
+    await deleteSceneDoc(id)
+    await loadDocs()
+    showToast(t('ai.docDeleted'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+  }
+}
+
 async function generate(s: SceneScenario) {
   if (running.value) return
-  const params: Record<string, unknown> = {}
-  for (const f of s.fields || []) {
-    const raw = (values.value[s.code]?.[f.key] ?? '').trim()
-    if (!raw) continue
-    params[f.key] = f.type === 'number' ? Number(raw) : raw
-  }
+  const params = collectParams(s)
   // 交期风险分析需要 plan_no 或 plan_id 才能定位计划，缺则提示
   if (s.code === 'plan_risk' && !params.plan_no && !params.plan_id) {
     showToast(t('ai.planNoRequired'))
@@ -73,6 +170,7 @@ async function generate(s: SceneScenario) {
       message: r.report || r.rule_summary || t('ai.noContent'),
       confirmButtonText: t('ai.ok'),
     })
+    void loadDocs()
   } catch (e: unknown) {
     if (!handleExtensionLocked(e, t('ai.nameScene')) && !isAccessDenied(e)) {
       showToast(e instanceof Error ? e.message : t('ai.generateFailed'))
@@ -89,9 +187,12 @@ onMounted(load)
 
 <template>
   <div class="space-y-3">
-    <div class="rounded-xl bg-white p-3 shadow-sm">
-      <div class="text-sm font-medium text-zinc-800">{{ t('ai.sceneTitle') }}</div>
-      <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.sceneSubtitle') }}</div>
+    <div class="flex items-start justify-between gap-2 rounded-xl bg-white p-3 shadow-sm">
+      <div class="min-w-0 flex-1">
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.sceneTitle') }}</div>
+        <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.sceneSubtitle') }}</div>
+      </div>
+      <van-button size="mini" plain @click="openDocs">{{ t('ai.docs') }}</van-button>
     </div>
 
     <div v-if="loading" class="py-10 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
@@ -104,37 +205,61 @@ onMounted(load)
     <van-empty v-else-if="!scenarios.length" :description="t('ai.noData')" />
 
     <template v-else>
-    <div v-for="s in scenarios" :key="s.code" class="rounded-xl bg-white p-3 shadow-sm">
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0 flex-1">
-          <div class="text-sm font-medium text-zinc-800">{{ s.name }}</div>
-          <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">{{ s.desc }}</div>
+      <div v-for="s in scenarios" :key="s.code" class="rounded-xl bg-white p-3 shadow-sm">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-zinc-800">{{ s.name }}</div>
+            <div class="mt-1 text-[11px] leading-relaxed text-zinc-500">{{ s.desc }}</div>
+          </div>
+          <div class="flex shrink-0 gap-1">
+            <van-button size="mini" plain :loading="previewing === s.code" @click="preview(s)">{{ t('ai.preview') }}</van-button>
+            <van-button size="mini" type="primary" plain :loading="running === s.code" @click="generate(s)">{{ t('ai.generate') }}</van-button>
+          </div>
         </div>
-        <van-button size="small" type="primary" plain :loading="running === s.code" @click="generate(s)">
-          {{ t('ai.generate') }}
-        </van-button>
-      </div>
-      <div v-if="s.fields && s.fields.length" class="mt-2 space-y-1">
-        <div v-for="f in s.fields" :key="f.key" class="flex items-center gap-2">
-          <span class="w-24 shrink-0 truncate text-[11px] text-zinc-500">{{ f.label }}</span>
-          <select
-            v-if="f.type === 'select'"
-            v-model="values[s.code][f.key]"
-            class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs"
-          >
-            <option value="">{{ t('ai.fieldOptional') }}</option>
-            <option v-for="o in f.options || []" :key="o" :value="o">{{ o }}</option>
-          </select>
-          <input
-            v-else
-            v-model="values[s.code][f.key]"
-            :type="f.type === 'number' ? 'number' : 'text'"
-            :placeholder="f.placeholder || t('ai.fieldOptional')"
-            class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs"
-          />
+        <div v-if="s.fields && s.fields.length" class="mt-2 space-y-1">
+          <div v-for="f in s.fields" :key="f.key" class="flex items-center gap-2">
+            <span class="w-24 shrink-0 truncate text-[11px] text-zinc-500">{{ f.label }}</span>
+            <select
+              v-if="f.type === 'select'"
+              v-model="values[s.code][f.key]"
+              class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs"
+            >
+              <option value="">{{ t('ai.fieldOptional') }}</option>
+              <option v-for="o in f.options || []" :key="o" :value="o">{{ o }}</option>
+            </select>
+            <input
+              v-else
+              v-model="values[s.code][f.key]"
+              :type="f.type === 'number' ? 'number' : 'text'"
+              :placeholder="f.placeholder || t('ai.fieldOptional')"
+              class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1 text-xs"
+            />
+          </div>
         </div>
       </div>
-    </div>
     </template>
+
+    <van-popup v-model:show="docsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
+      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.docs') }}</div>
+        <van-button size="mini" plain @click="openDocs">{{ t('ai.refresh') }}</van-button>
+      </div>
+      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+        <div v-if="docsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+        <van-empty v-else-if="!docs.length" :description="t('ai.noDocs')" />
+        <div v-else class="space-y-2">
+          <div v-for="d in docs" :key="d.id" class="rounded-xl bg-zinc-50 p-3" @click="openDoc(d.id)">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm text-zinc-800">{{ d.title }}</div>
+                <div v-if="d.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ d.excerpt }}</div>
+                <div class="mt-1 text-[10px] text-zinc-400">{{ d.type_name || d.doc_type }} · {{ d.created_at || '' }}</div>
+              </div>
+              <van-button size="mini" plain type="danger" @click.stop="removeDoc(d.id)">{{ t('ai.delete') }}</van-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
   </div>
 </template>

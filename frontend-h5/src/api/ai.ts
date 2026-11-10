@@ -1,7 +1,7 @@
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
 // H5 侧 AI 能力统一走付费扩展 /extensions/*（飞书为核心免费能力，见 api/feishu.ts）
-import { apiGet, apiPost } from '@/utils/http'
+import { apiDelete, apiGet, apiPost } from '@/utils/http'
 
 const AI_TIMEOUT_MS = 120_000
 
@@ -102,10 +102,20 @@ export function aiHelp(question: string) {
   }))
 }
 
-export function aiChat(data: { message: string; conversation_id?: number; model_code?: string }) {
+export function aiChat(data: {
+  message: string
+  conversation_id?: number | null
+  model_code?: string
+  kind?: string
+}) {
   return apiPost<{ reply?: string | null; conversation_id: number; hint?: string }>(
     '/extensions/ai_assistant/chat',
-    { message: data.message, kind: 'assistant', model_code: data.model_code },
+    {
+      message: data.message,
+      conversation_id: data.conversation_id ?? undefined,
+      kind: data.kind || 'assistant',
+      model_code: data.model_code,
+    },
     { timeout: AI_TIMEOUT_MS },
   ).then<AiChatOut>((r) => ({
     conversation_id: r.conversation_id,
@@ -145,10 +155,10 @@ export function analyzeInsight(axis: string, days = 30) {
 
 // ── 异常预警 ───────────────────────────────────────────────────────────────
 
-export function listAiAlerts() {
+export function listAiAlerts(params: { dim?: string; severity?: string } = {}) {
   return apiGet<{ items?: AlertItem[]; total_active?: number }>(
     '/extensions/ai_anomaly/alerts',
-    { params: { status: 'all', limit: 100 }, timeout: 30_000 },
+    { params: { status: 'all', limit: 100, ...params }, timeout: 30_000 },
   )
 }
 
@@ -386,4 +396,190 @@ export async function shiftAiSummary(data: { shift_start?: string; shift_hours?:
 export function attachmentIdToUrl(id: number, filename?: string): string {
   const name = filename ? `&filename=${encodeURIComponent(filename)}` : ''
   return `/api/files/${id}?download=true${name}`
+}
+
+// ── 第二批：接入后端已有能力（会话历史 / 概览 / 记录 / 归档 / 预览） ───────
+
+export type AssistantConversation = {
+  id: number
+  kind: string
+  title: string
+  created_at?: string
+  updated_at?: string
+  message_count?: number
+}
+
+export type AssistantMessage = {
+  id: number
+  role: string
+  content: string
+  created_at?: string
+}
+
+export function listAssistantConversations(kind = 'assistant') {
+  return apiGet<{ items?: AssistantConversation[]; count?: number }>(
+    '/extensions/ai_assistant/conversations',
+    { params: { kind } },
+  )
+}
+
+export function getAssistantConversation(id: number) {
+  return apiGet<{
+    conversation: AssistantConversation | null
+    items?: AssistantMessage[]
+    found: boolean
+  }>(`/extensions/ai_assistant/conversations/${id}`)
+}
+
+export function deleteAssistantConversation(id: number) {
+  return apiDelete<{ deleted: boolean; found: boolean }>(
+    `/extensions/ai_assistant/conversations/${id}`,
+  )
+}
+
+export type AnomalySummary = {
+  health_score?: number
+  total_active?: number
+  total_events?: number
+  total_resolved?: number
+  by_dimension?: Record<string, number>
+  generated_at?: string
+}
+
+export function getAnomalySummary() {
+  return apiGet<AnomalySummary>('/extensions/ai_anomaly/summary')
+}
+
+export type AnomalyOptionItem = { key: string; label: string; score?: number }
+export type AnomalyOptions = {
+  dimensions?: AnomalyOptionItem[]
+  severities?: AnomalyOptionItem[]
+  statuses?: AnomalyOptionItem[]
+}
+
+export function getAnomalyOptions() {
+  return apiGet<AnomalyOptions>('/extensions/ai_anomaly/options')
+}
+
+export function getAlertDetail(id: number) {
+  return apiGet<{ alert: AlertItem | null; found: boolean }>(
+    `/extensions/ai_anomaly/alerts/${id}`,
+  )
+}
+
+export function interpretAlert(id: number, refresh = false) {
+  return apiPost<{
+    found?: boolean
+    available?: boolean
+    insight?: string
+    hint?: string
+    cached?: boolean
+    degraded?: boolean
+    error?: boolean
+  }>(`/extensions/ai_anomaly/alerts/${id}/interpret`, { refresh }, { timeout: AI_TIMEOUT_MS })
+}
+
+export type InsightAxis = { code: string; name: string; desc?: string }
+
+export function listInsightAxes() {
+  return apiGet<{ enabled?: boolean; axes?: InsightAxis[]; default_days?: number; note?: string }>(
+    '/extensions/ai_insight/axes',
+  )
+}
+
+export type InsightRun = {
+  id: number
+  axis: string
+  axis_name?: string
+  days?: number
+  ai_unavailable?: boolean
+  duration_ms?: number
+  created_at?: string
+  excerpt?: string
+}
+
+export function listInsightRuns(params: { axis?: string; page?: number; page_size?: number } = {}) {
+  return apiGet<{ items?: InsightRun[]; total?: number; page?: number; page_size?: number }>(
+    '/extensions/ai_insight/runs',
+    { params },
+  )
+}
+
+export function getInsightRun(id: number) {
+  return apiGet<{
+    ok: boolean
+    error?: string
+    axis_name?: string
+    summary?: string
+    rule_summary?: string
+    report?: string
+    risks?: string[]
+    suggestions?: string[]
+    facts?: { [key: string]: unknown }
+    created_at?: string
+  }>(`/extensions/ai_insight/runs/${id}`)
+}
+
+export type EmployeeLog = {
+  id: number
+  tool_code?: string
+  tool_name?: string
+  status?: string
+  available?: boolean
+  summary?: string
+  duration_ms?: number
+  created_at?: string
+}
+
+export function listEmployeeLogs(params: { tool?: string; limit?: number; offset?: number } = {}) {
+  return apiGet<{ items?: EmployeeLog[]; count?: number; total?: number }>(
+    '/extensions/ai_employee/logs',
+    { params },
+  )
+}
+
+export function getEmployeeToggle() {
+  return apiGet<{ enabled: boolean }>('/extensions/ai_employee/toggle')
+}
+
+export type SceneDocItem = {
+  id: number
+  doc_type: string
+  title: string
+  type_name?: string
+  excerpt?: string
+  ai_unavailable?: boolean
+  created_at?: string
+}
+
+export function listSceneDocs(params: { type?: string; page?: number; page_size?: number } = {}) {
+  return apiGet<{ items?: SceneDocItem[]; total?: number; page?: number; page_size?: number }>(
+    '/extensions/ai_scene_reports/docs',
+    { params },
+  )
+}
+
+export function getSceneDoc(id: number) {
+  return apiGet<SceneDoc & { ok: boolean; error?: string; summary?: string; facts?: { [key: string]: unknown } }>(
+    `/extensions/ai_scene_reports/docs/${id}`,
+  )
+}
+
+export function deleteSceneDoc(id: number) {
+  return apiDelete<{ ok: boolean; id?: number; deleted?: boolean; error?: string }>(
+    `/extensions/ai_scene_reports/docs/${id}`,
+  )
+}
+
+export function previewSceneDoc(type: string, params: Record<string, unknown> = {}) {
+  return apiGet<{
+    ok: boolean
+    error?: string
+    title?: string
+    facts?: { [key: string]: unknown }
+    rule_summary?: string
+    risks?: string[]
+    suggestions?: string[]
+    generated_at?: string
+  }>('/extensions/ai_scene_reports/preview', { params: { type, ...params }, timeout: AI_TIMEOUT_MS })
 }

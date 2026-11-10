@@ -3,18 +3,29 @@
   SPDX-License-Identifier: AGPL-3.0
 -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
-import { handleAlert, listAiAlerts, runAiAlerts, type AlertItem } from '@/api/ai'
+import {
+  getAnomalyOptions, getAnomalySummary, handleAlert, interpretAlert, listAiAlerts, runAiAlerts,
+  type AlertItem, type AnomalyOptionItem, type AnomalySummary,
+} from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const auth = useAuthStore()
 
 const loading = ref(true)
 const locked = ref(false)
 const scanning = ref(false)
 const items = ref<AlertItem[]>([])
+const summary = ref<AnomalySummary | null>(null)
+const dimensions = ref<AnomalyOptionItem[]>([])
+const dim = ref('')
+const interpreting = ref(0)
+
+const canManage = computed(() => auth.hasPermission('ext.ai_anomaly.manage'))
 
 const SEV_TYPE: Record<string, 'danger' | 'warning' | 'primary'> = { critical: 'danger', high: 'danger', warning: 'warning', mid: 'warning', info: 'primary', low: 'primary' }
 
@@ -31,8 +42,14 @@ function sevType(s?: string) {
 async function load() {
   loading.value = true
   try {
-    const res = await listAiAlerts()
-    items.value = res.items || []
+    const [list, sum, opts] = await Promise.all([
+      listAiAlerts({ dim: dim.value || undefined }),
+      getAnomalySummary().catch(() => null),
+      getAnomalyOptions().catch(() => null),
+    ])
+    items.value = list.items || []
+    summary.value = sum
+    dimensions.value = opts?.dimensions || []
     locked.value = false
   } catch (e: unknown) {
     items.value = []
@@ -44,6 +61,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+function selectDim(key: string) {
+  dim.value = key
+  void load()
 }
 
 async function scan() {
@@ -70,6 +92,21 @@ async function openAlert(a: AlertItem) {
   await showDialog({ title: a.title, message: lines || t('ai.detailEmpty'), confirmButtonText: t('ai.ok') })
 }
 
+async function interpret(a: AlertItem) {
+  interpreting.value = a.id
+  try {
+    const r = await interpretAlert(a.id)
+    const text = r.insight || r.hint || t('ai.noInterpret')
+    await showDialog({ title: t('ai.aiInterpret'), message: text, confirmButtonText: t('ai.ok') })
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAlerts'))) {
+      showToast(e instanceof Error ? e.message : t('ai.interpretFailed'))
+    }
+  } finally {
+    interpreting.value = 0
+  }
+}
+
 async function resolveAlert(a: AlertItem) {
   try {
     await showConfirmDialog({ title: t('ai.resolveTitle'), message: t('ai.resolveConfirm', { title: a.title }), confirmButtonText: t('ai.ok') })
@@ -87,17 +124,42 @@ async function resolveAlert(a: AlertItem) {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  if (!auth.permissions.length) await auth.fetchMe()
+  await load()
+})
 </script>
 
 <template>
   <div class="space-y-3">
-    <div class="flex items-center justify-between rounded-xl bg-white p-3 shadow-sm">
-      <div>
-        <div class="text-sm font-medium text-zinc-800">{{ t('ai.alertsTitle') }}</div>
-        <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.alertsSubtitle') }}</div>
+    <div class="rounded-xl bg-white p-3 shadow-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <div class="text-sm font-medium text-zinc-800">{{ t('ai.alertsTitle') }}</div>
+          <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.alertsSubtitle') }}</div>
+        </div>
+        <van-button v-if="canManage" size="small" type="primary" plain :loading="scanning" :disabled="locked" @click="scan">{{ t('ai.scan') }}</van-button>
+        <van-tag v-else plain type="warning">{{ t('ai.manageOnly') }}</van-tag>
       </div>
-      <van-button size="small" type="primary" plain :loading="scanning" :disabled="locked" @click="scan">{{ t('ai.scan') }}</van-button>
+      <div v-if="summary" class="mt-3 grid grid-cols-4 gap-2 text-center">
+        <div><div class="text-base font-bold text-indigo-600">{{ summary.health_score ?? '-' }}</div><div class="text-[10px] text-zinc-500">{{ t('ai.healthScore') }}</div></div>
+        <div><div class="text-base font-bold text-orange-500">{{ summary.total_active ?? 0 }}</div><div class="text-[10px] text-zinc-500">{{ t('ai.activeAlerts') }}</div></div>
+        <div><div class="text-base font-bold text-green-600">{{ summary.total_resolved ?? 0 }}</div><div class="text-[10px] text-zinc-500">{{ t('ai.resolvedAlerts') }}</div></div>
+        <div><div class="text-base font-bold text-zinc-700">{{ summary.total_events ?? 0 }}</div><div class="text-[10px] text-zinc-500">{{ t('ai.totalEvents') }}</div></div>
+      </div>
+    </div>
+
+    <div v-if="dimensions.length" class="flex gap-2 overflow-x-auto pb-1">
+      <van-tag :plain="dim !== ''" type="primary" size="large" class="shrink-0 cursor-pointer" @click="selectDim('')">{{ t('ai.all') }}</van-tag>
+      <van-tag
+        v-for="d in dimensions"
+        :key="d.key"
+        :plain="dim !== d.key"
+        type="primary"
+        size="large"
+        class="shrink-0 cursor-pointer"
+        @click="selectDim(d.key)"
+      >{{ d.label }}</van-tag>
     </div>
 
     <div v-if="loading" class="py-10 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
@@ -125,8 +187,9 @@ onMounted(load)
           </div>
           <van-tag plain type="default">{{ a.status_label || a.status || t('ai.pending') }}</van-tag>
         </div>
-        <div v-if="a.status !== 'resolved'" class="mt-2 text-right">
-          <van-button size="mini" plain @click.stop="resolveAlert(a)">{{ t('ai.resolve') }}</van-button>
+        <div v-if="a.status !== 'resolved'" class="mt-2 flex justify-end gap-2">
+          <van-button size="mini" plain :loading="interpreting === a.id" @click.stop="interpret(a)">{{ t('ai.aiInterpret') }}</van-button>
+          <van-button v-if="canManage" size="mini" plain @click.stop="resolveAlert(a)">{{ t('ai.resolve') }}</van-button>
         </div>
       </div>
     </div>

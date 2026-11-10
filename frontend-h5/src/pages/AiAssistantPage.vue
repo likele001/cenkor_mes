@@ -3,10 +3,13 @@
   SPDX-License-Identifier: AGPL-3.0
 -->
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { showToast } from 'vant'
-import { aiChat } from '@/api/ai'
+import { showConfirmDialog, showToast } from 'vant'
+import {
+  aiChat, deleteAssistantConversation, getAssistantConversation,
+  listAssistantConversations, type AssistantConversation,
+} from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied, showAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -19,9 +22,84 @@ const locked = ref(false)
 const messages = ref<Array<{ role: 'user' | 'assistant'; content: string }>>([])
 const listEl = ref<HTMLElement | null>(null)
 
+const convId = ref<number | null>(null)
+const conversations = ref<AssistantConversation[]>([])
+const historyOpen = ref(false)
+const historyLoading = ref(false)
+
+const currentTitle = computed(() => {
+  if (!convId.value) return t('ai.newChat')
+  const hit = conversations.value.find((c) => c.id === convId.value)
+  return hit?.title || t('ai.currentConv', { id: convId.value })
+})
+
 async function scrollBottom() {
   await nextTick()
   if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
+}
+
+async function loadConversations() {
+  try {
+    const r = await listAssistantConversations()
+    conversations.value = r.items || []
+  } catch {
+    conversations.value = []
+  }
+}
+
+async function openHistory() {
+  historyOpen.value = true
+  historyLoading.value = true
+  await loadConversations()
+  historyLoading.value = false
+}
+
+async function openConversation(id: number) {
+  try {
+    const r = await getAssistantConversation(id)
+    if (!r.found) {
+      await loadConversations()
+      return
+    }
+    messages.value = (r.items || [])
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+    convId.value = id
+    historyOpen.value = false
+    locked.value = false
+    void scrollBottom()
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameAssistant'))) {
+      showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
+    }
+  }
+}
+
+function newChat() {
+  messages.value = []
+  convId.value = null
+  historyOpen.value = false
+  locked.value = false
+}
+
+async function removeConversation(id: number) {
+  try {
+    await showConfirmDialog({
+      title: t('ai.delete'),
+      message: t('ai.deleteConfirm'),
+      confirmButtonText: t('ai.ok'),
+    })
+  } catch {
+    return
+  }
+  try {
+    await deleteAssistantConversation(id)
+    if (convId.value === id) newChat()
+    await loadConversations()
+    showToast(t('ai.deleted'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+  }
 }
 
 async function send(text?: string) {
@@ -32,8 +110,10 @@ async function send(text?: string) {
   sending.value = true
   void scrollBottom()
   try {
-    const res = await aiChat({ message: msg })
+    const res = await aiChat({ message: msg, conversation_id: convId.value })
+    convId.value = res.conversation_id
     messages.value.push({ role: 'assistant', content: res.reply })
+    void loadConversations()
   } catch (e: unknown) {
     messages.value.pop()
     if (handleExtensionLocked(e, t('ai.nameAssistant'))) {
@@ -53,10 +133,18 @@ async function send(text?: string) {
 function retry() {
   locked.value = false
 }
+
+onMounted(() => { void loadConversations() })
 </script>
 
 <template>
   <div class="flex min-h-[70vh] flex-col">
+    <div class="mb-2 flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm">
+      <span class="min-w-0 flex-1 truncate text-xs text-zinc-600">{{ currentTitle }}</span>
+      <van-button size="mini" plain @click="openHistory">{{ t('ai.history') }}</van-button>
+      <van-button size="mini" plain type="primary" @click="newChat">{{ t('ai.newChat') }}</van-button>
+    </div>
+
     <div v-if="locked" class="rounded-xl bg-white p-6 text-center shadow-sm">
       <div class="text-sm text-zinc-600">{{ t('ai.lockedTitle', { name: t('ai.nameAssistant') }) }}</div>
       <div class="mt-2 text-xs text-zinc-400">{{ t('ai.lockedHint') }}</div>
@@ -95,5 +183,29 @@ function retry() {
       <van-field v-model="input" :placeholder="t('ai.inputPlaceholder')" :disabled="sending || locked" @keyup.enter="send()" />
       <van-button type="primary" :loading="sending" :disabled="locked || !input.trim()" @click="send()">{{ t('ai.send') }}</van-button>
     </div>
+
+    <van-popup v-model:show="historyOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
+      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.history') }}</div>
+        <van-button size="mini" plain @click="loadConversations">{{ t('ai.refresh') }}</van-button>
+      </div>
+      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+        <div v-if="historyLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+        <van-empty v-else-if="!conversations.length" :description="t('ai.noHistory')" />
+        <div v-else class="space-y-2">
+          <div v-for="c in conversations" :key="c.id" class="rounded-xl bg-zinc-50 p-3" @click="openConversation(c.id)">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm text-zinc-800">{{ c.title || t('ai.convTitle', { n: c.id }) }}</div>
+                <div class="mt-1 text-[11px] text-zinc-400">
+                  {{ t('ai.msgCount', { n: c.message_count ?? 0 }) }}<span v-if="c.updated_at"> · {{ c.updated_at }}</span>
+                </div>
+              </div>
+              <van-button size="mini" plain type="danger" @click.stop="removeConversation(c.id)">{{ t('ai.delete') }}</van-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
   </div>
 </template>

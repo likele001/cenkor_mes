@@ -6,7 +6,10 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showDialog, showToast } from 'vant'
-import { analyzeInsight, listAiInsight, type AiInsightItem } from '@/api/ai'
+import {
+  analyzeInsight, getInsightRun, listAiInsight, listInsightAxes, listInsightRuns,
+  type AiInsightItem, type InsightAxis, type InsightRun,
+} from '@/api/ai'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -14,15 +17,29 @@ const { t } = useI18n()
 const loading = ref(true)
 const locked = ref(false)
 const items = ref<AiInsightItem[]>([])
+const axes = ref<InsightAxis[]>([])
 const generatedAt = ref('')
 const analyzing = ref('')
+
+const runsOpen = ref(false)
+const runsLoading = ref(false)
+const runs = ref<InsightRun[]>([])
+
+function descOf(code: string) {
+  return axes.value.find((a) => a.code === code)?.desc || ''
+}
+
+function joinLines(parts: Array<string | undefined>) {
+  return parts.filter(Boolean).join('\n\n')
+}
 
 async function load() {
   loading.value = true
   try {
-    const r = await listAiInsight()
+    const [r, ax] = await Promise.all([listAiInsight(), listInsightAxes().catch(() => null)])
     items.value = r.items || []
     generatedAt.value = r.generated_at || ''
+    axes.value = ax?.axes || []
     locked.value = false
   } catch (e: unknown) {
     items.value = []
@@ -33,6 +50,39 @@ async function load() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+async function openRuns() {
+  runsOpen.value = true
+  runsLoading.value = true
+  try {
+    const r = await listInsightRuns({ page_size: 30 })
+    runs.value = r.items || []
+  } catch {
+    runs.value = []
+  } finally {
+    runsLoading.value = false
+  }
+}
+
+async function openRun(id: number) {
+  try {
+    const r = await getInsightRun(id)
+    if (r.ok === false) {
+      showToast(r.error || t('ai.noAnalysis'))
+      return
+    }
+    const text = joinLines([
+      r.summary || r.rule_summary || r.report,
+      r.risks?.length ? `${t('ai.risks')}：${r.risks.join('；')}` : '',
+      r.suggestions?.length ? `${t('ai.suggestions')}：${r.suggestions.join('；')}` : '',
+    ]) || t('ai.noAnalysis')
+    await showDialog({ title: t('ai.runDetail'), message: text, confirmButtonText: t('ai.ok') })
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameInsight'))) {
+      showToast(e instanceof Error ? e.message : t('ai.loadFailed'))
+    }
   }
 }
 
@@ -61,9 +111,14 @@ onMounted(load)
 <template>
   <div class="space-y-3">
     <div class="rounded-xl bg-white p-3 shadow-sm">
-      <div class="text-sm font-medium text-zinc-800">{{ t('ai.insightTitle') }}</div>
-      <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.insightSubtitle') }}</div>
-      <div v-if="generatedAt" class="mt-1 text-[11px] text-zinc-400">{{ t('ai.dataTime', { v: generatedAt }) }}</div>
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium text-zinc-800">{{ t('ai.insightTitle') }}</div>
+          <div class="mt-1 text-[11px] text-zinc-500">{{ t('ai.insightSubtitle') }}</div>
+          <div v-if="generatedAt" class="mt-1 text-[11px] text-zinc-400">{{ t('ai.dataTime', { v: generatedAt }) }}</div>
+        </div>
+        <van-button size="mini" plain @click="openRuns">{{ t('ai.runs') }}</van-button>
+      </div>
     </div>
 
     <div v-if="loading" class="py-10 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
@@ -80,6 +135,7 @@ onMounted(load)
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <div class="text-sm font-medium text-zinc-800">{{ it.name }}</div>
+            <div v-if="descOf(it.axis)" class="mt-1 text-[11px] text-zinc-400">{{ descOf(it.axis) }}</div>
             <div class="mt-1 text-xs leading-relaxed text-zinc-600">
               {{ it.headline || (it.error ? t('ai.fetchFailed', { v: it.error }) : t('ai.noData')) }}
             </div>
@@ -90,5 +146,28 @@ onMounted(load)
         </div>
       </div>
     </div>
+
+    <van-popup v-model:show="runsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
+      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+        <div class="text-sm font-medium text-zinc-800">{{ t('ai.runs') }}</div>
+        <van-button size="mini" plain @click="openRuns">{{ t('ai.refresh') }}</van-button>
+      </div>
+      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+        <div v-if="runsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
+        <van-empty v-else-if="!runs.length" :description="t('ai.noRuns')" />
+        <div v-else class="space-y-2">
+          <div v-for="r in runs" :key="r.id" class="rounded-xl bg-zinc-50 p-3" @click="openRun(r.id)">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm text-zinc-800">{{ r.axis_name || r.axis }}</div>
+                <div v-if="r.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ r.excerpt }}</div>
+              </div>
+              <van-tag plain type="primary">{{ t('ai.view') }}</van-tag>
+            </div>
+            <div class="mt-1 text-[10px] text-zinc-400">{{ r.created_at || '' }}</div>
+          </div>
+        </div>
+      </div>
+    </van-popup>
   </div>
 </template>
