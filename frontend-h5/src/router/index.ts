@@ -40,6 +40,7 @@ const mainChildren: RouteRecordRaw[] = [
   { path: 'ai-employees', name: 'aiEmployees', component: () => import('@/pages/AiEmployeesPage.vue'), meta: { title: 'AI 员工' } },
   { path: 'ai-insight', name: 'aiInsight', component: () => import('@/pages/AiInsightPage.vue'), meta: { title: '深度洞察' } },
   { path: 'ai-scene', name: 'aiScene', component: () => import('@/pages/AiScenePage.vue'), meta: { title: '场景文书' } },
+  { path: 'ai-docs', name: 'aiDocs', component: () => import('@/pages/AiDocsPage.vue'), meta: { title: '知识库' } },
   { path: 'customer', redirect: { name: 'customerOrder' } },
   {
     path: 'customer/order',

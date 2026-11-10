@@ -36,6 +36,7 @@ const entries = computed<Entry[]>(() => [
   { path: '/ai-employees', icon: '💬', color: 'text-green-500', title: t('ai.cardEmployeesTitle'), desc: t('ai.cardEmployeesDesc'), perm: 'ext.ai_employee.view', ext: 'ai_employee' },
   { path: '/ai-insight', icon: '📊', color: 'text-cyan-500', title: t('ai.cardInsightTitle'), desc: t('ai.cardInsightDesc'), perm: 'ext.ai_insight.view', ext: 'ai_insight' },
   { path: '/ai-scene', icon: '📝', color: 'text-amber-500', title: t('ai.cardSceneTitle'), desc: t('ai.cardSceneDesc'), perm: 'ext.ai_scene_reports.view', ext: 'ai_scene_reports' },
+  { path: '/ai-docs', icon: '📚', color: 'text-sky-500', title: t('ai.cardDocsTitle'), desc: t('ai.cardDocsDesc'), perm: 'ext.ai_knowledge.view', ext: 'ai_knowledge' },
   { path: '/help', icon: '💡', color: 'text-blue-500', title: t('ai.cardHelpTitle'), desc: t('ai.cardHelpDesc') },
 ])
 

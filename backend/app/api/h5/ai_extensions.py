@@ -26,6 +26,7 @@ AI_EXTENSIONS: tuple[tuple[str, str], ...] = (
     ("ai_employee", "ext.ai_employee.view"),
     ("ai_insight", "ext.ai_insight.view"),
     ("ai_scene_reports", "ext.ai_scene_reports.view"),
+    ("ai_knowledge", "ext.ai_knowledge.view"),
 )
 
 

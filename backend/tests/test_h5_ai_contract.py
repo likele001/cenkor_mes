@@ -398,3 +398,69 @@ def test_knowledge_logs_default_keeps_global_view(monkeypatch):
     assert out["mine"] is False
     assert "created_by" not in seen["sql"]
     assert "uid" not in seen["params"]
+
+
+# ── 第七批：知识库资料浏览 / 洞察批量清理 ──────────────────────────────────
+
+def test_h5_ai_contract_covers_batch7_capabilities():
+    """第七批防回退：资料页可列可读、入口与路由齐备，洞察历史支持多选批量删除。"""
+    src = AI_TS.read_text(encoding="utf-8")
+    for marker in ("listKnowledgeDocs", "getKnowledgeDoc(", "batchDeleteInsightRuns("):
+        assert marker in src, f"ai.ts 缺少第七批封装: {marker}"
+
+    docs_page = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    for marker in ("listKnowledgeDocs(", "getKnowledgeDoc(", "copyDetail(", "pickScope("):
+        assert marker in docs_page, f"资料页缺少第七批能力: {marker}"
+
+    router = (REPO / "frontend-h5/src/router/index.ts").read_text(encoding="utf-8")
+    assert "ai-docs" in router and "AiDocsPage.vue" in router
+
+    hub = (REPO / "frontend-h5/src/pages/AiHubPage.vue").read_text(encoding="utf-8")
+    assert "/ai-docs" in hub and "ext.ai_knowledge.view" in hub
+
+    insight = (REPO / "frontend-h5/src/pages/AiInsightPage.vue").read_text(encoding="utf-8")
+    for marker in ("removeSelected(", "toggleSelectMode(", "batchDeleteInsightRuns("):
+        assert marker in insight, f"洞察页缺少第七批能力: {marker}"
+
+
+def test_h5_ai_extension_status_covers_knowledge():
+    """资料页也要参与扩展预检查，否则首页卡片无法标注未开通/未授权。"""
+    from app.api.h5 import ai_extensions as mod
+    perms = dict(mod.AI_EXTENSIONS)
+    assert perms.get("ai_knowledge") == "ext.ai_knowledge.view"
+
+
+def _insight_ext():
+    try:
+        return importlib.import_module("extensions.ai_insight.router")
+    except ModuleNotFoundError:
+        pytest.skip("ai_insight 扩展未安装（源码在私有仓库 mes-extensions）")
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_insight_batch_delete_dedups_and_reports_missing(monkeypatch):
+    """批量软删要先去重，再把已不存在的 id 回传，前端才能提示部分成功。"""
+    mod = _insight_ext()
+    db = MagicMock()
+    monkeypatch.setattr(mod, "_safe_rows", lambda _db, sql, **p: [{"id": 2}, {"id": 4}])
+    out = mod.batch_delete_runs(mod.BatchDeleteIn(ids=[4, 2, 2, 9]), db=db)["data"]
+    assert out["ok"] is True and out["total"] == 3
+    assert out["succeeded"] == [2, 4]
+    assert out["missing"] == [9]
+    sql = str(db.execute.call_args_list[0][0][0])
+    assert "deleted_at = NOW()" in sql
+    assert db.execute.call_args_list[0][0][1] == {"f0": 2, "f1": 4}
+    db.commit.assert_called_once()
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_insight_batch_delete_rejects_empty_and_oversize(monkeypatch):
+    """空选与超过 50 条都要在入口拦住，不能靠前端自觉。"""
+    mod = _insight_ext()
+    db = MagicMock()
+    monkeypatch.setattr(mod, "_safe_rows", lambda *a, **k: [])
+    out = mod.batch_delete_runs(mod.BatchDeleteIn(ids=[0, -1]), db=db)["data"]
+    assert out["ok"] is False and out["total"] == 0
+    db.execute.assert_not_called()
+    with pytest.raises(ValueError):
+        mod.BatchDeleteIn(ids=list(range(1, 52)))

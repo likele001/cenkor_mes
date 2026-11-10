@@ -749,3 +749,52 @@ export function deleteInsightRun(id: number) {
     `/extensions/ai_insight/runs/${id}`,
   )
 }
+
+// ── 第七批：知识库资料只读浏览 / 洞察批量清理 ──────────────────────────────
+
+export type KnowledgeDocItem = {
+  id: number
+  title: string
+  source?: string
+  scope?: string
+  role_allowed?: string
+  chunk_count?: number
+  vectorized?: number
+  updated_at?: string
+  content_len?: number
+}
+
+export function listKnowledgeDocs(
+  params: { q?: string; scope?: string; page?: number; page_size?: number } = {},
+) {
+  return apiGet<{ items?: KnowledgeDocItem[]; total?: number; page?: number; page_size?: number }>(
+    '/extensions/ai_knowledge/docs',
+    { params },
+  )
+}
+
+export type KnowledgeDoc = {
+  ok: boolean
+  error?: string
+  id: number
+  title: string
+  source?: string
+  content?: string
+  scope?: string
+  role_allowed?: string
+  chunk_count?: number
+  vectorized?: number
+  created_at?: string
+  updated_at?: string
+}
+
+export function getKnowledgeDoc(id: number) {
+  return apiGet<KnowledgeDoc>(`/extensions/ai_knowledge/docs/${id}`)
+}
+
+export function batchDeleteInsightRuns(ids: number[]) {
+  return apiPost<{ ok: boolean; error?: string; total?: number; succeeded?: number[]; missing?: number[] }>(
+    '/extensions/ai_insight/runs/batch-delete',
+    { ids },
+  )
+}

@@ -7,7 +7,8 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showDialog, showToast } from 'vant'
 import {
-  analyzeInsight, deleteInsightRun, getInsightRun, listAiInsight, listInsightAxes, listInsightRuns,
+  analyzeInsight, batchDeleteInsightRuns, deleteInsightRun, getInsightRun, listAiInsight,
+  listInsightAxes, listInsightRuns,
   type AiInsightItem, type InsightAxis, type InsightRun,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
@@ -25,6 +26,8 @@ const analyzing = ref('')
 const runsOpen = ref(false)
 const runsLoading = ref(false)
 const runs = ref<InsightRun[]>([])
+const selectMode = ref(false)
+const selected = ref<number[]>([])
 
 function descOf(code: string) {
   return axes.value.find((a) => a.code === code)?.desc || ''
@@ -130,6 +133,55 @@ async function removeRun(id: number) {
   }
 }
 
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  selected.value = []
+}
+
+function toggleSelect(id: number) {
+  const i = selected.value.indexOf(id)
+  if (i >= 0) selected.value.splice(i, 1)
+  else selected.value.push(id)
+}
+
+function toggleAll() {
+  selected.value = selected.value.length === runs.value.length ? [] : runs.value.map((r) => r.id)
+}
+
+function onRunClick(id: number) {
+  if (selectMode.value) toggleSelect(id)
+  else void openRun(id)
+}
+
+async function removeSelected() {
+  if (!selected.value.length) return
+  try {
+    await showConfirmDialog({
+      title: t('ai.runBatchDelete'),
+      message: t('ai.runBatchConfirm', { n: selected.value.length }),
+      confirmButtonText: t('ai.delete'),
+    })
+  } catch {
+    return
+  }
+  try {
+    const r = await batchDeleteInsightRuns(selected.value)
+    if (r.ok === false) {
+      showToast(r.error || t('ai.actionFailed'))
+      return
+    }
+    const done = r.succeeded?.length || 0
+    const miss = r.missing?.length || 0
+    showToast(miss ? t('ai.runBatchPartial', { n: done, m: miss }) : t('ai.runBatchDone', { n: done }))
+    selectMode.value = false
+    selected.value = []
+    await openRuns()
+    await load()
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+  }
+}
+
 async function analyze(it: AiInsightItem) {
   analyzing.value = it.axis
   try {
@@ -194,23 +246,55 @@ onMounted(load)
     <van-popup v-model:show="runsOpen" position="bottom" round class="pb-safe" :style="{ height: '60%' }">
       <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
         <div class="text-sm font-medium text-zinc-800">{{ t('ai.runs') }}</div>
-        <van-button size="mini" plain @click="openRuns">{{ t('ai.refresh') }}</van-button>
+        <div class="flex shrink-0 gap-1">
+          <van-button size="mini" plain @click="toggleSelectMode">
+            {{ selectMode ? t('ai.selectCancel') : t('ai.select') }}
+          </van-button>
+          <van-button size="mini" plain @click="openRuns">{{ t('ai.refresh') }}</van-button>
+        </div>
       </div>
-      <div class="h-[calc(100%-49px)] overflow-y-auto px-3 py-2">
+      <div
+        v-if="selectMode"
+        class="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-2 text-[11px] text-zinc-500"
+      >
+        <span class="cursor-pointer text-indigo-600" @click="toggleAll">
+          {{ selected.length === runs.length && runs.length ? t('ai.selectNone') : t('ai.selectAll') }}
+        </span>
+        <span>{{ t('ai.selectedCount', { n: selected.length }) }}</span>
+        <van-button size="mini" type="danger" plain :disabled="!selected.length" @click="removeSelected">
+          {{ t('ai.runBatchDelete') }}
+        </van-button>
+      </div>
+      <div
+        class="overflow-y-auto px-3 py-2"
+        :class="selectMode ? 'h-[calc(100%-93px)]' : 'h-[calc(100%-49px)]'"
+      >
         <div v-if="runsLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
         <van-empty v-else-if="!runs.length" :description="t('ai.noRuns')" />
         <div v-else class="space-y-2">
-          <div v-for="r in runs" :key="r.id" class="rounded-xl bg-zinc-50 p-3" @click="openRun(r.id)">
+          <div
+            v-for="r in runs"
+            :key="r.id"
+            class="rounded-xl bg-zinc-50 p-3"
+            :class="selected.includes(r.id) ? 'ring-2 ring-indigo-400' : ''"
+            @click="onRunClick(r.id)"
+          >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm text-zinc-800">{{ r.axis_name || r.axis }}</div>
                 <div v-if="r.excerpt" class="mt-1 line-clamp-2 text-[11px] text-zinc-500">{{ r.excerpt }}</div>
               </div>
-              <div class="flex shrink-0 flex-col gap-1">
+              <div v-if="!selectMode" class="flex shrink-0 flex-col gap-1">
                 <van-button size="mini" plain @click.stop="openRun(r.id)">{{ t('ai.view') }}</van-button>
                 <van-button size="mini" plain @click.stop="copyRun(r.id)">{{ t('ai.runCopy') }}</van-button>
                 <van-button size="mini" plain type="danger" @click.stop="removeRun(r.id)">{{ t('ai.runDelete') }}</van-button>
               </div>
+              <van-icon
+                v-else
+                class="shrink-0 text-lg"
+                :name="selected.includes(r.id) ? 'checked' : 'circle'"
+                :color="selected.includes(r.id) ? '#4f46e5' : '#d4d4d8'"
+              />
             </div>
             <div class="mt-1 text-[10px] text-zinc-400">{{ r.created_at || '' }}</div>
           </div>
