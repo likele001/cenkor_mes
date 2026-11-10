@@ -7,7 +7,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showToast } from 'vant'
 import {
-  getKnowledgeDoc, listKnowledgeDocs, type KnowledgeDoc, type KnowledgeDocItem,
+  getKnowledgeDoc, knowledgeAsk, listKnowledgeDocs,
+  type KnowledgeDoc, type KnowledgeDocItem,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
@@ -27,6 +28,23 @@ const scopes = ref<string[]>([])
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<KnowledgeDoc | null>(null)
+
+// 「问这篇」：检索限定在当前打开的这篇文档内，不跨文档串味
+const askText = ref('')
+const asking = ref(false)
+const askAnswer = ref('')
+const askNote = ref('')
+const askHits = ref(0)
+const askFallback = ref(false)
+
+function resetAsk() {
+  askText.value = ''
+  asking.value = false
+  askAnswer.value = ''
+  askNote.value = ''
+  askHits.value = 0
+  askFallback.value = false
+}
 
 // 业务域标签由后端按文档聚合下发（逗号分隔），这里只做展示用的去重收集
 function collectScopes(list: KnowledgeDocItem[]) {
@@ -86,6 +104,7 @@ async function openDoc(id: number) {
   detailOpen.value = true
   detailLoading.value = true
   detail.value = null
+  resetAsk()
   try {
     const r = await getKnowledgeDoc(id)
     if (r.ok === false) {
@@ -99,6 +118,34 @@ async function openDoc(id: number) {
     showToast(e instanceof Error ? e.message : t('ai.docsLoadFailed'))
   } finally {
     detailLoading.value = false
+  }
+}
+
+async function askDoc() {
+  const q = askText.value.trim()
+  const doc = detail.value
+  if (!q || !doc || asking.value) return
+  asking.value = true
+  askAnswer.value = ''
+  askNote.value = ''
+  askHits.value = 0
+  askFallback.value = false
+  try {
+    const r = await knowledgeAsk(q, true, 5, doc.id)
+    if (r.ok === false) {
+      askNote.value = r.error || t('ai.docsAskFailed')
+      return
+    }
+    askAnswer.value = r.answer || ''
+    askHits.value = r.hits?.length || 0
+    askFallback.value = !!r.ai_unavailable
+    askNote.value = r.ai_hint || r.note || ''
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameKnowledge'))) {
+      askNote.value = e instanceof Error ? e.message : t('ai.docsAskFailed')
+    }
+  } finally {
+    asking.value = false
   }
 }
 
@@ -212,6 +259,30 @@ onMounted(() => {
         <div v-if="detailLoading" class="py-8 text-center text-sm text-zinc-400">{{ t('ai.loading') }}</div>
         <template v-else-if="detail">
           <div class="mb-2 text-[10px] text-zinc-400">{{ detailMeta }}</div>
+          <div class="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-2">
+            <div class="text-[11px] font-medium text-indigo-700">{{ t('ai.docsAskTitle') }}</div>
+            <div class="mt-1 flex items-center gap-1">
+              <van-field
+                v-model="askText"
+                :placeholder="t('ai.docsAskPlaceholder')"
+                class="!min-w-0 !flex-1 !px-0"
+                @keyup.enter="askDoc"
+              />
+              <van-button
+                size="mini"
+                type="primary"
+                :loading="asking"
+                :disabled="!askText.trim()"
+                @click="askDoc"
+              >{{ t('ai.docsAsk') }}</van-button>
+            </div>
+            <div v-if="askAnswer" class="mt-2 rounded-lg bg-white p-2">
+              <div class="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-zinc-700">{{ askAnswer }}</div>
+              <div class="mt-1 text-[10px] text-zinc-400">{{ t('ai.docsAskHits', { n: askHits }) }}</div>
+              <div v-if="askFallback" class="mt-1 text-[10px] text-amber-600">{{ t('ai.docsAskFallback') }}</div>
+            </div>
+            <div v-else-if="askNote" class="mt-2 text-[11px] leading-relaxed text-amber-600">{{ askNote }}</div>
+          </div>
           <div class="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-700">{{ detail.content }}</div>
         </template>
         <van-empty v-else :description="t('ai.docsEmpty')" />

@@ -656,20 +656,22 @@ export type KnowledgeAskOut = {
   tokens_in?: number | null
   tokens_out?: number | null
   asked_at?: string
+  doc_id?: number | null
 }
 
-export function knowledgeSearch(query: string, topK = 5) {
+// docId 传了就只在这一篇里检索（资料页「问这篇」）；不传仍是全库检索
+export function knowledgeSearch(query: string, topK = 5, docId?: number) {
   return apiPost<KnowledgeSearchOut>(
     '/extensions/ai_knowledge/search',
-    { query, top_k: topK },
+    { query, top_k: topK, ...(docId ? { doc_id: docId } : {}) },
     { timeout: AI_TIMEOUT_MS },
   )
 }
 
-export function knowledgeAsk(query: string, useLlm = true, topK = 5) {
+export function knowledgeAsk(query: string, useLlm = true, topK = 5, docId?: number) {
   return apiPost<KnowledgeAskOut>(
     '/extensions/ai_knowledge/ask',
-    { query, use_llm: useLlm, top_k: topK },
+    { query, use_llm: useLlm, top_k: topK, ...(docId ? { doc_id: docId } : {}) },
     { timeout: AI_TIMEOUT_MS },
   )
 }

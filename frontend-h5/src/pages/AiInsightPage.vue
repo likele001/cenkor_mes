@@ -133,6 +133,35 @@ async function removeRun(id: number) {
   }
 }
 
+function exportRuns() {
+  if (!runs.value.length) {
+    showToast(t('ai.runExportEmpty'))
+    return
+  }
+  try {
+    const esc = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
+    const head = [
+      t('ai.runColTime'), t('ai.runColAxis'), t('ai.runColDays'), t('ai.runColExcerpt'),
+    ]
+    const rows = runs.value.map((r) => [
+      r.created_at || '',
+      r.axis_name || r.axis,
+      r.days ?? '',
+      (r.excerpt || '').replace(/\s+/g, ' '),
+    ].map(esc).join(','))
+    const csv = '\uFEFF' + [head.map(esc).join(','), ...rows].join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `insight-runs-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(t('ai.exportDone'))
+  } catch {
+    showToast(t('ai.exportFailed'))
+  }
+}
+
 function toggleSelectMode() {
   selectMode.value = !selectMode.value
   selected.value = []
@@ -250,6 +279,7 @@ onMounted(load)
           <van-button size="mini" plain @click="toggleSelectMode">
             {{ selectMode ? t('ai.selectCancel') : t('ai.select') }}
           </van-button>
+          <van-button size="mini" plain :disabled="!runs.length" @click="exportRuns">{{ t('ai.runExport') }}</van-button>
           <van-button size="mini" plain @click="openRuns">{{ t('ai.refresh') }}</van-button>
         </div>
       </div>

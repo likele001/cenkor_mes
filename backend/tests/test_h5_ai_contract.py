@@ -464,3 +464,59 @@ def test_insight_batch_delete_rejects_empty_and_oversize(monkeypatch):
     db.execute.assert_not_called()
     with pytest.raises(ValueError):
         mod.BatchDeleteIn(ids=list(range(1, 52)))
+
+# ── 第八批：资料页「问这篇」（doc_id 限定检索）与洞察导出 ──────────────────
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_knowledge_search_accepts_doc_id_scope():
+    """问这篇靠 doc_id 限定范围；不传必须留空，默认行为仍是全库检索。"""
+    mod = _knowledge()
+    assert mod.SearchIn(query="换型步骤").doc_id is None
+    assert mod.SearchIn(query="换型步骤", doc_id=12).doc_id == 12
+    with pytest.raises(ValueError):
+        mod.SearchIn(query="换型步骤", doc_id=0)  # ge=1，0 不是合法文档 id
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_knowledge_doc_guard_blocks_invisible_doc(monkeypatch):
+    """知道 id 不等于有权限：查不到目标文档就要拦掉，不能悄悄退化成全库检索。"""
+    mod = _knowledge()
+    db = MagicMock()
+    # 不指定文档时不查库，直接放行（全库路径不接受多余查询）
+    assert mod._doc_scope_guard(db, None, "1=1", {}) == ""
+    db.execute.assert_not_called()
+    monkeypatch.setattr(mod, "_safe_rows", lambda *a, **k: [])
+    assert mod._doc_scope_guard(db, 42, "1=1", {}) != ""
+    monkeypatch.setattr(mod, "_safe_rows", lambda *a, **k: [{"id": 42}])
+    assert mod._doc_scope_guard(db, 42, "1=1", {}) == ""
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_knowledge_retrieve_scopes_both_paths_to_doc():
+    """向量与关键词两条路径都要按 doc_id 收口，只堵一条等于没堵。"""
+    mod = _knowledge()
+    src = Path(mod.__file__).read_text(encoding="utf-8")
+    assert "def _retrieve(db, query: str, top_k: int, scope: str, where: str, args: dict," in src
+    assert 'if only and c["doc_id"] != only:' in src
+    assert "c.doc_id = :only_doc" in src
+    # 单篇时候选窗口要放大，否则别的文档占满 recall，过滤后可能一篇不剩
+    assert "400 if only else 0" in src
+    assert "2000 if only else 0" in src
+
+
+def test_h5_ai_contract_covers_batch8_capabilities():
+    """资料页「问这篇」与洞察导出必须真的落在页面上，防止后续重构抹掉。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    assert "export function knowledgeAsk(query: string, useLlm = true, topK = 5, docId?: number)" in ai
+    assert "...(docId ? { doc_id: docId } : {})" in ai
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    assert "knowledgeAsk(q, true, 5, doc.id)" in docs
+    assert "t('ai.docsAskTitle')" in docs
+    assert "t('ai.docsAskFallback')" in docs
+    insight = (REPO / "frontend-h5/src/pages/AiInsightPage.vue").read_text(encoding="utf-8")
+    assert "function exportRuns()" in insight
+    assert "t('ai.runExport')" in insight
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("docsAskTitle", "docsAskFallback", "runExport", "runColExcerpt"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"
