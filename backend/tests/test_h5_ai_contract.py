@@ -566,3 +566,83 @@ def test_h5_ai_contract_covers_batch10_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("convSearchPlaceholder", "convSearchEmpty", "runFilterAll"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第十一批：员工执行日志按人隔离 + 执行明细 ────────────────────────────────
+
+def _employee_ext():
+    try:
+        return importlib.import_module("extensions.ai_employee.router")
+    except ModuleNotFoundError:
+        pytest.skip("ai_employee 扩展未安装（源码在私有仓库 mes-extensions）")
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_employee_logs_mine_scoped_to_current_user(monkeypatch):
+    """/logs 原本是全站时间线，员工端必须能按人收回来，否则别人的巡检结果全可见。"""
+    mod = _employee_ext()
+    calls = {"sql": [], "args": []}
+
+    def fake_rows(_db, sql, **p):
+        calls["sql"].append(sql)
+        calls["args"].append(p)
+        return []
+
+    monkeypatch.setattr(mod, "_rows", fake_rows)
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+    out = mod.logs(mine=1, limit=10, offset=0, db=MagicMock(), user=MagicMock(id=9))["data"]
+    assert out["mine"] is True
+    assert "user_id=:uid" in calls["sql"][0]
+    assert calls["args"][0]["uid"] == 9
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_employee_logs_default_keeps_global_view(monkeypatch):
+    """管理端不传 mine，行为必须保持全站，不能顺手把管理视图也收窄。"""
+    mod = _employee_ext()
+    calls = []
+    monkeypatch.setattr(mod, "_rows", lambda _db, sql, **p: calls.append(sql) or [])
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+    out = mod.logs(mine=0, limit=10, offset=0, db=MagicMock(), user=MagicMock(id=9))["data"]
+    assert out["mine"] is False
+    assert "user_id=:uid" not in calls[0]
+
+
+@pytest.mark.skipif(not HAS_EXT, reason="商业扩展源码在私有仓库，公开仓库跳过")
+def test_employee_log_detail_scoped_and_parses_facts(monkeypatch):
+    """明细要限本人；有 manage 才放开全站；facts_json 要解析成对象给前端。"""
+    mod = _employee_ext()
+    captured = {}
+
+    def fake_rows(_db, sql, **p):
+        captured["sql"], captured["args"] = sql, p
+        return [{"id": 3, "tool_code": "prod_daily", "facts_json": '{"lines": 2}'}]
+
+    monkeypatch.setattr(mod, "_safe_rows", fake_rows)
+    monkeypatch.setattr(mod, "_can_manage", lambda *a: False)
+    out = mod.log_detail(3, db=MagicMock(), user=MagicMock(id=5))["data"]
+    assert out["found"] is True
+    assert out["facts"] == {"lines": 2}
+    assert out["manage"] is False
+    assert "user_id=:uid" in captured["sql"]
+    assert captured["args"]["uid"] == 5
+
+    monkeypatch.setattr(mod, "_can_manage", lambda *a: True)
+    out2 = mod.log_detail(3, db=MagicMock(), user=MagicMock(id=5))["data"]
+    assert out2["manage"] is True
+    assert "user_id=:uid" not in captured["sql"]
+
+
+def test_h5_ai_contract_covers_batch11_capabilities():
+    """员工端日志要带 mine=1，明细按钮与弹层真的接上，否则等于没隔离。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    assert "export function getEmployeeLog(id: number)" in ai
+    assert "/extensions/ai_employee/logs/${id}" in ai
+    page = (REPO / "frontend-h5/src/pages/AiEmployeesPage.vue").read_text(encoding="utf-8")
+    assert "mine: 1," in page
+    assert "function openLog(id: number)" in page
+    assert "getEmployeeLog(id)" in page
+    assert "t('ai.logFacts')" in page
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("logDetail", "logInstruction", "logFacts", "logTokens"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

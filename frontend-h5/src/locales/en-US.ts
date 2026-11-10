@@ -484,5 +484,11 @@ export default {
     convSearchPlaceholder: "Search conversation titles",
     convSearchEmpty: "No matching conversations",
     runFilterAll: "All",
+    logDetail: "Run detail",
+    logInstruction: "Instruction",
+    logOutput: "Report",
+    logFacts: "Structured facts",
+    logNoFacts: "No structured facts for this run",
+    logTokens: "{i} in / {o} out tokens",
   },
 }

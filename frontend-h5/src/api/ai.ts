@@ -551,11 +551,30 @@ export type EmployeeLog = {
   created_at?: string
 }
 
-export function listEmployeeLogs(params: { tool?: string; status?: string; limit?: number; offset?: number } = {}) {
-  return apiGet<{ items?: EmployeeLog[]; count?: number; total?: number }>(
+// mine=1 只看本人执行记录：/logs 本身是全站时间线，员工端不能默认看全厂
+export function listEmployeeLogs(
+  params: { tool?: string; status?: string; mine?: number; limit?: number; offset?: number } = {},
+) {
+  return apiGet<{ items?: EmployeeLog[]; count?: number; total?: number; mine?: boolean }>(
     '/extensions/ai_employee/logs',
     { params },
   )
+}
+
+export type EmployeeLogDetail = EmployeeLog & {
+  found: boolean
+  error?: string
+  conversation_id?: number | null
+  user_id?: number
+  instruction?: string
+  facts?: { [key: string]: unknown }
+  tokens_in?: number | null
+  tokens_out?: number | null
+  manage?: boolean
+}
+
+export function getEmployeeLog(id: number) {
+  return apiGet<EmployeeLogDetail>(`/extensions/ai_employee/logs/${id}`)
 }
 
 export function getEmployeeToggle() {

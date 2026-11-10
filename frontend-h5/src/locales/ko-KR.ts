@@ -484,5 +484,11 @@ export default {
     convSearchPlaceholder: "대화 제목 검색",
     convSearchEmpty: "일치하는 대화가 없습니다",
     runFilterAll: "전체",
+    logDetail: "실행 상세",
+    logInstruction: "점검 지시",
+    logOutput: "작업 보고",
+    logFacts: "구조화 데이터",
+    logNoFacts: "이번 실행에는 구조화 데이터가 없습니다",
+    logTokens: "입력 {i} / 출력 {o} tokens",
   },
 }

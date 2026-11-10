@@ -484,5 +484,11 @@ export default {
     convSearchPlaceholder: "搜索会话标题",
     convSearchEmpty: "没有匹配的会话",
     runFilterAll: "全部",
+    logDetail: "执行明细",
+    logInstruction: "巡检指令",
+    logOutput: "工作简报",
+    logFacts: "结构化事实",
+    logNoFacts: "本次执行没有结构化事实",
+    logTokens: "输入 {i} / 输出 {o} tokens",
   },
 }
