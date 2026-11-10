@@ -495,5 +495,6 @@ export default {
     helpCopySnippet: "复制片段",
     usageTokens: "输入 {i} / 输出 {o} tokens",
     usageModel: "模型 {m}",
+    exportMd: "导出 MD",
   },
 }

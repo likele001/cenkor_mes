@@ -11,6 +11,7 @@ import {
   previewSceneDoc, type SceneDocItem, type SceneScenario,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
+import { downloadText } from '@/utils/download'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -168,6 +169,29 @@ async function copyDoc(id: number) {
   }
 }
 
+async function exportDocMd(id: number) {
+  try {
+    const r = await getSceneDoc(id)
+    if (r.ok === false) {
+      showToast(r.error || t('ai.noContent'))
+      return
+    }
+    const facts = Object.entries(r.facts || {}).map(([k, v]) => `- ${k}: ${String(v)}`).join('\n')
+    const parts = [
+      `# ${r.title || t('ai.docDetail')}`,
+      '',
+      facts ? `\n## ${t('ai.facts')}\n${facts}` : '',
+      r.risks?.length ? `\n## ${t('ai.risks')}\n${r.risks.map((x) => `- ${x}`).join('\n')}` : '',
+      r.suggestions?.length ? `\n## ${t('ai.suggestions')}\n${r.suggestions.map((x) => `- ${x}`).join('\n')}` : '',
+      `\n## ${t('ai.helpAnswer')}\n\n${r.report || r.summary || r.rule_summary || ''}`,
+    ].filter(Boolean)
+    const done = downloadText(`scene-${r.doc_type || 'doc'}-${id}.md`, parts.join('\n'))
+    showToast(done ? t('ai.exportDone') : t('ai.exportFailed'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.exportFailed'))
+  }
+}
+
 async function removeDoc(id: number) {
   try {
     await showConfirmDialog({
@@ -305,6 +329,7 @@ onMounted(load)
                 </div>
                 <div class="flex shrink-0 flex-col gap-1">
                   <van-button size="mini" plain @click.stop="copyDoc(d.id)">{{ t('ai.copy') }}</van-button>
+                  <van-button size="mini" plain @click.stop="exportDocMd(d.id)">{{ t('ai.exportMd') }}</van-button>
                   <van-button size="mini" plain type="danger" @click.stop="removeDoc(d.id)">{{ t('ai.delete') }}</van-button>
                 </div>
               </div>

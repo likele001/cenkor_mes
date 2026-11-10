@@ -696,3 +696,27 @@ def test_h5_ai_contract_covers_batch13_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("usageTokens", "usageModel"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第十四批：报告 / 文书导出 Markdown ──────────────────────────────────────
+
+def test_h5_ai_contract_covers_batch14_capabilities():
+    """导出走统一工具，两个页面都要真的接上，别各写一份 Blob 逻辑。"""
+    dl = REPO / "frontend-h5/src/utils/download.ts"
+    assert dl.is_file(), "缺少统一的下载工具"
+    src = dl.read_text(encoding="utf-8")
+    assert "export function downloadText(" in src
+    assert "URL.createObjectURL" in src and "revokeObjectURL" in src
+
+    insight = (REPO / "frontend-h5/src/pages/AiInsightPage.vue").read_text(encoding="utf-8")
+    assert "import { downloadText } from '@/utils/download'" in insight
+    assert "async function exportRunMd(r: InsightRun)" in insight
+    assert "exportRunMd(r)" in insight
+
+    scene = (REPO / "frontend-h5/src/pages/AiScenePage.vue").read_text(encoding="utf-8")
+    assert "import { downloadText } from '@/utils/download'" in scene
+    assert "async function exportDocMd(id: number)" in scene
+    assert "exportDocMd(d.id)" in scene
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        assert "exportMd:" in pack, f"{loc} 缺 exportMd"

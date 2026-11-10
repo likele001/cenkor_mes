@@ -12,6 +12,7 @@ import {
   type AiInsightItem, type InsightAxis, type InsightRun,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
+import { downloadText } from '@/utils/download'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -131,6 +132,33 @@ async function removeRun(id: number) {
     await load()
   } catch (e: unknown) {
     showToast(e instanceof Error ? e.message : t('ai.actionFailed'))
+  }
+}
+
+// 单条导出成 .md：主管存档或转发时比截图/长文本好用
+async function exportRunMd(r: InsightRun) {
+  try {
+    const d = await getInsightRun(r.id)
+    if (d.ok === false) {
+      showToast(d.error || t('ai.noAnalysis'))
+      return
+    }
+    const title = d.axis_name || r.axis_name || r.axis || 'insight'
+    const parts = [
+      `# ${title}`,
+      '',
+      `- ${t('ai.runColTime')}: ${d.created_at || r.created_at || ''}`,
+      d.risks?.length ? `\n## ${t('ai.risks')}\n${d.risks.map((x) => `- ${x}`).join('\n')}` : '',
+      d.suggestions?.length ? `\n## ${t('ai.suggestions')}\n${d.suggestions.map((x) => `- ${x}`).join('\n')}` : '',
+      `\n## ${t('ai.helpAnswer')}\n\n${d.summary || d.rule_summary || d.report || ''}`,
+    ].filter(Boolean)
+    const done = downloadText(
+      `insight-${r.axis || 'run'}-${new Date().toISOString().slice(0, 10)}.md`,
+      parts.join('\n'),
+    )
+    showToast(done ? t('ai.exportDone') : t('ai.exportFailed'))
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.exportFailed'))
   }
 }
 
@@ -336,6 +364,7 @@ onMounted(load)
               <div v-if="!selectMode" class="flex shrink-0 flex-col gap-1">
                 <van-button size="mini" plain @click.stop="openRun(r.id)">{{ t('ai.view') }}</van-button>
                 <van-button size="mini" plain @click.stop="copyRun(r.id)">{{ t('ai.runCopy') }}</van-button>
+                <van-button size="mini" plain @click.stop="exportRunMd(r)">{{ t('ai.exportMd') }}</van-button>
                 <van-button size="mini" plain type="danger" @click.stop="removeRun(r.id)">{{ t('ai.runDelete') }}</van-button>
               </div>
               <van-icon

@@ -495,5 +495,6 @@ export default {
     helpCopySnippet: "조각 복사",
     usageTokens: "입력 {i} / 출력 {o} tokens",
     usageModel: "모델 {m}",
+    exportMd: "MD 내보내기",
   },
 }

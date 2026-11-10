@@ -495,5 +495,6 @@ export default {
     helpCopySnippet: "Copy snippet",
     usageTokens: "{i} in / {o} out tokens",
     usageModel: "Model {m}",
+    exportMd: "Export .md",
   },
 }
