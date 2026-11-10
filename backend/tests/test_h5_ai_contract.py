@@ -720,3 +720,75 @@ def test_h5_ai_contract_covers_batch14_capabilities():
     for loc in ("zh-CN", "en-US", "ko-KR"):
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         assert "exportMd:" in pack, f"{loc} 缺 exportMd"
+
+
+# ── 第十五批：资料排序 / 向量化筛选 / 首页最近使用 ──────────────────────────
+
+def test_knowledge_doc_order_whitelist_only():
+    """ORDER BY 是拼 SQL 的入口：白名单之外（包括注入串）必须回落默认排序。"""
+    mod = _knowledge()
+    assert mod._doc_order(None) == "d.id DESC"
+    assert mod._doc_order("updated") == "d.updated_at DESC, d.id DESC"
+    assert mod._doc_order("TITLE ") == "d.title ASC, d.id DESC"
+    assert mod._doc_order("long") == "CHAR_LENGTH(COALESCE(d.content,'')) DESC, d.id DESC"
+    for bad in ("", "id desc; DROP TABLE users", "updated_at", "-id"):
+        assert mod._doc_order(bad) == "d.id DESC", f"未拦截非法排序 {bad!r}"
+
+
+def test_knowledge_list_docs_applies_sort_and_vectorized_filter(monkeypatch):
+    """排序与向量化筛选要真的进 SQL；未传时不加条件（管理端/老前端行为不变）。"""
+    mod = _knowledge()
+    monkeypatch.setattr(mod, "_is_manager", lambda user, db: False)
+    monkeypatch.setattr(mod, "_visibility", lambda db, user, manage: ("1=1", {}))
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+
+    captured = {}
+
+    def fake_rows(db, sql, **kw):
+        captured["sql"] = sql
+        return []
+
+    monkeypatch.setattr(mod, "_safe_rows", fake_rows)
+    db, user = MagicMock(), MagicMock(id=3)
+
+    mod.list_docs(q=None, scope=None, sort="updated", vectorized=0,
+                  page=1, page_size=20, db=db, user=user)
+    sql = captured["sql"]
+    assert "ORDER BY d.updated_at DESC, d.id DESC" in sql
+    assert "(d.vectorized = 0 OR d.vectorized IS NULL)" in sql
+
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=1,
+                  page=1, page_size=20, db=db, user=user)
+    sql = captured["sql"]
+    assert "ORDER BY d.id DESC" in sql
+    assert "AND d.vectorized = 1" in sql
+
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+                  page=1, page_size=20, db=db, user=user)
+    sql = captured["sql"]
+    where = sql.split(" WHERE ", 1)[1].split(" ORDER BY ", 1)[0]
+    assert "vectorized" not in where, "未筛选时 WHERE 不应带向量化条件"
+
+
+def test_h5_ai_contract_covers_batch15_capabilities():
+    """排序/筛选下沉后端、最近使用只记本机：前端与三语都要真的接上。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    for marker in ("sort?: string", "vectorized?: number"):
+        assert marker in ai, f"ai.ts 缺少列表参数: {marker}"
+
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    for marker in ("const sortMode = ref('new')", "const vecMode = ref('')",
+                   "function pickSort(", "function pickVec(",
+                   "sort: sortMode.value",
+                   "vectorized: vecMode.value === '' ? undefined : Number(vecMode.value)"):
+        assert marker in docs, f"资料页缺少第十五批能力: {marker}"
+
+    hub = (REPO / "frontend-h5/src/pages/AiHubPage.vue").read_text(encoding="utf-8")
+    for marker in ("cenkormes_h5_ai_hub_recent", "const recentEntries = computed<Entry[]>(",
+                   "function pushRecent(", "pushRecent(e.path)"):
+        assert marker in hub, f"智能中心缺少最近使用: {marker}"
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("docsSortUpdated", "docsVecNone", "hubRecent"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

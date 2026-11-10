@@ -26,6 +26,9 @@ const loadingMore = ref(false)
 const keyword = ref('')
 const activeScope = ref('')
 const scopes = ref<string[]>([])
+// 排序与向量化筛选都下沉到后端：本地重排会让分页错位（第 2 页接不上第 1 页的顺序）
+const sortMode = ref('new')
+const vecMode = ref('')
 
 const RECENT_KEY = 'cenkormes_h5_ai_docs_recent'
 type RecentDoc = { id: number; title: string; at: string }
@@ -105,6 +108,8 @@ async function load(reset = true) {
     const r = await listKnowledgeDocs({
       q: keyword.value.trim() || undefined,
       scope: activeScope.value || undefined,
+      sort: sortMode.value,
+      vectorized: vecMode.value === '' ? undefined : Number(vecMode.value),
       page: page.value,
       page_size: 20,
     })
@@ -137,6 +142,31 @@ function pickScope(s: string) {
   activeScope.value = activeScope.value === s ? '' : s
   void load()
 }
+
+function pickSort(v: string) {
+  if (sortMode.value === v) return
+  sortMode.value = v
+  void load()
+}
+
+function pickVec(v: string) {
+  if (vecMode.value === v) return
+  vecMode.value = v
+  void load()
+}
+
+const sortOptions = computed(() => [
+  { v: 'new', label: t('ai.docsSortNew') },
+  { v: 'updated', label: t('ai.docsSortUpdated') },
+  { v: 'title', label: t('ai.docsSortTitle') },
+  { v: 'long', label: t('ai.docsSortLength') },
+])
+
+const vecOptions = computed(() => [
+  { v: '', label: t('ai.docsVecAll') },
+  { v: '1', label: t('ai.docsVecOnly') },
+  { v: '0', label: t('ai.docsVecNone') },
+])
 
 async function openDoc(id: number) {
   detailOpen.value = true
@@ -271,6 +301,26 @@ watch(() => [route.query.doc, route.query.q], () => {
           :class="activeScope === s ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
           @click="pickScope(s)"
         >{{ s }}</span>
+      </div>
+      <div class="mt-2 flex flex-wrap items-center gap-1">
+        <span class="text-[10px] text-zinc-400">{{ t('ai.docsSortLabel') }}</span>
+        <span
+          v-for="o in sortOptions"
+          :key="o.v"
+          class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"
+          :class="sortMode === o.v ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
+          @click="pickSort(o.v)"
+        >{{ o.label }}</span>
+      </div>
+      <div class="mt-1 flex flex-wrap items-center gap-1">
+        <span class="text-[10px] text-zinc-400">{{ t('ai.docsVecLabel') }}</span>
+        <span
+          v-for="o in vecOptions"
+          :key="o.v"
+          class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"
+          :class="vecMode === o.v ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
+          @click="pickVec(o.v)"
+        >{{ o.label }}</span>
       </div>
     </div>
 

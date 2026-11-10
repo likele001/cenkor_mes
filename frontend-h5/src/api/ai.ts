@@ -796,7 +796,10 @@ export type KnowledgeDocItem = {
 }
 
 export function listKnowledgeDocs(
-  params: { q?: string; scope?: string; page?: number; page_size?: number } = {},
+  params: {
+    q?: string; scope?: string; page?: number; page_size?: number
+    sort?: string; vectorized?: number
+  } = {},
 ) {
   return apiGet<{ items?: KnowledgeDocItem[]; total?: number; page?: number; page_size?: number }>(
     '/extensions/ai_knowledge/docs',

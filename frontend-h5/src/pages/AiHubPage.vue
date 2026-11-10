@@ -45,6 +45,47 @@ const summary = computed(() => {
   return { ready: list.filter((e) => !blockedState(e)).length, total: list.length }
 })
 
+// 最近使用只记本机、只记成功进入的入口；本机不记角色/权限，换人登录也不会越权（仍走 blockedState 校验）
+const RECENT_KEY = 'cenkormes_h5_ai_hub_recent'
+const recentPaths = ref<string[]>([])
+
+function loadRecent() {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    recentPaths.value = Array.isArray(parsed)
+      ? parsed.filter((x) => typeof x === 'string').slice(0, 4)
+      : []
+  } catch {
+    recentPaths.value = []
+  }
+}
+
+function pushRecent(path: string) {
+  const next = [path, ...recentPaths.value.filter((p) => p !== path)].slice(0, 4)
+  recentPaths.value = next
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {
+    // 隐私模式 / 配额不足：只在内存里留着，不影响进入页面
+  }
+}
+
+function clearRecent() {
+  recentPaths.value = []
+  try {
+    localStorage.removeItem(RECENT_KEY)
+  } catch {
+    // 忽略
+  }
+}
+
+const recentEntries = computed<Entry[]>(() =>
+  recentPaths.value
+    .map((p) => entries.value.find((e) => e.path === p))
+    .filter((e): e is Entry => !!e && !blockedState(e)),
+)
+
 // 后端状态不可用时退回本地权限判断，避免接口异常把整页卡死
 function localLocked(e: Entry) {
   return !!e.perm && auth.permissions.length > 0 && !auth.hasPermission(e.perm)
@@ -82,6 +123,7 @@ function go(e: Entry) {
   if (s === 'missing') return showToast(t('ai.hubLockedMissing'))
   if (s === 'disabled') return showToast(t('ai.hubLockedDisabled'))
   if (s === 'denied' || s === 'local') return showToast(t('ai.hubLockedDenied'))
+  pushRecent(e.path)
   void router.push(e.path)
 }
 
@@ -101,6 +143,7 @@ async function check() {
 }
 
 onMounted(async () => {
+  loadRecent()
   if (!auth.permissions.length) await auth.fetchMe()
   await check()
 })
@@ -116,6 +159,20 @@ onMounted(async () => {
         <span class="shrink-0 cursor-pointer underline opacity-90" @click="check">
           {{ checking ? t('ai.loading') : t('ai.hubStatusRefresh') }}
         </span>
+      </div>
+    </div>
+    <div v-if="recentEntries.length" class="rounded-xl bg-white p-3 shadow-sm">
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] text-zinc-400">{{ t('ai.hubRecent') }}</span>
+        <span class="cursor-pointer text-[10px] text-zinc-400" @click="clearRecent">{{ t('ai.hubRecentClear') }}</span>
+      </div>
+      <div class="mt-1 flex flex-wrap gap-1">
+        <span
+          v-for="e in recentEntries"
+          :key="e.path"
+          class="cursor-pointer rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600"
+          @click="go(e)"
+        >{{ e.icon }} {{ e.title }}</span>
       </div>
     </div>
     <div class="grid grid-cols-2 gap-3">
