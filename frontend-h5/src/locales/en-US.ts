@@ -490,5 +490,8 @@ export default {
     logFacts: "Structured facts",
     logNoFacts: "No structured facts for this run",
     logTokens: "{i} in / {o} out tokens",
+    recentDocs: "Recently viewed",
+    recentClear: "Clear",
+    helpCopySnippet: "Copy snippet",
   },
 }

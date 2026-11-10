@@ -490,5 +490,8 @@ export default {
     logFacts: "구조화 데이터",
     logNoFacts: "이번 실행에는 구조화 데이터가 없습니다",
     logTokens: "입력 {i} / 출력 {o} tokens",
+    recentDocs: "최근 본 문서",
+    recentClear: "지우기",
+    helpCopySnippet: "조각 복사",
   },
 }

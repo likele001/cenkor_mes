@@ -27,6 +27,40 @@ const keyword = ref('')
 const activeScope = ref('')
 const scopes = ref<string[]>([])
 
+const RECENT_KEY = 'cenkormes_h5_ai_docs_recent'
+type RecentDoc = { id: number; title: string; at: string }
+const recent = ref<RecentDoc[]>([])
+
+function loadRecent() {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    recent.value = Array.isArray(parsed) ? parsed.slice(0, 5) : []
+  } catch {
+    recent.value = []
+  }
+}
+
+function pushRecent(d: KnowledgeDoc) {
+  const item: RecentDoc = { id: d.id, title: d.title || `#${d.id}`, at: new Date().toISOString() }
+  const next = [item, ...recent.value.filter((r) => r.id !== item.id)].slice(0, 5)
+  recent.value = next
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {
+    // 隐私模式 / 配额不足：只在内存里留着，别影响看资料
+  }
+}
+
+function clearRecent() {
+  recent.value = []
+  try {
+    localStorage.removeItem(RECENT_KEY)
+  } catch {
+    // 忽略
+  }
+}
+
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<KnowledgeDoc | null>(null)
@@ -115,6 +149,7 @@ async function openDoc(id: number) {
       return
     }
     detail.value = r
+    pushRecent(r)
   } catch (e: unknown) {
     detailOpen.value = false
     showToast(e instanceof Error ? e.message : t('ai.docsLoadFailed'))
@@ -171,6 +206,7 @@ const detailMeta = computed(() => {
 
 // 从问答 / 预警跳过来时带 ?doc=<id> 直接开全文、?q=<词> 预填搜索
 async function applyQuery() {
+  loadRecent()
   const q = typeof route.query.q === 'string' ? route.query.q : ''
   const docId = Number(route.query.doc || 0)
   if (q) keyword.value = q
@@ -202,6 +238,20 @@ watch(() => [route.query.doc, route.query.q], () => {
         <van-button size="small" type="primary" plain @click="load()">{{ t('ai.docsSearch') }}</van-button>
       </div>
       <div v-if="total" class="mt-2 text-[11px] text-zinc-400">{{ t('ai.docsTotal', { n: total }) }}</div>
+      <div v-if="recent.length" class="mt-2 border-t border-zinc-100 pt-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] text-zinc-400">{{ t('ai.recentDocs') }}</span>
+          <span class="cursor-pointer text-[10px] text-zinc-400" @click="clearRecent">{{ t('ai.recentClear') }}</span>
+        </div>
+        <div class="mt-1 flex flex-wrap gap-1">
+          <span
+            v-for="r in recent"
+            :key="r.id"
+            class="max-w-[9rem] cursor-pointer truncate rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600"
+            @click="openDoc(r.id)"
+          >{{ r.title }}</span>
+        </div>
+      </div>
       <div v-if="scopes.length" class="mt-2 flex flex-wrap gap-1">
         <span
           class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"

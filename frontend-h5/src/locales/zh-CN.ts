@@ -490,5 +490,8 @@ export default {
     logFacts: "结构化事实",
     logNoFacts: "本次执行没有结构化事实",
     logTokens: "输入 {i} / 输出 {o} tokens",
+    recentDocs: "最近浏览",
+    recentClear: "清空",
+    helpCopySnippet: "复制片段",
   },
 }

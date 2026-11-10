@@ -646,3 +646,28 @@ def test_h5_ai_contract_covers_batch11_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("logDetail", "logInstruction", "logFacts", "logTokens"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+# ── 第十二批：详情复制 / 资料页最近浏览 / 命中片段复制 ────────────────────────
+
+def test_h5_ai_contract_covers_batch12_capabilities():
+    """复制与最近浏览都要真接上，不能只有按钮没实现。"""
+    alerts = (REPO / "frontend-h5/src/pages/AiAlertsPage.vue").read_text(encoding="utf-8")
+    assert "async function copyAlertDetail()" in alerts
+    assert "copyToClipboard(lines.join(" in alerts
+    assert "@click=\"copyAlertDetail\"" in alerts
+
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    assert "const RECENT_KEY = 'cenkormes_h5_ai_docs_recent'" in docs
+    assert "function pushRecent(d: KnowledgeDoc)" in docs
+    assert "loadRecent()" in docs
+    # 打开详情成功后才记，否则失败了也进「最近浏览」
+    assert "detail.value = r\n    pushRecent(r)" in docs
+
+    help_page = (REPO / "frontend-h5/src/pages/HelpPage.vue").read_text(encoding="utf-8")
+    assert "async function copyHit(h: KnowledgeHit)" in help_page
+    assert "t('ai.helpCopySnippet')" in help_page
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("recentDocs", "recentClear", "helpCopySnippet"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

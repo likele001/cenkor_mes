@@ -11,6 +11,7 @@ import {
   aiHelp, getKnowledgeStatus, knowledgeAsk, knowledgeSearch, listKnowledgeLogs,
   type KnowledgeHit, type KnowledgeAskOut, type KnowledgeLog, type KnowledgeSearchOut,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { isAccessDenied } from '@/utils/extension-gate'
 
 const { t } = useI18n()
@@ -119,6 +120,14 @@ async function fallback(q: string) {
   }
 }
 
+// 贴工单/群里时通常只要那一段，整条答案太长
+async function copyHit(h: KnowledgeHit) {
+  const text = [h.title ? `《${h.title}》` : '', h.excerpt || h.text || ''].filter(Boolean).join('\n')
+  if (!text.trim()) return
+  const done = await copyToClipboard(text)
+  showToast(done ? t('ai.copied') : t('ai.copyFailed'))
+}
+
 // 依据来源直达全文：答案里的《文档名》要能点开，不然还得自己去资料页翻
 function openSourceDoc(h: KnowledgeHit) {
   if (!h.doc_id) return
@@ -225,9 +234,12 @@ async function ask() {
           <div v-if="h.excerpt || h.text" class="mt-1 line-clamp-3 text-[11px] text-zinc-500">{{ h.excerpt || h.text }}</div>
           <div class="mt-1 flex items-center justify-between gap-2">
             <div class="text-[10px] text-zinc-400">{{ t('ai.helpSeq', { n: h.seq }) }}<span v-if="h.scope"> · {{ h.scope }}</span></div>
-            <van-button v-if="h.doc_id" size="mini" plain type="primary" @click="openSourceDoc(h)">
-              {{ t('ai.helpOpenDoc') }}
-            </van-button>
+            <div class="flex shrink-0 gap-1">
+              <van-button size="mini" plain @click="copyHit(h)">{{ t('ai.helpCopySnippet') }}</van-button>
+              <van-button v-if="h.doc_id" size="mini" plain type="primary" @click="openSourceDoc(h)">
+                {{ t('ai.helpOpenDoc') }}
+              </van-button>
+            </div>
           </div>
         </div>
       </div>

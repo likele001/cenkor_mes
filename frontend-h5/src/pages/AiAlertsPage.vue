@@ -12,6 +12,7 @@ import {
   handleAlert, interpretAlert, listAiAlerts, runAiAlerts,
   type AlertItem, type AnomalyOptionItem, type AnomalySummary,
 } from '@/api/ai'
+import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { handleExtensionLocked, isAccessDenied } from '@/utils/extension-gate'
 import { useAuthStore } from '@/stores/auth'
 
@@ -148,6 +149,23 @@ function exportAlertsCsv() {
   } catch {
     showToast(t('ai.exportFailed'))
   }
+}
+
+// 整条复制：把现象/原因/建议/解读拼成一段，方便贴进群或工单，不用截屏
+async function copyAlertDetail() {
+  const d = detail.value
+  if (!d) return
+  const lines = [
+    `【${sevText(sevOf(d))}】${d.title || ''}`,
+    `${t('ai.dimension')}：${d.dim_label || d.dim || '-'}　${t('ai.statusLabel')}：${d.status_label || d.status || '-'}`,
+    d.detail ? `${t('ai.detailPhenomenon')}：${d.detail}` : '',
+    d.root_cause ? `${t('ai.detailRootCause')}：${d.root_cause}` : '',
+    d.suggestion ? `${t('ai.detailSuggestion')}：${d.suggestion}` : '',
+    insight.value ? `${t('ai.detailAiInsight')}：${insight.value}` : '',
+    `${t('ai.detailTimes')}：${d.first_seen_at || '-'} / ${d.last_seen_at || '-'}`,
+  ].filter(Boolean)
+  const done = await copyToClipboard(lines.join('\n'))
+  showToast(done ? t('ai.copied') : t('ai.copyFailed'))
 }
 
 // 预警 → 相关制度：拿维度名（没有就用标题）去资料页搜，别让用户自己猜关键词
@@ -429,6 +447,7 @@ onMounted(async () => {
         <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
           <div class="text-sm font-medium text-zinc-800">{{ t('ai.detailTitle') }}</div>
           <div class="flex shrink-0 gap-1">
+            <van-button size="mini" plain @click="copyAlertDetail">{{ t('ai.copy') }}</van-button>
             <van-button size="mini" plain type="primary" @click="findDocs">{{ t('ai.alertFindDocs') }}</van-button>
             <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.close') }}</van-button>
           </div>
