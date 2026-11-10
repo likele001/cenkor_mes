@@ -8,7 +8,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import {
-  getKnowledgeDoc, knowledgeAsk, listKnowledgeDocs,
+  createKnowledgeDoc, getKnowledgeDoc, knowledgeAsk, listKnowledgeDocs,
+  updateKnowledgeDoc,
   type KnowledgeDoc, type KnowledgeDocItem,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
@@ -30,6 +31,8 @@ const scopes = ref<string[]>([])
 const sortMode = ref('new')
 const vecMode = ref('')
 const activeSource = ref('')
+// 「我建的」：现场员工自己沉淀的资料，改完要能马上找回来
+const mineOnly = ref(false)
 
 const RECENT_KEY = 'cenkormes_h5_ai_docs_recent'
 type RecentDoc = { id: number; title: string; at: string }
@@ -112,6 +115,7 @@ async function load(reset = true) {
       sort: sortMode.value,
       vectorized: vecMode.value === '' ? undefined : Number(vecMode.value),
       source: activeSource.value || undefined,
+      mine: mineOnly.value ? 1 : undefined,
       page: page.value,
       page_size: 20,
     })
@@ -170,6 +174,91 @@ function pickVec(v: string) {
   if (vecMode.value === v) return
   vecMode.value = v
   void load()
+}
+
+function pickMine() {
+  mineOnly.value = !mineOnly.value
+  void load()
+}
+
+// ── 新建 / 编辑资料 ─────────────────────────────────────────────────
+// 正文最少 20 字是后端硬门槛，前端先挡一次，省一次往返
+const editOpen = ref(false)
+const saving = ref(false)
+const editId = ref(0)
+const editTitle = ref('')
+const editSource = ref('')
+const editScope = ref('')
+const editContent = ref('')
+const editVectorize = ref(true)
+
+function openCreate() {
+  editId.value = 0
+  editTitle.value = ''
+  editSource.value = ''
+  editScope.value = ''
+  editContent.value = ''
+  editVectorize.value = true
+  editOpen.value = true
+}
+
+function openEdit() {
+  const d = detail.value
+  if (!d) return
+  editId.value = d.id
+  editTitle.value = d.title || ''
+  editSource.value = d.source || ''
+  editScope.value = d.scope || ''
+  editContent.value = d.content || ''
+  editVectorize.value = true
+  detailOpen.value = false
+  editOpen.value = true
+}
+
+// 业务域在前端是「逗号分隔的输入框」，提交给后端要还原成数组
+function splitTags(v: string) {
+  return v.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean)
+}
+
+async function saveDoc() {
+  const title = editTitle.value.trim()
+  const content = editContent.value.trim()
+  if (!title) {
+    showToast(t('ai.docsEditTitleRequired'))
+    return
+  }
+  if (content.length < 20) {
+    showToast(t('ai.docsEditContentTooShort'))
+    return
+  }
+  if (saving.value) return
+  saving.value = true
+  try {
+    const payload = {
+      title,
+      content,
+      scope: splitTags(editScope.value),
+      vectorize: editVectorize.value,
+    }
+    const r = editId.value
+      ? await updateKnowledgeDoc(editId.value, payload)
+      : await createKnowledgeDoc({ ...payload, source: editSource.value.trim() || undefined })
+    if (r?.ok === false) {
+      showToast(r.error || t('ai.docsSaveFailed'))
+      return
+    }
+    showToast(r?.vectorized ? t('ai.docsSavedVectorized') : t('ai.docsSaved'))
+    const targetId = r?.id || editId.value
+    editOpen.value = false
+    await load()
+    if (targetId) await openDoc(targetId)
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, t('ai.nameKnowledge'))) {
+      showToast(e instanceof Error ? e.message : t('ai.docsSaveFailed'))
+    }
+  } finally {
+    saving.value = false
+  }
 }
 
 const sortOptions = computed(() => [
@@ -290,6 +379,14 @@ watch(() => [route.query.doc, route.query.q], () => {
         />
         <van-button size="small" type="primary" plain @click="load()">{{ t('ai.docsSearch') }}</van-button>
       </div>
+      <div class="mt-2 flex items-center gap-2">
+        <van-button size="mini" type="primary" icon="plus" @click="openCreate">{{ t('ai.docsCreate') }}</van-button>
+        <span
+          class="cursor-pointer rounded-full border px-2 py-0.5 text-[11px]"
+          :class="mineOnly ? 'border-indigo-500 text-indigo-600' : 'border-zinc-200 text-zinc-500'"
+          @click="pickMine"
+        >{{ t('ai.docsMineOnly') }}</span>
+      </div>
       <div v-if="activeSource" class="mt-2">
         <van-tag plain type="primary" closeable @close="clearSource">
           {{ t('ai.docsSourceChip', { v: activeSource }) }}
@@ -367,6 +464,7 @@ watch(() => [route.query.doc, route.query.q], () => {
             <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-medium text-zinc-800">{{ d.title }}</div>
               <div class="mt-1 flex flex-wrap items-center gap-1">
+                <van-tag v-if="d.is_mine" plain type="success">{{ t('ai.docsMine') }}</van-tag>
                 <span v-if="d.source" class="text-[10px] text-zinc-400">《{{ d.source }}》</span>
                 <van-tag
                   v-for="s in (d.scope || '').split(',').filter(Boolean)"
@@ -394,6 +492,7 @@ watch(() => [route.query.doc, route.query.q], () => {
       <div class="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3">
         <div class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800">{{ detail?.title || t('ai.docsDetail') }}</div>
         <div class="flex shrink-0 gap-1">
+          <van-button v-if="detail?.can_edit" size="mini" type="primary" plain @click="openEdit">{{ t('ai.docsEdit') }}</van-button>
           <van-button size="mini" plain :disabled="!detail?.source" @click="filterBySource">{{ t('ai.docsSameSource') }}</van-button>
           <van-button size="mini" plain :disabled="!detail?.content" @click="copyDetail">{{ t('ai.copy') }}</van-button>
           <van-button size="mini" plain @click="detailOpen = false">{{ t('ai.ok') }}</van-button>
@@ -433,6 +532,58 @@ watch(() => [route.query.doc, route.query.q], () => {
           <div class="whitespace-pre-wrap break-words text-sm leading-relaxed text-zinc-700">{{ detail.content }}</div>
         </template>
         <van-empty v-else :description="t('ai.docsEmpty')" />
+      </div>
+    </van-popup>
+
+    <van-popup v-model:show="editOpen" position="bottom" round class="pb-safe" :style="{ height: '82%' }">
+      <div class="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+        <div class="text-sm font-medium text-zinc-800">
+          {{ editId ? t('ai.docsEditTitle') : t('ai.docsCreateTitle') }}
+        </div>
+        <van-button size="mini" plain @click="editOpen = false">{{ t('common.cancel') }}</van-button>
+      </div>
+      <div class="h-[calc(100%-49px)] overflow-y-auto px-4 py-3">
+        <div class="text-[11px] text-zinc-500">{{ t('ai.docsEditTitleLabel') }}</div>
+        <van-field
+          v-model="editTitle"
+          :placeholder="t('ai.docsEditTitlePlaceholder')"
+          maxlength="200"
+          class="!px-0"
+        />
+        <template v-if="!editId">
+          <div class="mt-2 text-[11px] text-zinc-500">{{ t('ai.docsEditSourceLabel') }}</div>
+          <van-field
+            v-model="editSource"
+            :placeholder="t('ai.docsEditSourcePlaceholder')"
+            maxlength="200"
+            class="!px-0"
+          />
+        </template>
+        <div class="mt-2 text-[11px] text-zinc-500">{{ t('ai.docsEditScopeLabel') }}</div>
+        <van-field
+          v-model="editScope"
+          :placeholder="t('ai.docsEditScopePlaceholder')"
+          class="!px-0"
+        />
+        <div class="mt-2 text-[11px] text-zinc-500">{{ t('ai.docsEditContentLabel') }}</div>
+        <van-field
+          v-model="editContent"
+          type="textarea"
+          rows="8"
+          autosize
+          maxlength="200000"
+          show-word-limit
+          :placeholder="t('ai.docsEditContentPlaceholder')"
+          class="!px-0"
+        />
+        <div class="mt-3 flex items-center justify-between">
+          <span class="text-[12px] text-zinc-600">{{ t('ai.docsEditVectorize') }}</span>
+          <van-switch v-model="editVectorize" size="20px" />
+        </div>
+        <div class="mt-1 text-[10px] leading-relaxed text-zinc-400">{{ t('ai.docsEditVectorizeHint') }}</div>
+        <van-button class="mt-3" block type="primary" :loading="saving" @click="saveDoc">
+          {{ editId ? t('ai.docsSaveEdit') : t('ai.docsSaveCreate') }}
+        </van-button>
       </div>
     </van-popup>
   </div>

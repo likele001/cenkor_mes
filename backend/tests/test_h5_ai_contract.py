@@ -866,3 +866,77 @@ def test_h5_ai_contract_covers_batch17_capabilities():
         pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
         for key in ("docsSameSource", "exportAll", "exportAllPartial"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+def test_knowledge_list_docs_filters_by_mine(monkeypatch):
+    """只看自己建的资料要落到 created_by，并把 is_mine 算好回给前端。"""
+    mod = _knowledge()
+    monkeypatch.setattr(mod, "_is_manager", lambda user, db: False)
+    monkeypatch.setattr(mod, "_visibility", lambda db, user, manage: ("1=1", {}))
+    monkeypatch.setattr(mod, "_safe_scalar", lambda *a, **k: 0)
+
+    captured = {}
+
+    def fake_rows(db, sql, **kw):
+        captured["sql"] = sql
+        captured["args"] = kw
+        return [{"id": 1, "title": "换模 SOP", "created_by": 7},
+                {"id": 2, "title": "别人的", "created_by": 9}]
+
+    monkeypatch.setattr(mod, "_safe_rows", fake_rows)
+    db, user = MagicMock(), MagicMock(id=7)
+
+    out = mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+                        source=None, mine=1, page=1, page_size=20, db=db, user=user)
+    assert "AND d.created_by = :me" in captured["sql"]
+    assert captured["args"]["me"] == 7
+    items = out["data"]["items"]
+    assert [it["is_mine"] for it in items] == [True, False]
+    assert out["data"]["mine"] == 1
+
+    mod.list_docs(q=None, scope=None, sort=None, vectorized=None,
+                  source=None, mine=None, page=1, page_size=20, db=db, user=user)
+    where = captured["sql"].split(" WHERE ", 1)[1].split(" ORDER BY ", 1)[0]
+    assert "created_by" not in where
+
+
+def test_knowledge_doc_detail_flags_can_edit(monkeypatch):
+    """详情要区分「我建的」和「有管理权」：前者给编辑，后者也给。"""
+    mod = _knowledge()
+    monkeypatch.setattr(mod, "_visibility", lambda db, user, manage: ("1=1", {}))
+    monkeypatch.setattr(mod, "_safe_rows", lambda *a, **k: [{"id": 5, "title": "T", "created_by": 7}])
+    db = MagicMock()
+
+    monkeypatch.setattr(mod, "_is_manager", lambda user, db: False)
+    out = mod.doc_detail(5, db=db, user=MagicMock(id=7))
+    assert out["data"]["is_mine"] is True
+    assert out["data"]["can_edit"] is True
+
+    out = mod.doc_detail(5, db=db, user=MagicMock(id=42))
+    assert out["data"]["is_mine"] is False
+    assert out["data"]["can_edit"] is False
+
+    monkeypatch.setattr(mod, "_is_manager", lambda user, db: True)
+    out = mod.doc_detail(5, db=db, user=MagicMock(id=42))
+    assert out["data"]["can_edit"] is True
+
+
+def test_h5_ai_contract_covers_batch18_capabilities():
+    """资料的新建/编辑闭环，后端接口、前端封装、页面、三语键都要齐。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    for marker in ("export function createKnowledgeDoc(", "export function updateKnowledgeDoc(",
+                   "mine?: number", "is_mine?: boolean", "can_edit?: boolean"):
+        assert marker in ai, f"api/ai.ts 缺 {marker}"
+
+    docs = (REPO / "frontend-h5/src/pages/AiDocsPage.vue").read_text(encoding="utf-8")
+    for marker in ("const mineOnly = ref(false)", "mine: mineOnly.value ? 1 : undefined",
+                   "async function saveDoc(", "function openCreate(",
+                   "function openEdit(", '@click="pickMine"', 'v-model:show="editOpen"',
+                   "detail?.can_edit", "d.is_mine"):
+        assert marker in docs, f"资料页缺少新建/编辑闭环: {marker}"
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("docsCreate", "docsEdit", "docsMineOnly", "docsMine",
+                    "docsEditVectorize", "docsSavedVectorized"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

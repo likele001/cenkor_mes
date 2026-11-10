@@ -1,7 +1,7 @@
 // Copyright (C) 2026 CenkorMES Project
 // SPDX-License-Identifier: AGPL-3.0
 // H5 侧 AI 能力统一走付费扩展 /extensions/*（飞书为核心免费能力，见 api/feishu.ts）
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/utils/http'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '@/utils/http'
 
 const AI_TIMEOUT_MS = 120_000
 
@@ -793,12 +793,15 @@ export type KnowledgeDocItem = {
   vectorized?: number
   updated_at?: string
   content_len?: number
+  created_by?: number
+  // is_mine 由后端比对当前用户算好下发：前端不持有用户 id，自己比对不了
+  is_mine?: boolean
 }
 
 export function listKnowledgeDocs(
   params: {
     q?: string; scope?: string; page?: number; page_size?: number
-    sort?: string; vectorized?: number; source?: string
+    sort?: string; vectorized?: number; source?: string; mine?: number
   } = {},
 ) {
   return apiGet<{ items?: KnowledgeDocItem[]; total?: number; page?: number; page_size?: number }>(
@@ -820,10 +823,46 @@ export type KnowledgeDoc = {
   vectorized?: number
   created_at?: string
   updated_at?: string
+  created_by?: number
+  is_mine?: boolean
+  can_edit?: boolean
 }
 
 export function getKnowledgeDoc(id: number) {
   return apiGet<KnowledgeDoc>(`/extensions/ai_knowledge/docs/${id}`)
+}
+
+export type KnowledgeDocWriteOut = {
+  ok: boolean
+  error?: string
+  id?: number
+  title?: string
+  chunks?: number
+  vectorized?: number
+  note?: string
+}
+
+// 新建资料：现场员工把 SOP / 经验沉淀进知识库，正文过短后端会直接拒（<20 字）
+export function createKnowledgeDoc(data: {
+  title: string
+  content: string
+  source?: string
+  scope?: string[]
+  vectorize?: boolean
+}) {
+  return apiPost<KnowledgeDocWriteOut>('/extensions/ai_knowledge/docs', data,
+    { timeout: AI_TIMEOUT_MS })
+}
+
+// 编辑资料：只传要改的字段，vectorize=true 会在保存后立刻重建分块与向量
+export function updateKnowledgeDoc(id: number, data: {
+  title?: string
+  content?: string
+  scope?: string[]
+  vectorize?: boolean
+}) {
+  return apiPut<KnowledgeDocWriteOut>(`/extensions/ai_knowledge/docs/${id}`, data,
+    { timeout: AI_TIMEOUT_MS })
 }
 
 export function batchDeleteInsightRuns(ids: number[]) {
