@@ -9,6 +9,7 @@ import { showToast, showLoadingToast, closeToast, showDialog } from 'vant'
 import { getTaskDetail, submitReport, type H5Task } from '@/api/tasks'
 import { uploadFile } from '@/api/files'
 import { photoAiCount, defectAiClassify, voiceParseReport, attachmentIdToUrl } from '@/api/ai'
+import { handleExtensionLocked } from '@/utils/extension-gate'
 import { VoiceInput, isVoiceInputSupported } from '@/utils/voice-input'
 import ScanTaskCodeButton from '@/components/ScanTaskCodeButton.vue'
 import { parseTaskCodeFromScan } from '@/utils/parseTaskCode'
@@ -184,7 +185,9 @@ async function parseVoiceText(text: string) {
     })
   } catch (e: unknown) {
     closeToast()
-    showToast(e instanceof Error ? e.message : 'AI 解析失败')
+    if (!handleExtensionLocked(e, 'AI 语音报工')) {
+      showToast(e instanceof Error ? e.message : 'AI 解析失败')
+    }
   } finally {
     voiceInput.value?.destroy()
     voiceInput.value = null
@@ -231,7 +234,9 @@ async function handleAiCount() {
       message: `识别 ${res.image_count} 张照片，共 ${cur} 件。可信度：${res.confidence || 'unknown'}\n${res.note || ''}`,
     })
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'AI 计数失败')
+    if (!handleExtensionLocked(e, 'AI 拍照计数')) {
+      showToast(e instanceof Error ? e.message : 'AI 计数失败')
+    }
   } finally {
     aiCounting.value = false
   }
@@ -274,7 +279,9 @@ async function handleAiDefect() {
     }
     showToast(`已识别为 ${res.defect_name ?? '未知缺陷'}`)
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'AI 识别失败')
+    if (!handleExtensionLocked(e, 'AI 缺陷识别')) {
+      showToast(e instanceof Error ? e.message : 'AI 识别失败')
+    }
   } finally {
     aiClassifying.value = false
   }

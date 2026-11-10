@@ -84,7 +84,8 @@ def startup_host() -> None:
 
     runtime.app_version = read_core_version()
     run_extension_migrations(extensions_base_dir())
-    sync_permissions()
+    # 启动时全量对齐：补建新扩展权限点、补授 admin、清理已下线扩展的残留权限点
+    sync_permissions(prune=True)
     # 延迟导入避免循环依赖；线程在 web 进程内定期把 hub 已购快照刷进 runtime，
     # 由每请求 require_extension 门控实现“到期/吊销自动停用”。
     try:
@@ -112,8 +113,11 @@ def _manifest_permissions(key: str) -> dict[str, str]:
 def sync_permissions(only_key: str | None = None, *, force: bool = False, prune: bool = False) -> dict:
     """把扩展声明的权限点写入 DB，并补授 admin 角色。
 
-    only_key: 只同步该扩展（安装/更新/修复），配合 force 跳过 ``is_enabled`` 门禁。
-    prune: 删除该扩展已不再声明的 ``ext.<key>.*`` 权限点（更新降级时清残留）。
+    only_key: 只同步该扩展（安装/更新/修复）。
+    prune: 删除不再声明的权限点；传 only_key 时只清理该扩展，否则清理全部失效的 ``ext.*``。
+
+    权限点与启用状态解耦：只要扩展在磁盘上（含本地禁用/授权过期），就注入权限点，
+    便于管理员在「角色管理」里提前分配；是否可调用仍由 ``require_extension`` 门控。
     """
     from app.models.permission import Permission
     from app.models.role import Role, role_permissions
@@ -121,8 +125,6 @@ def sync_permissions(only_key: str | None = None, *, force: bool = False, prune:
     wanted: dict[str, str] = {}
     for key in runtime.installed:
         if only_key and key != only_key:
-            continue
-        if not (force and key == only_key) and not runtime.is_enabled(key):
             continue
         wanted.update(_manifest_permissions(key))
 
@@ -146,9 +148,13 @@ def sync_permissions(only_key: str | None = None, *, force: bool = False, prune:
             if missing:
                 admin.permissions.extend(missing)
                 granted = [p.code for p in missing]
-        if prune and only_key:
-            prefix = f"ext.{only_key}."
-            stale = [p for code, p in existing.items() if code.startswith(prefix) and code not in wanted]
+        if prune:
+            if only_key:
+                prefix = f"ext.{only_key}."
+                stale = [p for code, p in existing.items() if code.startswith(prefix) and code not in wanted]
+            else:
+                # 全量同步：清掉已下线扩展遗留的 ext.* 权限点（ext.* 由宿主托管）
+                stale = [p for code, p in existing.items() if code.startswith("ext.") and code not in wanted]
             for perm in stale:
                 db.execute(delete(role_permissions).where(role_permissions.c.permission_id == perm.id))
                 db.delete(perm)

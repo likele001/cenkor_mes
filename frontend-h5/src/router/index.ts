@@ -34,6 +34,12 @@ const mainChildren: RouteRecordRaw[] = [
   { path: 'notifications', name: 'notifications', component: NotificationsPage, meta: { title: '消息中心' } },
   { path: 'profile', name: 'profile', component: () => import('@/pages/ProfilePage.vue'), meta: { titleKey: 'layout.profile' } },
   { path: 'help', name: 'help', component: () => import('@/pages/HelpPage.vue'), meta: { title: '智能帮助' } },
+  { path: 'ai-hub', name: 'aiHub', component: () => import('@/pages/AiHubPage.vue'), meta: { title: '智能中心' } },
+  { path: 'ai-assistant', name: 'aiAssistant', component: () => import('@/pages/AiAssistantPage.vue'), meta: { title: '工厂助手' } },
+  { path: 'ai-alerts', name: 'aiAlerts', component: () => import('@/pages/AiAlertsPage.vue'), meta: { title: '数据预警' } },
+  { path: 'ai-employees', name: 'aiEmployees', component: () => import('@/pages/AiEmployeesPage.vue'), meta: { title: 'AI 员工' } },
+  { path: 'ai-insight', name: 'aiInsight', component: () => import('@/pages/AiInsightPage.vue'), meta: { title: '深度洞察' } },
+  { path: 'ai-scene', name: 'aiScene', component: () => import('@/pages/AiScenePage.vue'), meta: { title: '场景文书' } },
   { path: 'customer', redirect: { name: 'customerOrder' } },
   {
     path: 'customer/order',
@@ -134,7 +140,7 @@ router.beforeEach(async (to) => {
 
   if (!isPublic && auth.userInfo && auth.isCustomer) {
     const sub = to.path
-    if (sub === '/home' || sub.startsWith('/tasks') || sub === '/report' || sub === '/report-unit' || sub === '/report-manual' || sub === '/report-history' || sub === '/attendance' || sub === '/wages' || sub.startsWith('/salary/')) {
+    if (sub === '/home' || sub.startsWith('/tasks') || sub === '/report' || sub === '/report-unit' || sub === '/report-manual' || sub === '/report-history' || sub === '/attendance' || sub === '/wages' || sub.startsWith('/salary/') || sub.startsWith('/ai-')) {
       return { name: 'customerOrder', replace: true }
     }
   }

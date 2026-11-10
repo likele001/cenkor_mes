@@ -79,8 +79,14 @@
       <el-dialog v-model="perm.open" :title="t('system.roles.configPermissions')" width="720px" destroy-on-close>
             <div class="text-[12px] text-gray-600 mb-2">{{ perm.roleLabel }}</div>
             <el-select v-model="perm.permission_codes" multiple filterable style="width: 100%">
-              <el-option v-for="p in permissions" :key="p.code" :label="`${p.name}（${p.code}）`" :value="p.code" />
+              <el-option-group :label="t('system.roles.corePermissions')">
+                <el-option v-for="p in corePermissions" :key="p.code" :label="`${p.name}（${p.code}）`" :value="p.code" />
+              </el-option-group>
+              <el-option-group :label="t('system.roles.extensionPermissions')">
+                <el-option v-for="p in extensionPermissions" :key="p.code" :label="`${p.name}（${p.code}）`" :value="p.code" />
+              </el-option-group>
             </el-select>
+            <div class="text-[12px] text-gray-500 mt-2">{{ t('system.roles.extensionPermissionsHint') }}</div>
             <template #footer>
               <el-button @click="perm.open = false">{{ t('system.roles.cancel') }}</el-button>
               <el-button type="primary" :loading="perm.saving" @click="onSavePerms">{{ t('system.roles.save') }}</el-button>
@@ -92,7 +98,7 @@
 
 <script setup lang="ts">
 import AdminPage from '@/components/admin/AdminPage.vue'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -104,6 +110,10 @@ const loading = ref(false)
 const exporting = ref(false)
 const items = ref<RoleOut[]>([])
 const permissions = ref<PermissionOut[]>([])
+
+// 权限点按「核心功能 / 扩展能力」分组，便于管理员在 160+ 权限点里定位
+const corePermissions = computed(() => permissions.value.filter((p) => !p.code.startsWith('ext.')))
+const extensionPermissions = computed(() => permissions.value.filter((p) => p.code.startsWith('ext.')))
 
 const dlg = reactive({
   open: false,

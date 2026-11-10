@@ -7,7 +7,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showLoadingToast, showSuccessToast, showToast, closeToast } from 'vant'
 import { changePassword, me, updateProfile, type MeOut } from '@/api/auth'
-import { getFeishuBindStatus, getFeishuBindUrl } from '@/api/feishu'
+import { bindImUser, getBindStatus, getFeishuBindUrl, type BindStatusOut } from '@/api/feishu'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -19,10 +19,10 @@ const pwdSaving = ref(false)
 const showPwd = ref(false)
 
 const meData = ref<MeOut | null>(null)
-const feishuEnabled = ref(false)
-const feishuBound = ref(false)
+const bindStatus = ref<BindStatusOut | null>(null)
 const feishuBinding = ref(false)
-const feishuBotLink = ref('')
+const imBinding = ref<'' | 'wecom' | 'dingtalk'>('')
+const imForm = reactive({ wecom: '', dingtalk: '' })
 
 const profileForm = reactive({
   full_name: '',
@@ -63,16 +63,13 @@ function validateProfile(): boolean {
   return true
 }
 
-async function loadFeishuStatus() {
+async function loadBindStatus() {
   try {
-    const fs = await getFeishuBindStatus()
-    feishuEnabled.value = fs.enabled
-    feishuBound.value = fs.bound
-    feishuBotLink.value = fs.bot_open_link || ''
+    bindStatus.value = await getBindStatus()
+    imForm.wecom = bindStatus.value.wecom?.userid || ''
+    imForm.dingtalk = bindStatus.value.dingtalk?.userid || ''
   } catch {
-    feishuEnabled.value = false
-    feishuBound.value = false
-    feishuBotLink.value = ''
+    bindStatus.value = null
   }
 }
 
@@ -81,14 +78,7 @@ async function loadMe() {
   try {
     meData.value = await me()
     fillForm(meData.value)
-    await loadFeishuStatus()
-    auth.userInfo = {
-      full_name: meData.value.full_name,
-      roles: meData.value.roles,
-      username: meData.value.username,
-      phone: meData.value.phone,
-      email: meData.value.email,
-    }
+    await loadBindStatus()
   } finally {
     loading.value = false
   }
@@ -157,18 +147,28 @@ async function onBindFeishu() {
     const res = await getFeishuBindUrl()
     window.location.href = res.authorize_url
   } catch (e: unknown) {
-    showToast(String(e))
+    showToast(e instanceof Error ? e.message : '飞书绑定暂不可用')
   } finally {
     feishuBinding.value = false
   }
 }
 
-async function onOpenFeishuBot() {
-  if (!feishuBotLink.value) {
-    showToast('请先在管理后台配置飞书 App ID')
+async function onBindIm(channel: 'wecom' | 'dingtalk') {
+  const userid = imForm[channel].trim()
+  if (!userid) {
+    showToast(`请输入${channel === 'wecom' ? '企微' : '钉钉'} UserID`)
     return
   }
-  window.location.href = feishuBotLink.value
+  imBinding.value = channel
+  try {
+    await bindImUser(channel, userid)
+    showSuccessToast('绑定成功')
+    await loadBindStatus()
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : '绑定失败')
+  } finally {
+    imBinding.value = ''
+  }
 }
 
 onMounted(async () => {
@@ -195,16 +195,54 @@ onMounted(async () => {
       <van-button block type="primary" round :loading="profileSaving" @click="onSaveProfile">保存资料</van-button>
     </div>
 
-    <van-cell-group v-if="feishuEnabled" inset title="飞书通知">
-      <van-cell title="绑定状态" :value="feishuBound ? '已绑定' : '未绑定'" />
-      <van-cell v-if="!feishuBound" title="说明" label="绑定后派工/报工/工资等通知会推送到飞书机器人单聊" />
-      <div v-if="!feishuBound" class="px-4 pb-4">
-        <van-button block type="primary" plain round :loading="feishuBinding" @click="onBindFeishu">
-          绑定飞书
-        </van-button>
+    <van-cell-group v-if="bindStatus" inset title="消息绑定">
+      <van-cell
+        title="飞书通知"
+        :value="bindStatus.feishu.bound ? '已绑定' : bindStatus.feishu.available ? '未绑定' : '未开通'"
+      />
+      <div v-if="!bindStatus.feishu.available" class="px-4 pb-3 text-xs text-zinc-400">
+        飞书为免费能力，管理员在后台「系统设置 → 飞书」配置 App ID 后即可绑定。
       </div>
-      <div v-else class="px-4 pb-4">
-        <van-button block type="primary" plain round @click="onOpenFeishuBot">打开飞书机器人</van-button>
+      <template v-else-if="!bindStatus.feishu.bound">
+        <div class="px-4 pb-3 text-xs text-zinc-400">绑定后派工/报工/工资等通知会推送到飞书机器人单聊</div>
+        <div class="px-4 pb-3">
+          <van-button block type="primary" plain round :loading="feishuBinding" @click="onBindFeishu">
+            绑定飞书
+          </van-button>
+        </div>
+      </template>
+      <div v-else class="px-4 pb-3 text-xs text-zinc-400">绑定时间：{{ bindStatus.feishu.bound_at || '—' }}</div>
+
+      <van-cell
+        title="企业微信"
+        :value="!bindStatus.wecom.available ? '未开通' : bindStatus.wecom.bound ? '已绑定' : '未绑定'"
+      />
+      <template v-if="bindStatus.wecom.available">
+        <van-field v-model="imForm.wecom" label="UserID" placeholder="企业微信成员账号" clearable />
+        <div class="px-4 pb-3">
+          <van-button block type="primary" plain round :loading="imBinding === 'wecom'" @click="onBindIm('wecom')">
+            {{ bindStatus.wecom.bound ? '更新企微绑定' : '绑定企业微信' }}
+          </van-button>
+        </div>
+      </template>
+      <div v-else class="px-4 pb-3 text-xs text-zinc-400">
+        「企微/钉钉通知」为付费扩展，请在应用市场的扩展应用中开通后再绑定。
+      </div>
+
+      <van-cell
+        title="钉钉"
+        :value="!bindStatus.dingtalk.available ? '未开通' : bindStatus.dingtalk.bound ? '已绑定' : '未绑定'"
+      />
+      <template v-if="bindStatus.dingtalk.available">
+        <van-field v-model="imForm.dingtalk" label="UserID" placeholder="钉钉成员账号" clearable />
+        <div class="px-4 pb-3">
+          <van-button block type="primary" plain round :loading="imBinding === 'dingtalk'" @click="onBindIm('dingtalk')">
+            {{ bindStatus.dingtalk.bound ? '更新钉钉绑定' : '绑定钉钉' }}
+          </van-button>
+        </div>
+      </template>
+      <div v-else class="px-4 pb-3 text-xs text-zinc-400">
+        钉钉通知复用「企微/钉钉通知」付费扩展，开通后即可在此自助绑定。
       </div>
     </van-cell-group>
 

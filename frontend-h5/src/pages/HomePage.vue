@@ -7,7 +7,8 @@ import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showDialog, showLoadingToast, closeToast, showToast } from 'vant'
 import { getMyDashboardSummary, type H5DashboardSummary } from '@/api/tasks'
-import { getAiBrief, listAiAlerts, runAiAlerts, shiftAiSummary, type AlertItem, type AiBriefOut, type ShiftSummaryOut } from '@/api/ai'
+import { shiftAiSummary, type ShiftSummaryOut } from '@/api/ai'
+import { handleExtensionLocked } from '@/utils/extension-gate'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
@@ -15,18 +16,9 @@ const auth = useAuthStore()
 
 const loading = ref(false)
 const summary = ref<H5DashboardSummary | null>(null)
-const aiAlerts = ref<AlertItem[]>([])
-const alertScanning = ref(false)
-const briefLoading = ref(false)
-const brief = ref<AiBriefOut | null>(null)
 
-const canAi = computed(() => auth.hasPermission('ai.use'))
-const canAiAlert = computed(() => auth.hasPermission('ai.alert.view'))
-const canAiBrief = computed(() => canAi.value && canAiAlert.value)
-const canAiEmployee = computed(() => auth.hasPermission("ai_employee.use"))
-const canShiftSummary = computed(() => auth.hasPermission('ai.report_assist'))
-const showAiHub = computed(() => canAi.value || canAiAlert.value || canAiEmployee.value)
 const showStaffHome = computed(() => !auth.isCustomer)
+const showAiHub = computed(() => !auth.isCustomer)
 
 // 交接摘要（Task 6）
 const shiftSummaryLoading = ref(false)
@@ -60,38 +52,6 @@ async function refresh() {
   } finally {
     loading.value = false
   }
-  if (canAiAlert.value) {
-    try {
-      const res = await listAiAlerts()
-      aiAlerts.value = (res.items || []).slice(0, 5)
-    } catch {
-      aiAlerts.value = []
-    }
-  }
-  if (canAiBrief.value) {
-    briefLoading.value = true
-    try {
-      brief.value = await getAiBrief()
-    } catch {
-      brief.value = null
-    } finally {
-      briefLoading.value = false
-    }
-  }
-}
-
-async function scanAlerts() {
-  alertScanning.value = true
-  try {
-    const res = await runAiAlerts()
-    showToast(`扫描 ${res.events ?? 0} 条`)
-    const list = await listAiAlerts()
-    aiAlerts.value = (list.items || []).slice(0, 5)
-  } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : '扫描失败')
-  } finally {
-    alertScanning.value = false
-  }
 }
 
 // AI 生成换班/交接摘要
@@ -108,7 +68,9 @@ async function generateShiftSummary() {
     })
   } catch (e: unknown) {
     closeToast()
-    showToast(e instanceof Error ? e.message : '生成摘要失败')
+    if (!handleExtensionLocked(e, 'AI 场景文书')) {
+      showToast(e instanceof Error ? e.message : '生成摘要失败')
+    }
   } finally {
     shiftSummaryLoading.value = false
   }
@@ -176,7 +138,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="canShiftSummary" class="mx-4 mt-4 rounded-xl bg-white p-4 shadow-sm">
+    <div v-if="showStaffHome" class="mx-4 mt-4 rounded-xl bg-white p-4 shadow-sm">
       <div class="flex items-center justify-between mb-2">
         <div class="text-sm font-medium text-zinc-700">换班/交接摘要（AI）</div>
         <van-button
@@ -216,16 +178,6 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div v-if="canAiBrief" class="mx-4 mt-4 rounded-xl bg-white p-4 shadow-sm">
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-sm font-medium text-zinc-700">今日简报</div>
-        <span v-if="brief?.mode" class="text-xs text-zinc-400">{{ brief.mode === 'llm' ? 'AI 生成' : '规则汇总' }}</span>
-      </div>
-      <div v-if="briefLoading" class="text-xs text-zinc-400">加载中…</div>
-      <div v-else-if="brief?.content" class="text-sm text-zinc-600 whitespace-pre-wrap leading-relaxed">{{ brief.content }}</div>
-      <div v-else class="text-xs text-zinc-400">暂无简报</div>
-    </div>
-
     <div v-if="showAiHub" class="mx-4 mt-4">
       <div class="mb-2 text-sm font-medium text-zinc-700">智能中心</div>
       <div class="grid grid-cols-3 gap-3">
@@ -233,46 +185,30 @@ onMounted(async () => {
           <div class="text-violet-500 text-2xl">🧠</div>
           <div class="mt-1 text-sm font-medium">智能中心</div>
         </div>
+        <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/ai-assistant')">
+          <div class="text-indigo-500 text-2xl">🤖</div>
+          <div class="mt-1 text-sm font-medium">工厂助手</div>
+        </div>
+        <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/ai-alerts')">
+          <div class="text-orange-500 text-2xl">⚠️</div>
+          <div class="mt-1 text-sm font-medium">数据预警</div>
+        </div>
+        <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/ai-employees')">
+          <div class="text-green-500 text-2xl">💬</div>
+          <div class="mt-1 text-sm font-medium">AI 员工</div>
+        </div>
+        <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/ai-insight')">
+          <div class="text-cyan-500 text-2xl">📊</div>
+          <div class="mt-1 text-sm font-medium">深度洞察</div>
+        </div>
+        <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/ai-scene')">
+          <div class="text-amber-500 text-2xl">📝</div>
+          <div class="mt-1 text-sm font-medium">场景文书</div>
+        </div>
         <div class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer" @click="go('/help')">
           <div class="text-blue-500 text-2xl">💡</div>
           <div class="mt-1 text-sm font-medium">智能帮助</div>
         </div>
-        <div
-          v-if="canAi"
-          class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer"
-          @click="go('/ai-assistant')"
-        >
-          <div class="text-indigo-500 text-2xl">🤖</div>
-          <div class="mt-1 text-sm font-medium">工厂助手</div>
-        </div>
-        <div
-          v-else-if="canAiAlert"
-          class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer"
-          @click="go('/ai-alerts')"
-        >
-          <div class="text-orange-500 text-2xl">⚠️</div>
-          <div class="mt-1 text-sm font-medium">数据预警</div>
-        </div>
-        <div
-          v-if="canAiEmployee"
-          class="rounded-xl bg-white p-3 text-center shadow-sm cursor-pointer"
-          @click="go('/ai-employees')"
-        >
-          <div class="text-green-500 text-2xl">💬</div>
-          <div class="mt-1 text-sm font-medium">AI 员工</div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="canAiAlert" class="mx-4 mt-4 rounded-xl bg-white p-4 shadow-sm">
-      <div class="flex items-center justify-between mb-2">
-        <div class="text-sm font-medium text-zinc-700">AI 数据预警</div>
-        <van-button v-if="canAi" size="mini" plain :loading="alertScanning" @click="scanAlerts">扫描</van-button>
-      </div>
-      <div v-if="!aiAlerts.length" class="text-xs text-zinc-400">暂无预警</div>
-      <div v-for="a in aiAlerts" :key="a.id" class="py-2 border-b border-zinc-50 last:border-0">
-        <div class="text-sm font-medium">{{ a.title }}</div>
-        <div v-if="a.summary" class="text-xs text-zinc-500 mt-1">{{ a.summary }}</div>
       </div>
     </div>
 

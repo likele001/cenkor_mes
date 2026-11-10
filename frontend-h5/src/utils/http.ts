@@ -53,6 +53,15 @@ http.interceptors.response.use(
     if (body && typeof body === 'object' && typeof body.code === 'number') {
       if (body.code === 200) return body.data
       const msg = body.msg || '请求失败'
+      const url = resp.config?.url || ''
+      // 扩展未开通：交给调用方弹“需要开通扩展”窗口，避免再弹一次 toast；
+      // 已开通但当前角色没分配权限点：给一次明确提示，引导联系管理员在角色管理里分配。
+      if (body.code === 403 && url.startsWith('/extensions/')) {
+        if (msg.includes('无权限')) {
+          showToast('该功能未授权，请联系管理员在角色管理中分配权限')
+        }
+        return Promise.reject(new ApiError(body.code, msg))
+      }
       showToast(msg)
       return Promise.reject(new ApiError(body.code, msg))
     }

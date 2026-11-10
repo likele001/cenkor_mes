@@ -10,6 +10,7 @@ import { getTaskDetail, type H5Task } from '@/api/tasks'
 import { getTaskUnits, submitReportUnit, type AnomalyWarning, type ReportUnitItem, type TaskFlowContext } from '@/api/reportUnits'
 import { getReportMediaSettings, type ReportMediaSettings } from '@/api/settings'
 import { reportAiCheck, defectAiClassify, photoAiCount, voiceParseReport, attachmentIdToUrl, type DefectClassifyOut } from '@/api/ai'
+import { handleExtensionLocked } from '@/utils/extension-gate'
 import { VoiceInput, isVoiceInputSupported } from '@/utils/voice-input'
 import { tenantH5Path } from '@/utils/tenant'
 import CameraPhotoCapture from '@/components/CameraPhotoCapture.vue'
@@ -148,7 +149,9 @@ async function handleAiClassify() {
       showToast(`已识别为 ${res.defect_name ?? '未知缺陷'}`)
     }
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'AI 识别失败')
+    if (!handleExtensionLocked(e, 'AI 缺陷识别')) {
+      showToast(e instanceof Error ? e.message : 'AI 识别失败')
+    }
   } finally {
     aiClassifying.value = false
   }
@@ -224,7 +227,8 @@ async function parseVoiceResult(text: string) {
       title: '语音解析完成',
       message: res.summary || text,
     })
-  } catch {
+  } catch (e: unknown) {
+    if (handleExtensionLocked(e, 'AI 语音报工')) return
     form.value.remark = form.value.remark ? `${form.value.remark}\n${text}` : text
     showToast('语音已填入备注')
   }
@@ -254,7 +258,9 @@ async function handleAiCount() {
       showToast(res.error || 'AI 无法计数')
     }
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'AI 计数失败')
+    if (!handleExtensionLocked(e, 'AI 拍照计数')) {
+      showToast(e instanceof Error ? e.message : 'AI 计数失败')
+    }
   } finally {
     aiCounting.value = false
   }
@@ -282,7 +288,9 @@ async function handleAiCheck() {
       message: (res.hints?.length ? res.hints.join('\n') : res.reply) || '无特别建议',
     })
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : 'AI 暂不可用')
+    if (!handleExtensionLocked(e, 'AI 报工自检')) {
+      showToast(e instanceof Error ? e.message : 'AI 暂不可用')
+    }
   } finally {
     aiChecking.value = false
   }

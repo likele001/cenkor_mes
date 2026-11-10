@@ -34,7 +34,7 @@ async function exportExcel() {
   if (exporting.value) return
   exporting.value = true
   try {
-    const blob = await http.downloadBlob({ url: '/admin/production/quality/defect-codes/export', method: 'GET' })
+    const blob = await http.downloadBlob({ url: '/admin/production/defect-codes/export', method: 'GET' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

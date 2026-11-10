@@ -6,6 +6,7 @@
 import { ref } from 'vue'
 import { showToast } from 'vant'
 import { aiHelp } from '@/api/ai'
+import { handleExtensionLocked } from '@/utils/extension-gate'
 
 const question = ref('')
 const loading = ref(false)
@@ -23,7 +24,9 @@ async function ask() {
     answer.value = res.answer
     sources.value = res.sources || []
   } catch (e: unknown) {
-    showToast(e instanceof Error ? e.message : '帮助暂不可用')
+    if (!handleExtensionLocked(e, 'AI 助手（知识库帮助）')) {
+      showToast(e instanceof Error ? e.message : '帮助暂不可用')
+    }
   } finally {
     loading.value = false
   }

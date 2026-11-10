@@ -5,9 +5,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { showDialog, showToast } from 'vant'
 import { getMyTasks, type H5Task } from '@/api/tasks'
-import { getTaskRecommend, type TaskRecommendItem } from '@/api/ai'
+import { aiChat } from '@/api/ai'
+import { handleExtensionLocked } from '@/utils/extension-gate'
 import { tenantH5Path } from '@/utils/tenant'
 
 const router = useRouter()
@@ -88,52 +89,48 @@ function onTabChange(key: string) {
   load(true)
 }
 
-// AI 推荐（Task 5）
-const recommends = ref<TaskRecommendItem[]>([])
-const aiRecommending = ref(false)
+// 推荐报工：按剩余量排序（规则层），需要更细排序可点「问 AI」
+const recommends = computed(() =>
+  items.value
+    .filter((t) => t.status !== 'done' && (t.remaining_qty ?? 0) > 0)
+    .sort((a, b) => (b.remaining_qty ?? 0) - (a.remaining_qty ?? 0))
+    .slice(0, 3)
+    .map((t) => ({ task: t, reason: '剩余数量最多，建议优先报工' })),
+)
+const aiAsking = ref(false)
 
-async function loadRecommend() {
-  aiRecommending.value = true
+function goReportByTask(t: H5Task) {
+  const path = t.use_unit_report === false ? '/report' : '/report-unit'
+  router.push({ path: tenantH5Path(path), query: { task_code: t.task_code } })
+}
+
+async function askAiOrder() {
+  if (!recommends.value.length) {
+    showToast('暂无可报工任务')
+    return
+  }
+  const ctx = recommends.value
+    .map((r) => `${r.task.task_code} ${r.task.process?.name || ''} 剩余${r.task.remaining_qty ?? 0}`)
+    .join('；')
+  aiAsking.value = true
   try {
-    const res = await getTaskRecommend()
-    recommends.value = res.items || []
-  } catch {
-    // 静默失败：推荐是辅助，不打扰用户
-    recommends.value = []
+    const res = await aiChat({
+      message: `我是车间工人，请根据剩余数量给出前 3 个优先报工的任务与一句理由：${ctx}`,
+    })
+    await showDialog({ title: 'AI 排工建议', message: res.reply, confirmButtonText: '知道了' })
+  } catch (e: unknown) {
+    if (!handleExtensionLocked(e, '工厂助手（AI 助手）')) {
+      showToast(e instanceof Error ? e.message : 'AI 暂不可用')
+    }
   } finally {
-    aiRecommending.value = false
+    aiAsking.value = false
   }
-}
-
-function findTaskByCode(code: string): H5Task | undefined {
-  return items.value.find((t) => t.task_code === code)
-}
-
-function goReportCode(taskCode: string, useUnit: boolean | undefined) {
-  const path = useUnit === false ? '/report' : '/report-unit'
-  router.push({ path: tenantH5Path(path), query: { task_code: taskCode } })
-}
-
-function onRecommendClick(rec: TaskRecommendItem) {
-  const t = findTaskByCode(rec.task_code)
-  if (t) {
-    goReportCode(rec.task_code, t.use_unit_report)
-  } else {
-    // 任务可能不在当前页列表中：尝试简单按 task_code 跳转
-    showToast('请到任务列表中跳转报工')
-  }
-}
-
-function priorityTag(p: string) {
-  if (p === 'urgent') return { type: 'danger' as const, text: '急' }
-  return { type: 'primary' as const, text: '推荐' }
 }
 
 watch(statusFilter, () => load(true), { immediate: true })
 
 onMounted(() => {
   load(true)
-  loadRecommend()
 })
 </script>
 
@@ -162,37 +159,36 @@ onMounted(() => {
       <van-tab v-for="t in tabs" :key="t.key" :title="t.label" :name="t.key" />
     </van-tabs>
 
-    <!-- AI 推荐（Task 5）：急件 / 续报 / 剩最多 -->
+    <!-- 推荐报工：规则层按剩余量排序，可再问 AI -->
     <div v-if="recommends.length" class="mx-2 mt-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 p-3 text-white shadow-sm">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <van-icon name="aim" />
-          <span class="text-sm font-medium">AI 推荐</span>
-          <van-loading v-if="aiRecommending" size="12px" color="#fff" />
+          <span class="text-sm font-medium">推荐报工</span>
+          <van-loading v-if="aiAsking" size="12px" color="#fff" />
         </div>
-        <span class="text-[11px] opacity-80">点击直接报工</span>
+        <van-button size="mini" plain class="!text-white !border-white/60" :loading="aiAsking" @click="askAiOrder">
+          问 AI
+        </van-button>
       </div>
       <div class="mt-2 space-y-2">
         <div
           v-for="(rec, idx) in recommends"
-          :key="rec.task_id"
+          :key="rec.task.id"
           class="flex items-center justify-between rounded-lg bg-white/15 p-2 active:bg-white/25"
-          @click="onRecommendClick(rec)"
+          @click="goReportByTask(rec.task)"
         >
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="rounded bg-white/30 px-1.5 text-[10px] font-medium">TOP{{ idx + 1 }}</span>
-              <van-tag :type="priorityTag(rec.priority).type" plain class="!bg-white/20 !text-white !border-transparent">
-                {{ priorityTag(rec.priority).text }}
-              </van-tag>
               <span class="truncate text-sm font-medium">
-                {{ rec.process_name || rec.task_code }}
+                {{ rec.task.process?.name || rec.task.task_code }}
               </span>
             </div>
-            <div class="mt-1 text-[11px] opacity-90">{{ rec.reason || '建议继续报工' }}</div>
+            <div class="mt-1 text-[11px] opacity-90">{{ rec.reason }}</div>
           </div>
           <div class="ml-2 text-right text-[11px]">
-            <div class="font-bold">{{ rec.remaining_qty }}</div>
+            <div class="font-bold">{{ rec.task.remaining_qty ?? 0 }}</div>
             <div class="opacity-80">待报</div>
           </div>
         </div>
