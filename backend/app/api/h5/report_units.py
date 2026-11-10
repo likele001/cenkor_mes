@@ -268,12 +268,14 @@ def submit_report_unit_api(
 @router.get("/report-units")
 def my_report_units_api(
     status: str | None = Query(default=None),
+    exclude_draft: bool = Query(default=False),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)):
     _ensure_report_read(user)
-    items = list_report_units(db, user_id=user.id, status=status, offset=offset, limit=limit
+    items = list_report_units(db, user_id=user.id, status=status,
+                              exclude_draft=exclude_draft, offset=offset, limit=limit
     )
     return ok(
         {

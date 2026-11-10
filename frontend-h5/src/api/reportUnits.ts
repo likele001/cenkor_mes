@@ -68,10 +68,26 @@ export function submitReportUnit(data: {
   return apiPost<SubmitReportUnitResult>('/h5/report-units', data)
 }
 
-export function getMyReportUnits(params?: { status?: string; offset?: number; limit?: number }) {
+// exclude_draft: draft 是报工前的占位槽位（按 assigned_qty 预建 1..N），
+// 报工记录这类「已发生事实」的列表必须排除，否则一堆空槽位会把真实记录挤掉
+export function getMyReportUnits(params?: {
+  status?: string
+  exclude_draft?: boolean
+  offset?: number
+  limit?: number
+}) {
   return apiGet<{ items: ReportUnitItem[] }>('/h5/report-units', { params })
 }
 
+export interface ReportAuditRow {
+  id: number
+  audit_level?: string | null
+  action?: string | null
+  reason?: string | null
+  attachment_ids?: string | null
+  created_at?: string | null
+}
+
 export function getReportUnitDetail(unitId: number) {
-  return apiGet<ReportUnitItem & { audits?: unknown[] }>(`/h5/report-units/${unitId}`)
+  return apiGet<ReportUnitItem & { audits?: ReportAuditRow[] }>(`/h5/report-units/${unitId}`)
 }

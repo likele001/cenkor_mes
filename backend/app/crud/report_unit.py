@@ -272,6 +272,7 @@ def list_report_units(
     prescreen_level: str | None = None,
     risk_first: bool = False,
     pending_audit: bool = False,
+    exclude_draft: bool = False,
     offset: int = 0,
     limit: int = 50,
 ) -> list[ReportUnit]:
@@ -297,6 +298,10 @@ def list_report_units(
         stmt = stmt.where(ReportUnit.status.in_(PENDING_AUDIT_UNIT_STATUSES))
     elif status:
         stmt = stmt.where(ReportUnit.status == status)
+    # draft 只是报工前的占位槽位（sync_unit_slots 按 assigned_qty 预建 1..N），
+    # 报工记录这类「已发生事实」的列表必须排除它们，否则 100 个槽位会把真实记录挤没
+    if exclude_draft:
+        stmt = stmt.where(ReportUnit.status != "draft")
     if prescreen_level:
         stmt = stmt.where(ReportUnit.prescreen_level == prescreen_level)
     if risk_first:
