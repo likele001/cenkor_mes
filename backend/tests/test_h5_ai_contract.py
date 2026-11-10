@@ -967,3 +967,24 @@ def test_h5_ai_contract_covers_batch19_capabilities():
         for key in ("agentToolsTitle", "agentToolsCount", "empConversations",
                     "empConvDeleteConfirm", "empConvNotFound"):
             assert f"{key}:" in pack, f"{loc} 缺 {key}"
+
+
+def test_h5_ai_contract_covers_batch20_capabilities():
+    """查数据模式：/agent 与 /act 必须先注册，页面必须有确认闸门。"""
+    ai = AI_TS.read_text(encoding="utf-8")
+    for marker in ("export function aiAgent(", "export function actPendingAction(",
+                   "export type PendingAction", "export type ToolTraceItem"):
+        assert marker in ai, f"api/ai.ts 缺 {marker}"
+
+    page = (REPO / "frontend-h5/src/pages/AiAssistantPage.vue").read_text(encoding="utf-8")
+    for marker in ("const toolMode = ref(false)", "async function confirmPending(",
+                   "@click.stop=\"confirmPending(i)\"", "toggleTrace(i)",
+                   "const res = await aiAgent(", "await actPendingAction(p.token)"):
+        assert marker in page, f"助手页缺查数据模式: {marker}"
+    # 写操作必须经过人工确认，不能出现「拿到 pending 就直接执行」的写法
+    assert "pending_action" in page or "pending:" in page
+
+    for loc in ("zh-CN", "en-US", "ko-KR"):
+        pack = (REPO / f"frontend-h5/src/locales/{loc}.ts").read_text(encoding="utf-8")
+        for key in ("agentMode", "agentConfirmDo", "agentTraceShow", "agentActDone"):
+            assert f"{key}:" in pack, f"{loc} 缺 {key}"

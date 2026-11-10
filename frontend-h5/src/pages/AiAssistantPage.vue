@@ -7,9 +7,9 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { showConfirmDialog, showToast } from 'vant'
 import {
-  aiChat, deleteAssistantConversation, getAssistantConversation,
+  actPendingAction, aiAgent, aiChat, deleteAssistantConversation, getAssistantConversation,
   listAgentTools, listAssistantConversations, renameAssistantConversation,
-  type AgentToolItem, type AssistantConversation,
+  type AgentToolItem, type AssistantConversation, type PendingAction, type ToolTraceItem,
 } from '@/api/ai'
 import { copyText as copyToClipboard } from '@/utils/clipboard'
 import { downloadText } from '@/utils/download'
@@ -27,8 +27,65 @@ const messages = ref<Array<{
   content: string
   failed?: boolean
   tokens?: { i: number; o: number }
+  // 查数据模式的产物：调了哪些工具、有没有等待确认的写操作
+  trace?: ToolTraceItem[]
+  pending?: PendingAction
 }>>([])
 const listEl = ref<HTMLElement | null>(null)
+
+// 查数据模式：默认关闭。开着才会走 /agent 调工具读真实数据，
+// 关着就是普通对话，避免员工随口一问就把权限内的数据翻出来。
+const TOOL_MODE_KEY = 'cenkormes_h5_ai_agent_mode'
+const toolMode = ref(false)
+const traceOpen = ref<number>(-1)
+const acting = ref('')
+
+function loadToolMode() {
+  try {
+    toolMode.value = localStorage.getItem(TOOL_MODE_KEY) === '1'
+  } catch {
+    // 隐私模式：保持默认关闭
+  }
+}
+
+function saveToolMode() {
+  try {
+    localStorage.setItem(TOOL_MODE_KEY, toolMode.value ? '1' : '0')
+  } catch {
+    // 忽略
+  }
+  // 模式切换后折叠复位，避免展开状态错位到别的消息上
+  traceOpen.value = -1
+}
+
+function toggleTrace(i: number) {
+  traceOpen.value = traceOpen.value === i ? -1 : i
+}
+
+async function confirmPending(i: number) {
+  const m = messages.value[i]
+  const p = m?.pending
+  if (!p || acting.value) return
+  acting.value = p.token
+  try {
+    const r = await actPendingAction(p.token)
+    m.pending = undefined
+    messages.value.push({
+      role: 'assistant',
+      content: t('ai.agentActDone', { name: r.name || p.name }),
+    })
+    void scrollBottom()
+  } catch (e: unknown) {
+    showToast(e instanceof Error ? e.message : t('ai.agentActFailed'))
+  } finally {
+    acting.value = ''
+  }
+}
+
+function cancelPending(i: number) {
+  const m = messages.value[i]
+  if (m) m.pending = undefined
+}
 
 const convId = ref<number | null>(null)
 const conversations = ref<AssistantConversation[]>([])
@@ -220,16 +277,29 @@ async function send(text?: string) {
   sending.value = true
   void scrollBottom()
   try {
-    const res = await aiChat({ message: msg, conversation_id: convId.value })
-    convId.value = res.conversation_id
-    messages.value.push({
-      role: 'assistant',
-      content: res.reply || res.hint || t('ai.unavailable'),
+    let reply = ''
+    let tokens: { i: number; o: number } | undefined
+    let trace: ToolTraceItem[] | undefined
+    let pending: PendingAction | undefined
+    if (toolMode.value) {
+      const res = await aiAgent({ message: msg, conversation_id: convId.value, kind: 'assistant' })
+      reply = res.reply || res.hint || t('ai.unavailable')
       // 成本可见：这次回答花了多少 token，降级/失败时不显示
-      tokens: (res.tokens_in || res.tokens_out)
+      tokens = (res.tokens_in || res.tokens_out)
         ? { i: res.tokens_in ?? 0, o: res.tokens_out ?? 0 }
-        : undefined,
-    })
+        : undefined
+      trace = res.tool_trace?.length ? res.tool_trace : undefined
+      pending = res.pending_action
+      convId.value = res.conversation_id ?? convId.value
+    } else {
+      const res = await aiChat({ message: msg, conversation_id: convId.value })
+      reply = res.reply || res.hint || t('ai.unavailable')
+      tokens = (res.tokens_in || res.tokens_out)
+        ? { i: res.tokens_in ?? 0, o: res.tokens_out ?? 0 }
+        : undefined
+      convId.value = res.conversation_id ?? convId.value
+    }
+    messages.value.push({ role: 'assistant', content: reply, tokens, trace, pending })
     void loadConversations()
     void autoNameIfNew(wasNew, msg)
   } catch (e: unknown) {
@@ -318,7 +388,10 @@ function exportChat() {
   }
 }
 
-onMounted(() => { void loadConversations() })
+onMounted(() => {
+  loadToolMode()
+  void loadConversations()
+})
 </script>
 
 <template>
@@ -365,6 +438,42 @@ onMounted(() => { void loadConversations() })
           :class="m.role === 'user' ? 'bg-blue-500 text-white' : 'bg-white text-zinc-700'"
         >
           {{ m.content }}
+          <div v-if="m.trace && m.trace.length" class="mt-2 border-t border-zinc-100 pt-1">
+            <span class="cursor-pointer text-[10px] text-indigo-600" @click.stop="toggleTrace(i)">
+              {{ traceOpen === i ? t('ai.agentTraceHide', { n: m.trace.length }) : t('ai.agentTraceShow', { n: m.trace.length }) }}
+            </span>
+            <div v-if="traceOpen === i" class="mt-1 space-y-1">
+              <div
+                v-for="(tr, ti) in m.trace"
+                :key="ti"
+                class="rounded-lg bg-zinc-50 px-2 py-1 text-[10px] text-zinc-600"
+              >
+                <span class="font-medium">{{ tr.name || '-' }}</span>
+                <span :class="tr.ok === false ? 'text-red-500' : 'text-green-600'">
+                  · {{ tr.ok === false ? t('ai.agentTraceFail') : t('ai.agentTraceOk') }}
+                </span>
+                <span v-if="tr.elapsed_ms" class="text-zinc-400"> · {{ tr.elapsed_ms }}ms</span>
+                <div v-if="tr.error" class="mt-0.5 text-red-500">{{ tr.error }}</div>
+              </div>
+            </div>
+          </div>
+          <div v-if="m.pending" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+            <div class="text-[11px] leading-relaxed text-amber-700">
+              {{ m.pending.confirm_message || t('ai.agentConfirmDefault') }}
+            </div>
+            <div class="mt-1 text-[10px] text-amber-600">
+              {{ t('ai.agentConfirmHint', { n: Math.round((m.pending.expires_in || 900) / 60) }) }}
+            </div>
+            <div class="mt-2 flex gap-2">
+              <van-button
+                size="mini"
+                type="primary"
+                :loading="acting === m.pending.token"
+                @click.stop="confirmPending(i)"
+              >{{ t('ai.agentConfirmDo') }}</van-button>
+              <van-button size="mini" plain @click.stop="cancelPending(i)">{{ t('common.cancel') }}</van-button>
+            </div>
+          </div>
           <div v-if="m.role === 'assistant'" class="mt-1 flex items-center justify-end gap-2">
             <span v-if="m.tokens" class="text-[10px] text-zinc-400">
               {{ t('ai.usageTokens', { i: m.tokens.i, o: m.tokens.o }) }}
@@ -377,6 +486,14 @@ onMounted(() => { void loadConversations() })
         </div>
       </div>
       <div v-if="sending" class="text-xs text-zinc-400">{{ t('ai.thinking') }}</div>
+    </div>
+
+    <div class="mt-2 flex items-center gap-2 rounded-xl bg-white px-2 py-1 shadow-sm">
+      <span class="shrink-0 text-[11px] text-zinc-600">{{ t('ai.agentMode') }}</span>
+      <van-switch v-model="toolMode" size="16px" @update:model-value="saveToolMode" />
+      <span class="min-w-0 flex-1 truncate text-[10px] text-zinc-400">
+        {{ toolMode ? t('ai.agentModeOn') : t('ai.agentModeOff') }}
+      </span>
     </div>
 
     <div class="sticky bottom-0 mt-3 flex gap-2 bg-zinc-100 pt-2">

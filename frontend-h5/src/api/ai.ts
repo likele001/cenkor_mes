@@ -914,3 +914,56 @@ export function deleteEmployeeConversation(id: number) {
     `/extensions/ai_employee/conversations/${id}`,
   )
 }
+
+
+export type ToolTraceItem = {
+  name?: string
+  args?: unknown
+  ok?: boolean
+  elapsed_ms?: number
+  error?: string
+}
+
+export type PendingAction = {
+  token: string
+  name: string
+  args?: unknown
+  confirm_message?: string
+  expires_in?: number
+}
+
+export type AgentChatOut = {
+  available?: boolean
+  degraded?: boolean
+  engine?: string | null
+  conversation_id?: number
+  reply?: string | null
+  hint?: string
+  tokens_in?: number | null
+  tokens_out?: number | null
+  tool_trace?: ToolTraceItem[]
+  pending_action?: PendingAction
+}
+
+// 查数据模式：走工具调用，能读真实数据；写操作只会返回待确认动作，绝不直接执行
+export function aiAgent(data: {
+  message: string
+  conversation_id?: number | null
+  kind?: string
+  show_trace?: boolean
+}) {
+  return apiPost<AgentChatOut>(
+    '/extensions/ai_assistant/agent',
+    { kind: 'assistant', show_trace: true, ...data },
+    { timeout: AI_TIMEOUT_MS },
+  )
+}
+
+// 消费一次性确认令牌：工具名与参数一律以服务端待确认记录为准
+export function actPendingAction(token: string) {
+  return apiPost<{ name?: string; result?: unknown }>(
+    '/extensions/ai_assistant/act',
+    { token },
+    { timeout: AI_TIMEOUT_MS },
+  )
+}
