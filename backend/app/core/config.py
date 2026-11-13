@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     DB_SLOW_QUERY_MS: int = 800              # 慢查询阈值（毫秒），单次游标执行超过则 WARNING；<=0 关闭
 
     JWT_SECRET: str = "change_me"
+    # 轮换 JWT_SECRET 时把旧密钥填这里：解密历史数据（如 market_instance_token）
+    # 会依次回退尝试。encrypt 永远只用当前的 JWT_SECRET，不会用 OLD 重新加密。
+    JWT_SECRET_OLD: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     REMEMBER_ME_EXPIRE_MINUTES: int = 10080
