@@ -1,3 +1,13 @@
+# CenkorMES 后端直接依赖（兼容范围写法：只写下界，允许上游小版本浮动）
+#
+# 需要「精确复现已验证环境」时用 lock 文件（含 178 个传递依赖，全部 ==）：
+#   pip install -r requirements.lock.txt
+# 想在兼容范围内尽量对齐已测版本：
+#   pip install -r requirements.txt -c requirements.lock.txt
+#
+# 为什么两套并存：客户环境 Python 版本、已装包都可能不同，全量 == 反而装不上；
+# 而排查「线上能跑、新机器跑不起来」这类问题时，lock 是唯一可比对的基准。
+#
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 SQLAlchemy>=2.0.36
