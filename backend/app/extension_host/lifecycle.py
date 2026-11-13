@@ -49,7 +49,12 @@ DRAIN_SECONDS = 2.0
 FORBIDDEN_DIRS = {"__MACOSX", ".git", ".svn", ".hg", "node_modules", "__pycache__", ".idea", ".vscode"}
 FORBIDDEN_SUFFIX = {".pyc", ".pyo", ".bak", ".swp", ".swo", ".orig", ".rej"}
 _CREATE_TABLE_RE = re.compile(
-    r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`\"]?([A-Za-z0-9_]+)[`\"]?", re.IGNORECASE
+    r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`\"]?([A-Za-z0-9_]+)[`\"]?\s*\(", re.IGNORECASE
+)
+# 幂等兜底写法：CREATE TABLE IF NOT EXISTS <核心表> 不覆盖已有表，历史包用它引用核心表；
+# 不带 IF NOT EXISTS 的裸 CREATE TABLE <核心表> 仍必须按冲突拒绝。
+_CREATE_TABLE_IF_NOT_EXISTS_RE = re.compile(
+    r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+[`\"]?([A-Za-z0-9_]+)[`\"]?\s*\(", re.IGNORECASE
 )
 
 _KEY_LOCKS: dict[str, threading.Lock] = {}
@@ -148,10 +153,25 @@ def lifecycle_lock(key: str, *, timeout: float = 30.0):
 # ── 冲突探测 ────────────────────────────────────────────────────────────────
 
 def core_table_names() -> set[str]:
+    """只返回核心 ORM 声明的表。
+
+    扩展与核心共用 ``Base.metadata``：启动期 ``mount_all`` 会把已装扩展的 models
+    注册进同一份 metadata。直接返回 ``set(Base.metadata.tables)`` 会把扩展自己的
+    表当成核心表，导致「更新已装扩展」必然报与核心表冲突。复用
+    ``loader._core_table_ids()`` 按 Table 对象来源精确区分（118/118 全覆盖）。
+    """
     try:
         import app.models  # noqa: F401 - 触发全部模型注册
         from app.models.base import Base
 
+        from .loader import _core_table_ids
+
+        core_ids = _core_table_ids()
+        core = {name for name, table in Base.metadata.tables.items() if id(table) in core_ids}
+        if core:
+            return core
+        # 过滤结果异常时退回全量，宁可误报也不静默关掉校验
+        logger.warning("[extension] 核心表 id 过滤结果为空，退回 Base.metadata 全量")
         return set(Base.metadata.tables)
     except Exception as e:  # noqa: BLE001 - 取不到核心表时不阻断（denylist 仍含内置表）
         logger.warning("[extension] 读取核心表清单失败: %s", e)
@@ -207,10 +227,26 @@ def _check_table_conflicts(
     mine = own_tables_from_zip(manifest, zf) if zf is not None else own_tables(manifest)
     if not mine:
         return
+    # CREATE TABLE IF NOT EXISTS <核心表> 是历史包的幂等兜底：表已存在时为空操作，
+    # 不会覆盖核心表；不带 IF NOT EXISTS 的裸 CREATE 仍按冲突拒绝。
+    idempotent_refs: set[str] = set()
+    if zf is not None:
+        try:
+            sql = zf.read("migrations.sql").decode("utf-8")
+        except (KeyError, UnicodeDecodeError):
+            sql = ""
+        if sql:
+            idempotent_refs = set(_CREATE_TABLE_IF_NOT_EXISTS_RE.findall(sql))
     core = core_table_names()
-    clash = sorted(mine & core)
+    clash = sorted((mine - idempotent_refs) & core)
     if clash:
         raise LifecycleError(f"扩展表与核心表冲突：{', '.join(clash[:5])}", status_code=409)
+    if idempotent_refs & core:
+        logger.info(
+            "[extension] %s 幂等引用核心表：%s",
+            key, ", ".join(sorted(idempotent_refs & core)),
+        )
+    # 扩展间冲突仍用完整 mine，不受幂等引用豁免影响
     clash = sorted(mine & other_extension_tables(key))
     if clash:
         raise LifecycleError(f"扩展表与其他已装扩展冲突：{', '.join(clash[:5])}", status_code=409)

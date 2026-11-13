@@ -11,6 +11,12 @@ export function isExtensionLocked(e: unknown): boolean {
   return !!err && err.code === 403 && String(err.message || '').includes('未启用')
 }
 
+/** 403：扩展已开通，但当前账号没有分配对应权限点 */
+export function isPermissionDenied(e: unknown): boolean {
+  const err = e as { code?: number; message?: string } | null
+  return !!err && err.code === 403 && String(err.message || '').includes('无权限')
+}
+
 /** 403：扩展未开通，或当前账号未获得该扩展权限 */
 export function isAccessDenied(e: unknown): boolean {
   return (e as { code?: number } | null)?.code === 403
@@ -34,6 +40,10 @@ export function showAccessDenied(): void {
 }
 
 export function handleExtensionLocked(e: unknown, name: string): boolean {
+  if (isPermissionDenied(e)) {
+    showAccessDenied()
+    return true
+  }
   if (!isExtensionLocked(e)) return false
   showExtensionLocked(name)
   return true

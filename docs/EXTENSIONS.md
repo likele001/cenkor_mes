@@ -61,6 +61,12 @@ python scripts/extension.py sync              # 手动触发一次心跳同步
   的扩展注入 `plugin.js`（Blob 动态执行）。
 - 插件注册的动态路由挂载到 `app-layout` 之下，菜单渲染为侧边栏「扩展应用」分组，
   多语言经 `i18n.mergeLocaleMessage` 注入；菜单 `permission` 同时约束路由访问。
+- 扩展包只有 `frontend/plugin.js` 一个前端资源位（**没有 css 文件**），插件自带样式需在脚本内
+  自己插入 `<style id="ext-style-<key>">`（按 id 幂等，重复加载复用同一份），样式选择器
+  用页面根类（如 `.ext-hs`）限定，颜色走 Element Plus 变量以兼容暗色模式。
+- 插件里取组件必须用 `window.Vue.ElTable` 对象，**不能写 `h("el-table")` 字符串**：Vue 的 `h()`
+  不解析字符串，会当原生元素渲染，列插槽被无参调用后 `({ row }) => …` 直接抛错。
+  宿主桥对 `el-*` 字符串做了兜底解析，但属于兼容层，扩展源码仍应按组件引用编写。
 - 源码位置：`frontend-admin-pro/src/utils/extensionLoader.ts`。
 
 ## 七、本地开发流程（不接应用中心）
