@@ -160,7 +160,17 @@ from app.models.material_issue import MaterialIssue, MaterialIssueItem, Material
 from app.models.warehouse_entry import WarehouseEntry, WarehouseEntryItem
 # warehouse_entry / material_issue / supplier_statement 用字符串 relationship 引用了这两个模块的类，
 # 不在这里导入的话，只 import app.models 的脚本（demo_data、alembic、pytest）会 configure_mappers 失败
-from app.models.warehouse import Warehouse, Stock, StockLog
+from app.models.warehouse import (
+    Stock,
+    StockBatch,
+    StockLedger,
+    StockLog,
+    StockTransfer,
+    StockTransferItem,
+    Warehouse,
+    WarehouseLocation,
+    WarehouseZone,
+)
 # 盘点单：确认入账走 adjust_stock，同属库存域，跟着仓库/库存一起注册
 from app.models.stocktake import Stocktake, StocktakeItem
 # 不良品处置单：挂在报工的不良量上，只记决定与损失，不碰库存与报工良品数

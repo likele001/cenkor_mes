@@ -52,6 +52,7 @@ class BizType:
     REWORK = "rework"
     ECN = "ecn"
     DOWNTIME = "downtime"
+    STOCK_TRANSFER = "stock_transfer"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,8 @@ _RULES: dict[str, _Rule] = {
     BizType.REWORK: _Rule("RW"),
     BizType.ECN: _Rule("ECN"),
     BizType.DOWNTIME: _Rule("DT"),
+    # 库位化仓储：调拨单号 TR+YYYYMMDD+4 位流水
+    BizType.STOCK_TRANSFER: _Rule("TR"),
 }
 
 

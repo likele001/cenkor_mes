@@ -16,6 +16,11 @@ from app.api.admin.warehouse.shipments import router as shipments_router
 from app.api.admin.warehouse.material_issues import router as material_issues_router
 from app.api.admin.warehouse.warehouse_entries import router as warehouse_entries_router
 from app.api.admin.warehouse.stocktakes import router as stocktakes_router
+# 库位化仓储：库区 / 库位 / 批次与效期 / 调拨单
+from app.api.admin.warehouse.zones import router as zones_router
+from app.api.admin.warehouse.locations import router as locations_router
+from app.api.admin.warehouse.batches import router as batches_router
+from app.api.admin.warehouse.transfers import router as transfers_router
 from app.tasks._sync_excel import make_excel_response
 
 
@@ -36,6 +41,12 @@ router.include_router(shipments_router)
 router.include_router(material_issues_router)
 router.include_router(warehouse_entries_router)
 router.include_router(stocktakes_router)
+router.include_router(zones_router)
+router.include_router(locations_router)
+# batches 里的 /batches/expiry-alerts 要早于 /batches/{batch_id} 注册，
+# 所以整包放在 transfers 之前、且内部顺序已按此排列
+router.include_router(batches_router)
+router.include_router(transfers_router)
 
 
 @router.get("/warehouses")
