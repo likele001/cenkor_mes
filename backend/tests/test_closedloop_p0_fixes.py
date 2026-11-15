@@ -36,6 +36,11 @@ from app.models.work_order import WorkOrder
 OPTIONAL_MODULES = {
     # 独立版没有 AI 员工模块，飞书回调里用 try 兜底降级为回执文案
     "app.services.ai_employee.im_dispatch",
+    # 仓储调拨的可选依赖：单用户版没有品质防错（BatchHold 冻结校验）与开放平台
+    # （stock.transferred 埋点），transfer.py 用 try/except ImportError 降级。
+    # 两版共用同一份服务代码，所以这两个是必需的可选导入，不是死代码。
+    "app.models.quality_poka",
+    "app.services.openapi.webhook",
 }
 
 
