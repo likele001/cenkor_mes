@@ -4,7 +4,7 @@
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.models.ai import PlatformAiGateway, PlatformAiModel, PlatformAiProfile
+from app.models.ai import PlatformAiGateway, PlatformAiModel, PlatformAiProfile, PlatformAiQuota
 
 SECRET_PLACEHOLDER = "******"
 PROFILE_ID = 1
@@ -223,4 +223,56 @@ def set_default_ai_model(db: Session, row: PlatformAiModel) -> PlatformAiModel:
 
 
 def delete_ai_model(db: Session, row: PlatformAiModel) -> None:
+    db.delete(row)
+
+
+# --- 用量配额（services/ai/metering.py 负责记账，这里只管配置读写）---
+
+
+def list_ai_quotas(db: Session) -> list[PlatformAiQuota]:
+    return list(
+        db.scalars(
+            select(PlatformAiQuota).order_by(PlatformAiQuota.scope.asc(), PlatformAiQuota.scope_key.asc())
+        ).all()
+    )
+
+
+def get_ai_quota(db: Session, *, scope: str, scope_key: str = "") -> PlatformAiQuota | None:
+    return db.scalar(
+        select(PlatformAiQuota).where(
+            PlatformAiQuota.scope == scope,
+            PlatformAiQuota.scope_key == (scope_key or ""),
+        )
+    )
+
+
+def upsert_ai_quota(
+    db: Session,
+    *,
+    scope: str,
+    scope_key: str | None = None,
+    limit_tokens: int = 0,
+    policy: str = "warn",
+    enabled: bool = True,
+    note: str | None = None,
+) -> PlatformAiQuota:
+    """按 (scope, scope_key) 幂等写入。
+
+    global 的 scope_key 统一落空串：MySQL 唯一索引里 NULL 互不相等，留 NULL 会让
+    「global 只能有一条」这个约束形同虚设。
+    """
+    key = (scope_key or "") if scope == "extension" else ""
+    row = get_ai_quota(db, scope=scope, scope_key=key)
+    if row is None:
+        row = PlatformAiQuota(scope=scope, scope_key=key, period="monthly")
+        db.add(row)
+    row.limit_tokens = max(0, int(limit_tokens or 0))
+    row.policy = policy if policy in ("warn", "block") else "warn"
+    row.enabled = bool(enabled)
+    row.note = (note or "").strip() or None
+    db.flush()
+    return row
+
+
+def delete_ai_quota(db: Session, row: PlatformAiQuota) -> None:
     db.delete(row)

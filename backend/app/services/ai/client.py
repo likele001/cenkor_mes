@@ -8,6 +8,7 @@ resolve_runtime(db) 依据「总开关 → 选定/默认模型 → 所属网关 
 """
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import NamedTuple
@@ -24,6 +25,7 @@ from app.crud.ai_platform import (
     is_ai_globally_enabled,
 )
 from app.models.ai import PlatformAiGateway, PlatformAiModel
+from app.services.ai import metering
 
 
 class AiNotConfiguredError(Exception):
@@ -32,6 +34,30 @@ class AiNotConfiguredError(Exception):
 
 class AiCallError(Exception):
     """调用 LLM 过程中发生的异常（网络/超时/服务端错误）。"""
+
+
+class AiQuotaExceededError(AiCallError):
+    """本月用量超出配额且策略为 block。
+
+    继承 AiCallError 是刻意的：现存的扩展与核心端点都是 ``except AiCallError`` 降级，
+    配额拦截不该让它们变成 500，而应走既有的「AI 不可用，展示提示」路径。
+    """
+
+
+def _ms(t0: float) -> int:
+    return int((time.perf_counter() - t0) * 1000)
+
+
+def _enforce_quota(db: Session) -> dict:
+    """调用前检查配额；block 策略直接抛错，warn 策略返回标记供记录打标。"""
+    state = metering.check_quota(db)
+    if state.get("allowed"):
+        state["over_quota"] = False
+        return state
+    if (state.get("policy") or "warn") == "block":
+        raise AiQuotaExceededError(metering.quota_exceeded_message(state))
+    state["over_quota"] = True
+    return state
 
 
 @dataclass
@@ -103,6 +129,8 @@ def chat_completion(
     max_tokens: int = 2048,
 ) -> tuple[str, int | None, int | None]:
     cfg = resolve_runtime(db, model_code=model_code, gateway_id=gateway_id)
+    quota = _enforce_quota(db)
+    t0 = time.perf_counter()
     try:
         client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=cfg.timeout_seconds)
         resp = client.chat.completions.create(
@@ -114,16 +142,33 @@ def chat_completion(
     except AiNotConfiguredError:
         raise
     except Exception as e:  # noqa: BLE001
+        metering.record(
+            source="chat",
+            model_code=cfg.model_code,
+            gateway_code=cfg.gateway_code,
+            latency_ms=_ms(t0),
+            ok=False,
+            error=str(e)[:200],
+            over_quota=quota.get("over_quota", False),
+        )
         raise AiCallError(str(e)[:500]) from e
 
     choice = resp.choices[0] if resp.choices else None
     text = (choice.message.content or "").strip() if choice and choice.message else ""
     usage = resp.usage
-    return (
-        text,
-        int(usage.prompt_tokens) if usage and usage.prompt_tokens else None,
-        int(usage.completion_tokens) if usage and usage.completion_tokens else None,
+    tin = int(usage.prompt_tokens) if usage and usage.prompt_tokens else None
+    tout = int(usage.completion_tokens) if usage and usage.completion_tokens else None
+    metering.record(
+        source="chat",
+        model_code=cfg.model_code,
+        gateway_code=cfg.gateway_code,
+        tokens_in=tin,
+        tokens_out=tout,
+        latency_ms=_ms(t0),
+        ok=True,
+        over_quota=quota.get("over_quota", False),
     )
+    return text, tin, tout
 
 
 class StreamChunk(NamedTuple):
@@ -142,6 +187,12 @@ def chat_completion_stream(
     max_tokens: int = 2048,
 ) -> Iterator[StreamChunk]:
     cfg = resolve_runtime(db, model_code=model_code, gateway_id=gateway_id)
+    quota = _enforce_quota(db)
+    t0 = time.perf_counter()
+    ok = False
+    tin: int | None = None
+    tout: int | None = None
+    err: str | None = None
     try:
         client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=cfg.timeout_seconds)
         try:
@@ -162,8 +213,6 @@ def chat_completion_stream(
                 stream=True,
             )
         for chunk in stream:
-            tin: int | None = None
-            tout: int | None = None
             if getattr(chunk, "usage", None):
                 usage = chunk.usage
                 if usage.prompt_tokens is not None:
@@ -176,10 +225,26 @@ def chat_completion_stream(
                     yield StreamChunk(delta=delta, tokens_in=tin, tokens_out=tout)
             elif tin is not None or tout is not None:
                 yield StreamChunk(delta="", tokens_in=tin, tokens_out=tout)
+        ok = True
     except AiNotConfiguredError:
         raise
     except Exception as e:  # noqa: BLE001
+        err = str(e)[:200]
         raise AiCallError(str(e)[:500]) from e
+    finally:
+        # 流式调用可能在客户端断开时提前结束：只要有 token 就记账，成本已经发生
+        if ok or tin is not None or tout is not None or err:
+            metering.record(
+                source="stream",
+                model_code=cfg.model_code,
+                gateway_code=cfg.gateway_code,
+                tokens_in=tin,
+                tokens_out=tout,
+                latency_ms=_ms(t0),
+                ok=ok and err is None,
+                error=err,
+                over_quota=quota.get("over_quota", False),
+            )
 
 
 def vision_completion(
@@ -203,6 +268,8 @@ def vision_completion(
         raise AiNotConfiguredError("请配置 Vision 模型（在「AI 网关/模型」页勾选 is_vision）")
 
     cfg = resolve_runtime(db, model_code=model_row.code, gateway_id=model_row.gateway_id)
+    quota = _enforce_quota(db)
+    t0 = time.perf_counter()
     content: list[dict] = [{"type": "text", "text": prompt}]
     for url in image_urls[:6]:
         if url:
@@ -219,13 +286,29 @@ def vision_completion(
     except AiNotConfiguredError:
         raise
     except Exception as e:  # noqa: BLE001
+        metering.record(
+            source="vision",
+            model_code=cfg.model_code,
+            gateway_code=cfg.gateway_code,
+            latency_ms=_ms(t0),
+            ok=False,
+            error=str(e)[:200],
+        )
         raise AiCallError(str(e)[:500]) from e
 
     choice = resp.choices[0] if resp.choices else None
     text = (choice.message.content or "").strip() if choice and choice.message else ""
     usage = resp.usage
-    return (
-        text,
-        int(usage.prompt_tokens) if usage and usage.prompt_tokens else None,
-        int(usage.completion_tokens) if usage and usage.completion_tokens else None,
+    tin = int(usage.prompt_tokens) if usage and usage.prompt_tokens else None
+    tout = int(usage.completion_tokens) if usage and usage.completion_tokens else None
+    metering.record(
+        source="vision",
+        model_code=cfg.model_code,
+        gateway_code=cfg.gateway_code,
+        tokens_in=tin,
+        tokens_out=tout,
+        latency_ms=_ms(t0),
+        ok=True,
+        over_quota=quota.get("over_quota", False),
     )
+    return text, tin, tout

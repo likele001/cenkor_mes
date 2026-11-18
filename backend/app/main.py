@@ -25,6 +25,8 @@ from app.crud.user import create_user
 from app.extension_host import mount_all, startup_host
 from app.models.base import Base
 from app.models.user import User
+# AI 用量归属：中间件把 /api/extensions/<key>/... 折算成计量归属，45 个扩展免改造
+from app.services.ai.metering import AiUsageContextMiddleware
 # 导入即注册 Session 级监听：看板相关表 commit 后推 WebSocket 刷新
 from app.services import dashboard_events as _dashboard_events  # noqa: F401
 # 导入即注册 Session 级监听：业务读缓存按 namespace 在 commit 后失效；
@@ -58,6 +60,9 @@ if settings.TRUSTED_HOSTS:
 setup_logging()
 enable_slow_query_logging(engine)
 app.add_middleware(RequestContextMiddleware)
+# AI 计量归属中间件：必须晚于 RequestContextMiddleware 注册（更靠内层），
+# 这样记账时既能拿到 request_id，又能按路径区分「付费扩展」与「核心内置」调用。
+app.add_middleware(AiUsageContextMiddleware)
 
 app.include_router(api_router, prefix="/api")
 

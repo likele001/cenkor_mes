@@ -64,3 +64,14 @@ class AiPromptSettingsIn(BaseModel):
 class AiTestIn(BaseModel):
     gateway_id: int | None = Field(default=None, ge=1)
     model_code: str | None = None
+
+
+class AiQuotaIn(BaseModel):
+    """用量配额写入：global 兜底或按扩展覆盖（scope_key 为扩展 key）。"""
+
+    scope: str = Field(default="global", pattern="^(global|extension)$")
+    scope_key: str | None = Field(default=None, max_length=64)
+    limit_tokens: int = Field(default=0, ge=0)
+    policy: str = Field(default="warn", pattern="^(warn|block)$")
+    enabled: bool = True
+    note: str | None = Field(default=None, max_length=200)

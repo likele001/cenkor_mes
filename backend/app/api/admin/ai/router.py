@@ -8,7 +8,7 @@
 
 安全：api_key 一律掩码回显（SECRET_MASK），GET 永不返回明文；PUT 收到掩码或空则不改。
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_permissions
@@ -16,9 +16,11 @@ from app.core.response import ok
 from app.crud import ai_platform as crud_ai
 from app.crud import platform_setting as crud_ps
 from app.models.user import User
+from app.models.ai import PlatformAiQuota
 from app.schemas.ai import (
     AiGatewaySettingsIn,
     AiPromptSettingsIn,
+    AiQuotaIn,
     AiTestIn,
     PlatformAiGatewayIn,
     PlatformAiGatewayUpdateIn,
@@ -331,3 +333,101 @@ def test_connection(
         raise HTTPException(status_code=503, detail=str(e))
     except AiCallError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+# ── 用量与配额 ────────────────────────────────────────────────────────
+# 计量流水由 services/ai/metering.py 在每次 LLM 调用边界写入（独立事务），
+# 这里只做聚合查询与配额配置，避免把「记账」和「改配置」混在一个事务里。
+
+
+def _quota_out(row) -> dict:
+    return {
+        "id": row.id,
+        "scope": row.scope,
+        "scope_key": row.scope_key or "",
+        "period": row.period,
+        "limit_tokens": int(row.limit_tokens or 0),
+        "policy": row.policy,
+        "enabled": bool(row.enabled),
+        "note": row.note or "",
+        "updated_at": row.updated_at.strftime("%Y-%m-%d %H:%M:%S") if row.updated_at else "",
+    }
+
+
+@router.get("/usage/summary", dependencies=[Depends(MANAGE)])
+def usage_summary(
+    days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """最近 N 天用量总览：总量 + 按扩展 / 来源 / 模型 / 天，并附本月配额状态。"""
+    from app.services.ai import metering
+
+    data = metering.summary(db, days=days)
+    data["quota"] = metering.check_quota(db, scope="core", scope_key="")
+    return ok(data)
+
+
+@router.get("/usage/records", dependencies=[Depends(MANAGE)])
+def usage_records(
+    limit: int = Query(default=30, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    scope_key: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """最近的调用流水，用于核对「这笔账是哪个扩展打的」。"""
+    from app.services.ai import metering
+
+    return ok({"items": metering.recent(db, limit=limit, offset=offset, scope_key=scope_key)})
+
+
+@router.get("/quotas", dependencies=[Depends(MANAGE)])
+def list_quotas(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.services.ai import metering
+
+    rows = crud_ai.list_ai_quotas(db)
+    return ok(
+        {
+            "items": [{**_quota_out(r), "used_this_month": metering.month_usage(db, scope_key=r.scope_key or None)} for r in rows],
+            "global_state": metering.check_quota(db, scope="core", scope_key=""),
+        }
+    )
+
+
+@router.put("/quotas", dependencies=[Depends(MANAGE)])
+def save_quota(
+    payload: AiQuotaIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按 (scope, scope_key) 幂等写入配额；global 与扩展级可同时存在，扩展级优先。"""
+    from app.services.ai import metering
+
+    if payload.scope == "extension" and not (payload.scope_key or "").strip():
+        raise HTTPException(status_code=400, detail="扩展级配额需要提供 scope_key")
+    row = crud_ai.upsert_ai_quota(
+        db,
+        scope=payload.scope,
+        scope_key=payload.scope_key,
+        limit_tokens=payload.limit_tokens,
+        policy=payload.policy,
+        enabled=payload.enabled,
+        note=payload.note,
+    )
+    db.commit()
+    metering.invalidate_usage_cache()
+    return ok(_quota_out(row))
+
+
+@router.delete("/quotas/{quota_id}", dependencies=[Depends(MANAGE)])
+def delete_quota(quota_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.services.ai import metering
+
+    row = db.get(PlatformAiQuota, quota_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="配额配置不存在")
+    crud_ai.delete_ai_quota(db, row)
+    db.commit()
+    metering.invalidate_usage_cache()
+    return ok({"ok": True})
