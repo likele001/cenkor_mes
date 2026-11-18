@@ -15,7 +15,7 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-5000720260410001",
     "pinia": "^2.3.0",
     "vue": "^3.4.21",
-    "vue-i18n": "^9.14.5"
+    "vue-i18n": "^11.4.14"
   },
   "overrides": {
     "path-to-regexp": "0.1.13",
