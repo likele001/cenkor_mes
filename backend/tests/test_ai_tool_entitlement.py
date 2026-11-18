@@ -12,8 +12,17 @@ from __future__ import annotations
 import pytest
 
 from app.extension_host.state import runtime
-import extensions.ai_assistant.router as ai_router
-from extensions.ai_assistant.router import Tool
+
+# 本模块全部用例都直接操作 ai_assistant 扩展的内部函数（_REGISTRY / _tools_for_user ...）。
+# backend/extensions/ 是运行期安装的商业扩展，被 .gitignore 忽略，源码在私有仓库 mes-extensions；
+# 公开仓库的干净检出里没有这个包，模块级 import 会直接 ModuleNotFoundError 打断整个收集阶段。
+# 用 importorskip 让「本地有扩展就跑、CI 无扩展就整模块跳过」，与 tests/test_h5_ai_contract.py
+# 的 HAS_EXT 约定一致。
+ai_router = pytest.importorskip(
+    'extensions.ai_assistant.router',
+    reason='商业扩展源码在私有仓库，公开仓库无 extensions/ 时跳过',
+)
+Tool = ai_router.Tool
 
 
 class _User:
