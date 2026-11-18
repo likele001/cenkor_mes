@@ -10,6 +10,8 @@ from app.models.report import Report
 from app.models.report_unit import ReportUnit
 from app.models.salary import SalaryItem
 from app.models.task import Task
+from app.crud.report import PENDING_AUDIT_REPORT_STATUSES
+from app.crud.report_unit import PENDING_AUDIT_UNIT_STATUSES
 
 
 def get_dashboard_summary(db: Session, today: date | None = None) -> dict:
@@ -37,7 +39,7 @@ def get_dashboard_summary(db: Session, today: date | None = None) -> dict:
     pending_legacy = int(
         db.scalar(
             select(func.count(Report.id)).where(
-                Report.status.in_(("submitted", "leader_approved")),
+                Report.status.in_(PENDING_AUDIT_REPORT_STATUSES),
             )
         )
         or 0
@@ -45,7 +47,7 @@ def get_dashboard_summary(db: Session, today: date | None = None) -> dict:
     pending_units = int(
         db.scalar(
             select(func.count(ReportUnit.id)).where(
-                ReportUnit.status.in_(("submitted", "leader_approved")),
+                ReportUnit.status.in_(PENDING_AUDIT_UNIT_STATUSES),
             )
         )
         or 0
