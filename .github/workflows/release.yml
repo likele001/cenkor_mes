@@ -102,6 +102,18 @@ jobs:
               rows = []
           desc = next((r.get("description", "") for r in rows if r.get("version") == tag), "")
           body = desc or f"Release {tag}"
+          # CHANGELOG 的 description 只写变更说明，升级入口靠人工每版手写容易漏。
+          # 这里按固定模板补齐；已手写了「### 升级方式」的版本不重复追加。
+          if "### 升级方式" not in body:
+              body += (
+                  "\n\n### 升级方式\n"
+                  "- 在线升级（推荐）：管理后台 → 系统关于 → 在线升级 → 检查更新 → 立即升级"
+                  "（自动从本页附件拉取核心包并校验 SHA256）\n"
+                  "- 手动升级：下载下方核心包 `*.tar.gz` 与 `.sha256`，"
+                  "执行 `bash scripts/upgrade.sh --url <附件地址>`\n"
+                  "- 若版本说明含表结构变更：升级前先备份数据库，升级时执行 "
+                  "`alembic upgrade head` 并重启后端；具体影响见正文「升级影响」\n"
+              )
           notes = os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "release-notes.md")
           with open(notes, "w", encoding="utf-8") as f:
               f.write(body + "\n")
