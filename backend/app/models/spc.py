@@ -20,8 +20,13 @@ class SpcChart(Base):
     process_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("processes.id", ondelete="SET NULL"), nullable=True)
     sku_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("skus.id", ondelete="SET NULL"), nullable=True)
     sample_size: Mapped[int] = mapped_column(Integer, nullable=False, server_default="5")  # 子组大小
-    ucl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 上控制限
-    lcl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 下控制限
+    # 规格限（图纸公差）：过程能力 Cp/Cpk 的唯一依据，由 SPC 扩展写入
+    usl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 规格上限 USL
+    lsl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 规格下限 LSL
+    # 以下两列为历史遗留，语义曾被 SPC 扩展挪用来存 USL/LSL（见 docs 与 0028 迁移）。
+    # 控制限本身不落库：UCL/LCL 永远由样本按 X̄-R / X̄-s / p / np / c 方法实时计算。
+    ucl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 已废弃：旧版误存 USL，读时仅作回退
+    lcl: Mapped[float | None] = mapped_column(Float, nullable=True)  # 已废弃：旧版误存 LSL，读时仅作回退
     target: Mapped[float | None] = mapped_column(Float, nullable=True)  # 目标值
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
