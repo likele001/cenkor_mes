@@ -179,3 +179,41 @@ def wrap_pdf_html_with_page_number(
         html = html + "<body>" + header_block + footer_block + "</body></html>"
 
     return html
+
+
+_DELIVERY_NOTE_HTML = """<html><head><meta charset="utf-8" />
+<style>
+@page{size:A4;margin:12mm}
+body{font-family:Arial,Helvetica,"Microsoft YaHei",sans-serif;font-size:12px;color:#222}
+h1{font-size:20px;margin:0 0 4px;text-align:center;letter-spacing:4px}
+.sub{text-align:center;color:#666;margin-bottom:10px}
+.meta{width:100%;border-collapse:collapse;margin-bottom:8px}
+.meta td{padding:4px 6px;border:1px solid #ddd}
+.meta td.k{background:#f7f7f7;width:90px;color:#555}
+table.items{width:100%;border-collapse:collapse}
+table.items th,table.items td{border:1px solid #ccc;padding:6px}
+table.items th{background:#f2f2f2;text-align:left}
+table.items td.r{text-align:right}
+.sign{margin-top:22px;display:flex;justify-content:space-between}
+.sign div{width:45%;border-top:1px solid #999;padding-top:6px;color:#555}
+</style></head><body>
+<h1>送 货 单</h1>
+<div class="sub">DELIVERY NOTE</div>
+<table class="meta">
+<tr><td class="k">发货单号</td><td>{{ shipment.code }}</td><td class="k">订单号</td><td>{{ order.code }}</td></tr>
+<tr><td class="k">客户</td><td>{{ customer.name }}</td><td class="k">仓库</td><td>{{ warehouse.name }}</td></tr>
+<tr><td class="k">物流公司</td><td>{{ shipment.logistics_company }}</td><td class="k">物流单号</td><td>{{ shipment.logistics_no }}</td></tr>
+<tr><td class="k">发货时间</td><td>{{ shipment.shipped_at }}</td><td class="k">签收时间</td><td>{{ shipment.signed_at }}</td></tr>
+</table>
+<table class="items">
+<thead><tr><th>序号</th><th>型号编码</th><th>型号名称</th><th>规格</th><th class="r">数量</th><th>备注</th></tr></thead>
+<tbody>{{ items_html }}</tbody>
+</table>
+<div style="margin-top:8px;text-align:right">合计数量：{{ total_qty }}</div>
+<div style="margin-top:6px;color:#555">备注：{{ shipment.remark }}</div>
+<div class="sign"><div>发货人签字：</div><div>收货人签字：</div></div>
+<div style="margin-top:10px;color:#888">打印时间：{{ printed_at }}</div>
+</body></html>"""
+
+# 内置模板：生产环境不依赖 seed_demo，首次打印时由 ensure_print_template 落库
+_BUILTIN_TEMPLATES["delivery_note"] = ("送货单", "html", _DELIVERY_NOTE_HTML)

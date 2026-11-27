@@ -10,6 +10,7 @@ import AdminPage from '@/components/admin/AdminPage.vue'
 import { http } from '@/utils/http'
 import { warehouseApi, type WarehouseOption } from '@/api/warehouse'
 import { useStatus } from '@/utils/status-maps'
+import { openPrintWindow } from '@/utils/print'
 
 const { t } = useI18n()
 
@@ -125,6 +126,18 @@ async function sign(row: Shipment) {
   } catch { /* http 已提示 */ }
 }
 
+async function printDelivery(row: Shipment) {
+  const res = await http.get<{ html: string }>(`/admin/warehouse/shipments/${row.id}/print`)
+  if (res?.html) {
+    openPrintWindow(res.html, { title: `delivery_${row.code}`, autoPrint: true })
+  }
+}
+
+async function exportDeliveryPdf(row: Shipment) {
+  const res = await http.get<{ url: string }>(`/admin/warehouse/shipments/${row.id}/print-pdf`)
+  if (res?.url) window.open(res.url, '_blank')
+}
+
 function viewDetail(row: Shipment) {
   detail.value = row
   detailVisible.value = true
@@ -167,9 +180,11 @@ onMounted(() => {
           </template>
         </el-table-column>
         <el-table-column prop="shipped_at" :label="t('warehouse.shipments.shippedAt')" width="160" />
-        <el-table-column :label="t('warehouse.shipments.actions')" width="200" fixed="right">
+        <el-table-column :label="t('warehouse.shipments.actions')" width="330" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="viewDetail(row)">{{ t('warehouse.shipments.detail') }}</el-button>
+            <el-button size="small" @click="printDelivery(row)">{{ t('warehouse.shipments.print') }}</el-button>
+            <el-button size="small" @click="exportDeliveryPdf(row)">PDF</el-button>
             <el-button v-if="row.status === 'pending'" size="small" type="primary" @click="shipOut(row)">
               {{ t('warehouse.shipments.ship') }}
             </el-button>
@@ -192,6 +207,7 @@ onMounted(() => {
           </dl>
           <div class="admin-mobile-actions">
             <el-button size="small" @click="viewDetail(row)">{{ t('warehouse.shipments.detail') }}</el-button>
+            <el-button size="small" @click="printDelivery(row)">{{ t('warehouse.shipments.print') }}</el-button>
             <el-button v-if="row.status === 'pending'" size="small" type="primary" @click="shipOut(row)">{{ t('warehouse.shipments.ship') }}</el-button>
             <el-button v-if="row.status === 'shipped'" size="small" type="success" @click="sign(row)">{{ t('warehouse.shipments.sign') }}</el-button>
           </div>

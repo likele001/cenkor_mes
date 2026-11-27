@@ -3,19 +3,32 @@
 """发货管理 API"""
 
 from datetime import datetime, timezone
+from html import escape
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
+from app.crud.attachment import create_attachment
 from app.crud.notification import create_notification
 from app.crud.order import get_order_by_id
+from app.crud.print_template import (
+    ensure_print_template,
+    get_print_template_by_code,
+    get_print_template_by_id,
+    html_to_pdf_bytes,
+    render_print_template,
+    wrap_pdf_html_with_page_number,
+)
 from app.crud.shipment import create_shipment, get_shipment, list_shipments
 from app.crud.warehouse import adjust_stock, resolve_warehouse_id
 from app.models.shipment import Shipment
 from app.models.user import User
+from app.storage import get_active_storage
 
 router = APIRouter(prefix="/shipments", dependencies=[Depends(require_permissions(["order.manage"]))])
 
@@ -82,6 +95,145 @@ def get_api(shipment_id: int, db: Session = Depends(get_db), user: User = Depend
     if not s:
         raise HTTPException(status_code=404, detail="发货单不存在")
     return ok(_out(s))
+
+
+def _delivery_items_html(s: Shipment) -> str:
+    rows = []
+    for idx, it in enumerate(s.items or [], start=1):
+        sku = it.sku
+        spec = (sku.spec or sku.color or "") if sku else ""
+        rows.append(
+            "<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{escape(sku.code if sku else '')}</td>"
+            f"<td>{escape(sku.name if sku else '')}</td>"
+            f"<td>{escape(spec)}</td>"
+            f'<td class="r">{it.qty}</td>'
+            f"<td>{escape(s.remark or '')}</td>"
+            "</tr>"
+        )
+    return "".join(rows)
+
+
+def _render_delivery_note(
+    db: Session,
+    shipment_id: int,
+    *,
+    template_id: int | None,
+    template_code: str,
+) -> tuple[str, str]:
+    s = get_shipment(db, shipment_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="发货单不存在")
+    tpl = (
+        get_print_template_by_id(db, template_id)
+        if template_id is not None
+        else ensure_print_template(db, template_code)
+    )
+    if tpl is None:
+        tpl = get_print_template_by_code(db, template_code)
+    if not tpl or not tpl.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail=f"未找到可用打印模板（请在 系统管理-打印模板 创建 code={template_code} 的模板）",
+        )
+    order = s.order
+    customer = order.customer if order else None
+    html = render_print_template(
+        tpl.content,
+        {
+            "shipment": {
+                "id": s.id,
+                "code": s.code,
+                "status": s.status,
+                "shipped_at": s.shipped_at.strftime("%Y-%m-%d %H:%M") if s.shipped_at else "",
+                "signed_at": s.signed_at.strftime("%Y-%m-%d %H:%M") if s.signed_at else "",
+                "logistics_company": s.logistics_company or "",
+                "logistics_no": s.logistics_no or "",
+                "remark": s.remark or "",
+            },
+            "order": {"id": order.id if order else None, "code": order.code if order else ""},
+            "customer": {
+                "id": customer.id if customer else None,
+                "code": customer.code if customer else "",
+                "name": customer.name if customer else "",
+                "contact_name": getattr(customer, "contact_name", "") or "",
+                "phone": getattr(customer, "phone", "") or "",
+            },
+            "warehouse": {
+                "id": s.warehouse_id,
+                "code": s.warehouse.code if s.warehouse else "",
+                "name": s.warehouse.name if s.warehouse else "",
+            },
+            "items_html": _delivery_items_html(s),
+            "total_qty": sum(it.qty for it in (s.items or [])),
+            "printed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    )
+    return html, s.code
+
+
+@router.get("/{shipment_id}/print")
+def print_api(
+    shipment_id: int,
+    template_id: int | None = Query(default=None, ge=1),
+    template_code: str = Query(default="delivery_note", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    html, code = _render_delivery_note(
+        db, shipment_id, template_id=template_id, template_code=template_code
+    )
+    db.commit()
+    return ok({"html": html, "shipment_id": shipment_id, "code": code})
+
+
+@router.get("/{shipment_id}/print-pdf")
+def print_pdf_api(
+    shipment_id: int,
+    template_id: int | None = Query(default=None, ge=1),
+    template_code: str = Query(default="delivery_note", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    html, code = _render_delivery_note(
+        db, shipment_id, template_id=template_id, template_code=template_code
+    )
+    title = f"送货单 {code or shipment_id}"
+    wrapped = wrap_pdf_html_with_page_number(
+        html, title=title, printed_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    try:
+        pdf_bytes = html_to_pdf_bytes(wrapped)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    filename = f"delivery_note_{code or shipment_id}.pdf"
+    storage = get_active_storage(db)
+    stored = storage.save(
+        filename=filename,
+        content_type="application/pdf",
+        stream=BytesIO(pdf_bytes),
+        max_size=settings.FILE_MAX_UPLOAD_SIZE,
+    )
+    att = create_attachment(
+        db,
+        uploader_id=user.id,
+        storage_driver=stored.driver,
+        storage_key=stored.key,
+        original_filename=filename,
+        content_type="application/pdf",
+        size=stored.size,
+        sha256=stored.sha256,
+    )
+    db.commit()
+    db.refresh(att)
+    return ok(
+        {
+            "attachment_id": att.id,
+            "filename": att.original_filename,
+            "url": f"/api/files/{att.id}?download=true",
+        }
+    )
 
 
 @router.post("")
