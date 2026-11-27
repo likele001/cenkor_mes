@@ -4,6 +4,15 @@
 > 便于在 GitHub Actions 因账单锁定无法自动建 Release 时，手动到
 > https://github.com/likele001/cenkor_mes/releases/new 复制粘贴对应描述。
 
+## v2.3.3 — 2026-11-27
+
+对账来源占用修正：
+
+1. 「已对账」判定收窄为 confirmed/partial/paid，草稿不再占用订单/发货单；重复占用改在确认时拦（`ensure_sources_unbilled`）。
+2. `billable-orders` 只返回 confirmed/producing/shipped/completed 的订单，草稿与待确认不再出现在待开票下拉。
+
+无表结构变更，重启后端即可。
+
 ## v2.3.2 — 2026-11-27
 
 四项核心能力补齐：
