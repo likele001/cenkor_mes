@@ -28,6 +28,7 @@ class WarehouseCreateIn(BaseModel):
     code: str | None = Field(default=None, max_length=32)
     name: str = Field(min_length=1, max_length=128)
     address: str | None = Field(default=None, max_length=255)
+    is_finished: bool = Field(default=False)
 
 
 def _warehouse_code_exists(db: Session, code: str) -> bool:
@@ -57,7 +58,10 @@ def list_warehouses_api(
     items = list_warehouses(db)
     return ok({
         "items": [
-            {"id": w.id, "code": w.code, "name": w.name, "address": w.address}
+            {
+                "id": w.id, "code": w.code, "name": w.name, "address": w.address,
+                "is_finished": bool(w.is_finished),
+            }
             for w in items
         ]
     })
@@ -71,9 +75,9 @@ def export_warehouses_api(
     items = list_warehouses(db)
     rows = []
     for w in items:
-        rows.append([w.code, w.name, w.address or ""])
+        rows.append([w.code, w.name, w.address or "", "是" if w.is_finished else "否"])
     return make_excel_response(
-        headers=["仓库编码", "仓库名称", "地址"],
+        headers=["仓库编码", "仓库名称", "地址", "成品仓"],
         rows=rows,
         filename="warehouses.xlsx",
         sheet_name="仓库",
@@ -93,9 +97,12 @@ def create_warehouse_api(
         exists=lambda c: _warehouse_code_exists(db, c),
         duplicate_msg="仓库编码已存在",
     )
-    wh = create_warehouse(db, code=wh_code, name=payload.name, address=payload.address)
+    wh = create_warehouse(
+        db, code=wh_code, name=payload.name, address=payload.address,
+        is_finished=payload.is_finished,
+    )
     db.commit()
-    return ok({"id": wh.id, "code": wh.code, "name": wh.name})
+    return ok({"id": wh.id, "code": wh.code, "name": wh.name, "is_finished": bool(wh.is_finished)})
 
 
 @router.put("/warehouses/{warehouse_id}", dependencies=[Depends(require_permissions(["warehouse.manage"]))])
@@ -104,6 +111,7 @@ def update_warehouse_api(
     code: str = Query(min_length=1),
     name: str = Query(min_length=1),
     address: str | None = Query(default=None),
+    is_finished: bool | None = Query(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -114,8 +122,13 @@ def update_warehouse_api(
     wh.name = name
     if address is not None:
         wh.address = address
+    if is_finished is not None:
+        wh.is_finished = is_finished
     db.commit()
-    return ok({"id": wh.id, "code": wh.code, "name": wh.name, "address": wh.address})
+    return ok({
+        "id": wh.id, "code": wh.code, "name": wh.name, "address": wh.address,
+        "is_finished": bool(wh.is_finished),
+    })
 
 
 @router.get("/stocks")

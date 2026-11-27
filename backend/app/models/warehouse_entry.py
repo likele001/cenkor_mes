@@ -18,11 +18,12 @@ class WarehouseEntry(Base):
 
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="draft", index=True)  # draft/confirmed/cancelled
-    source_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")  # purchase/material_return/other
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")  # purchase/material_return/other/work_order
     warehouse_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     purchase_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("purchase_orders.id", ondelete="SET NULL"), nullable=True, index=True)
     material_return_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("material_returns.id", ondelete="SET NULL"), nullable=True, index=True)
+    work_order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("work_orders.id", ondelete="SET NULL"), nullable=True, index=True)
 
     total_qty: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     total_cost: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, server_default="0")
@@ -39,6 +40,7 @@ class WarehouseEntry(Base):
     warehouse = relationship("Warehouse")
     purchase_order = relationship("PurchaseOrder")
     material_return = relationship("MaterialReturn")
+    work_order = relationship("WorkOrder")
 
 
 class WarehouseEntryItem(Base):
@@ -48,7 +50,10 @@ class WarehouseEntryItem(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     entry_id: Mapped[int] = mapped_column(Integer, ForeignKey("warehouse_entries.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id", ondelete="RESTRICT"), nullable=False, index=True)
+    # 库存的真实维度只有 SKU（stocks 表也只有 warehouse_id + sku_id），物料主档是分类信息。
+    # 成品（半成品/产成品）在很多工厂根本没有物料主档，强制必填会让完工入库根本建不出单，
+    # 所以这里允许为空，成品入库只填 sku_id。
+    material_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("materials.id", ondelete="RESTRICT"), nullable=True, index=True)
     sku_id: Mapped[int] = mapped_column(Integer, ForeignKey("skus.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     qty: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -31,6 +31,9 @@ class Warehouse(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
+    # 成品仓：工单完工时自动生成的入库单落到这里。多仓场景下由用户在仓库页指定，
+    # 不靠编码约定（早期靠 WH-FIN 硬编码，改名就断）
+    is_finished: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())

@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -22,6 +23,8 @@ from app.models.salary import SalaryItem
 from app.models.task import Task
 from app.models.work_order import WorkOrder
 from app.models.order import Order, OrderItem
+
+logger = logging.getLogger(__name__)
 
 ZERO = Decimal("0")
 
@@ -146,11 +149,13 @@ def sync_work_order_progress(db: Session, wo: WorkOrder) -> str:
         new = "open"
 
     now = datetime.now()
+    newly_finished = False
     if new in ("in_progress", "done") and wo.started_at is None:
         wo.started_at = now
     if new == "done":
         if wo.finished_at is None:
             wo.finished_at = now
+            newly_finished = True
     else:
         wo.finished_at = None
 
@@ -174,7 +179,29 @@ def sync_work_order_progress(db: Session, wo: WorkOrder) -> str:
     if wo.status != new:
         wo.status = new
     db.flush()
+    if newly_finished:
+        _auto_create_finished_entry(db, wo)
     return new
+
+
+def _auto_create_finished_entry(db: Session, wo: WorkOrder) -> None:
+    """工单首次完工 → 自动生成一张草稿入库单，让成品库存跟得上生产。
+
+    报工是生产事实、入库是后续动作，自动建单失败不能把报工一起回滚，
+    所以用保存点单独隔离；失败只记日志，缺口在「待入库工单」列表里能查到。
+    """
+    from app.crud.warehouse_entry import ensure_work_order_entry
+
+    sp = db.begin_nested()
+    try:
+        entry = ensure_work_order_entry(db, wo)
+        sp.commit()
+    except Exception as exc:  # noqa: BLE001 - 任何异常都不该阻断报工终审
+        sp.rollback()
+        logger.warning("工单 #%s 完工自动入库失败：%s", wo.id, exc)
+        return
+    if entry is not None:
+        logger.info("工单 #%s 完工自动生成入库单 %s（%s 件）", wo.id, entry.code, entry.total_qty)
 
 
 # ────────────────────────── Order ──────────────────────────

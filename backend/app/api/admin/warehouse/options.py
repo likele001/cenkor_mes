@@ -17,7 +17,7 @@ router = APIRouter()
 def warehouse_options_api(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return ok({
         "items": [
-            {"id": w.id, "code": w.code, "name": w.name}
+            {"id": w.id, "code": w.code, "name": w.name, "is_finished": bool(w.is_finished)}
             for w in list_warehouses(db)
         ]
     })

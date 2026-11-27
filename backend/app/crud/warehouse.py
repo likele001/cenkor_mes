@@ -16,8 +16,11 @@ class StockShortage(ValueError):
 
 # ── 仓库 ──
 
-def create_warehouse(db: Session, code: str, name: str, address: str | None = None) -> Warehouse:
-    wh = Warehouse(code=code, name=name, address=address)
+def create_warehouse(
+    db: Session, code: str, name: str,
+    address: str | None = None, is_finished: bool = False,
+) -> Warehouse:
+    wh = Warehouse(code=code, name=name, address=address, is_finished=is_finished)
     db.add(wh)
     db.flush()
     return wh
