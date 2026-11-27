@@ -95,18 +95,78 @@ def calc_shipment_statement_amount(db: Session, shipment: Shipment) -> Decimal:
     return total.quantize(Decimal("0.0001"))
 
 
-def list_billed_shipment_ids(db: Session) -> set[int]:
-    rows = db.scalars(
-        select(StatementItem.shipment_id).where(StatementItem.shipment_id.is_not(None))
-    ).all()
-    return {int(x) for x in rows if x is not None}
+# 只有确认之后的账单才真正占用来源单据。草稿既没有下游动作也没有金额锁定，
+# 弃用一张草稿不该把订单/发货单永久锁死——历史上就是这么锁死且无法释放的。
+BILLED_STATEMENT_STATUSES = ("confirmed", "partial", "paid")
+
+# 可对账的订单状态：草稿 / 待确认还没定下来，不给开票
+BILLABLE_ORDER_STATUSES = ("confirmed", "producing", "shipped", "completed")
 
 
-def list_billed_order_ids(db: Session) -> set[int]:
+def list_billed_shipment_ids(
+    db: Session, *, exclude_statement_id: int | None = None
+) -> set[int]:
+    stmt = (
+        select(StatementItem.shipment_id)
+        .join(Statement, Statement.id == StatementItem.statement_id)
+        .where(
+            StatementItem.shipment_id.is_not(None),
+            Statement.status.in_(BILLED_STATEMENT_STATUSES),
+        )
+    )
+    if exclude_statement_id is not None:
+        stmt = stmt.where(StatementItem.statement_id != exclude_statement_id)
+    return {int(x) for x in db.scalars(stmt).all() if x is not None}
+
+
+def list_billed_order_ids(
+    db: Session, *, exclude_statement_id: int | None = None
+) -> set[int]:
+    stmt = (
+        select(StatementItem.order_id)
+        .join(Statement, Statement.id == StatementItem.statement_id)
+        .where(
+            StatementItem.order_id.is_not(None),
+            Statement.status.in_(BILLED_STATEMENT_STATUSES),
+        )
+    )
+    if exclude_statement_id is not None:
+        stmt = stmt.where(StatementItem.statement_id != exclude_statement_id)
+    return {int(x) for x in db.scalars(stmt).all() if x is not None}
+
+
+def list_billable_orders(
+    db: Session, customer_id: int, *, limit: int = 300
+) -> list[Order]:
+    """客户名下「状态已落定 + 未被已确认账单占用」的订单。"""
+    billed = list_billed_order_ids(db)
     rows = db.scalars(
-        select(StatementItem.order_id).where(StatementItem.order_id.is_not(None))
+        select(Order)
+        .where(
+            Order.customer_id == customer_id,
+            Order.status.in_(BILLABLE_ORDER_STATUSES),
+        )
+        .order_by(Order.id.desc())
+        .limit(limit)
     ).all()
-    return {int(x) for x in rows if x is not None}
+    return [o for o in rows if o.id not in billed]
+
+
+def ensure_sources_unbilled(db: Session, stmt: Statement) -> None:
+    """确认前复核来源单据。
+
+    草稿不锁单，同一张订单/发货单因此可能被两张草稿同时勾中；
+    重复占用必须在「确认」这一刻拦住，否则会重复计应收。
+    """
+    billed_orders = list_billed_order_ids(db, exclude_statement_id=stmt.id)
+    billed_shipments = list_billed_shipment_ids(db, exclude_statement_id=stmt.id)
+    for it in stmt.items:
+        if it.order_id and it.order_id in billed_orders:
+            code = it.order.code if it.order else f"#{it.order_id}"
+            raise ValueError(f"订单 {code} 已在其他已确认对账单中对过账，不能重复确认")
+        if it.shipment_id and it.shipment_id in billed_shipments:
+            code = it.shipment.code if it.shipment else f"#{it.shipment_id}"
+            raise ValueError(f"发货单 {code} 已在其他已确认对账单中对过账，不能重复确认")
 
 
 def create_statement(

@@ -14,7 +14,9 @@ from app.crud.finance import (
     calc_order_statement_amount,
     calc_shipment_statement_amount,
     create_statement,
+    ensure_sources_unbilled,
     get_statement_by_id,
+    list_billable_orders,
     list_billed_order_ids,
     list_billed_shipment_ids,
     list_statements,
@@ -370,6 +372,11 @@ def confirm_api(
         raise HTTPException(status_code=400, detail="对账单不存在")
     if item.status != "draft":
         raise HTTPException(status_code=400, detail="状态不允许确认")
+    # 草稿不锁来源单据，重复占用只能在确认这一刻拦（否则两张草稿确认后重复计应收）
+    try:
+        ensure_sources_unbilled(db, item)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     update_statement_status(db, item, "confirmed", operator=user.id, action="confirm")
     sp_crud.create_accrual_ledger(
         db,
@@ -499,20 +506,13 @@ def billable_orders_api(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """未对过账的订单，供新建对账单（按订单）下拉。"""
-    from app.models.order import Order
+    """未对过账的订单，供新建对账单（按订单）下拉。
 
-    billed = list_billed_order_ids(db)
-    rows = db.scalars(
-        select(Order)
-        .where(Order.customer_id == customer_id)
-        .order_by(Order.id.desc())
-        .limit(300)
-    ).all()
+    只列状态已落定的订单：草稿、待确认的单子还没定下来，不该出现在待开票列表里。
+    """
+    rows = list_billable_orders(db, customer_id, limit=300)
     items = []
     for o in rows:
-        if o.id in billed:
-            continue
         try:
             amt = calc_order_statement_amount(db, o)
             priced, hint = True, None
