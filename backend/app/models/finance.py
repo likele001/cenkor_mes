@@ -34,16 +34,22 @@ class Statement(Base):
 
 
 class StatementItem(Base):
-    """对账单明细（按订单）"""
+    """对账单明细（按订单或按发货）"""
     __tablename__ = "statement_items"
-    __table_args__ = (UniqueConstraint("statement_id", "order_id", name="uq_statement_items_stmt_order"),)
+    __table_args__ = (
+        UniqueConstraint("statement_id", "order_id", name="uq_statement_items_stmt_order"),
+        UniqueConstraint("statement_id", "shipment_id", name="uq_statement_items_stmt_shipment"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     statement_id: Mapped[int] = mapped_column(Integer, ForeignKey("statements.id", ondelete="CASCADE"), nullable=False, index=True)
-    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False)
+    order_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("orders.id", ondelete="RESTRICT"), nullable=True)
+    shipment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("shipments.id", ondelete="RESTRICT"), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False, server_default="order")
 
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
     statement = relationship("Statement", back_populates="items")
     order = relationship("Order")
+    shipment = relationship("Shipment")

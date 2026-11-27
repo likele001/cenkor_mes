@@ -20,9 +20,34 @@ export type CustomerStatementOut = {
 }
 
 export type CustomerStatementItemOut = {
+  source_type?: 'order' | 'shipment'
+  order_id: number | null
+  order_code: string | null
+  shipment_id?: number | null
+  shipment_code?: string | null
+  amount: number
+}
+
+export type BillableOrder = {
+  id: number
+  code: string
+  status: string
+  amount: number | null
+  priced: boolean
+  hint: string | null
+}
+
+export type BillableShipment = {
+  id: number
+  code: string
   order_id: number
   order_code: string | null
-  amount: number
+  status: string
+  shipped_at: string | null
+  total_qty: number
+  amount: number | null
+  priced: boolean
+  hint: string | null
 }
 
 export type CustomerStatementDetailOut = CustomerStatementOut & {
@@ -163,8 +188,37 @@ export const financeApi = {
   getCustomerStatement(id: number) {
     return http.request<CustomerStatementDetailOut>({ url: `/admin/finance/${id}`, method: 'GET' })
   },
-  printCustomerStatement(id: number, params?: { template_id?: number; template_code?: string }) {
-    return http.request<{ html: string; statement_id: number; code: string; template_id: number }>({
+  createCustomerStatement(params: {
+    customer_id: number
+    source_type: 'order' | 'shipment'
+    order_ids?: string
+    shipment_ids?: string
+    period_start?: string
+    period_end?: string
+    due_date?: string
+    remark?: string
+  }) {
+    return http.request<CustomerStatementOut>({
+      url: '/admin/finance',
+      method: 'POST',
+      params,
+    })
+  },
+  listBillableOrders(customerId: number) {
+    return http.request<{ items: BillableOrder[] }>({
+      url: '/admin/finance/billable-orders',
+      method: 'GET',
+      params: { customer_id: customerId },
+    })
+  },
+  listBillableShipments(customerId: number, keyword?: string) {
+    return http.request<{ items: BillableShipment[] }>({
+      url: '/admin/finance/billable-shipments',
+      method: 'GET',
+      params: { customer_id: customerId, keyword: keyword || undefined },
+    })
+  },
+  printCustomerStatement(id: number, params?: { template_id?: number; template_code?: string }) {    return http.request<{ html: string; statement_id: number; code: string; template_id: number }>({
       url: `/admin/finance/${id}/print`,
       method: 'GET',
       params,

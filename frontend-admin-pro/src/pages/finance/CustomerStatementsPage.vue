@@ -15,6 +15,7 @@
             <el-option :label="t('finance.statements.partial')" value="partial" />
             <el-option :label="t('finance.statements.paid')" value="paid" />
           </el-select>
+          <el-button type="primary" @click="openCreate">{{ t('finance.statements.createNew') }}</el-button>
           <el-button @click="reload(true)">{{ t('finance.statements.refresh') }}</el-button>
           <el-button :loading="exporting" @click="exportExcel">{{ t('common.exportExcel') }}</el-button>
           <el-button type="warning" plain @click="openAging('ar')">{{ t('finance.statements.aging') }}</el-button>
@@ -175,6 +176,64 @@
       </div>
       <template #footer><el-button @click="agingVisible = false">{{ t('finance.aging.close') }}</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="createVisible" :title="t('finance.statements.createTitle')" width="680px">
+      <el-form label-width="110px" v-loading="billableLoading">
+        <el-form-item :label="t('finance.statements.customer')" required>
+          <el-select v-model="createForm.customer_id" filterable style="width: 100%" @change="loadBillable">
+            <el-option v-for="c in customers" :key="c.id" :label="partyOptionLabel(c)" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('finance.statements.sourceType')">
+          <el-radio-group v-model="createForm.source_type">
+            <el-radio-button value="order">{{ t('finance.statements.sourceOrder') }}</el-radio-button>
+            <el-radio-button value="shipment">{{ t('finance.statements.sourceShipment') }}</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="createForm.source_type === 'order'" :label="t('finance.statements.pickOrders')" required>
+          <el-select v-model="createForm.order_ids" multiple filterable style="width: 100%" :no-data-text="t('finance.statements.noBillable')">
+            <el-option
+              v-for="o in billableOrders"
+              :key="o.id"
+              :value="o.id"
+              :label="`${o.code} · ${o.priced ? formatMoney(o.amount || 0) : t('finance.statements.unpriced')}`"
+              :disabled="!o.priced"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else :label="t('finance.statements.pickShipments')" required>
+          <el-select v-model="createForm.shipment_ids" multiple filterable style="width: 100%" :no-data-text="t('finance.statements.noBillable')">
+            <el-option
+              v-for="s in billableShipments"
+              :key="s.id"
+              :value="s.id"
+              :label="`${s.code} · ${s.order_code || '-'} · ${s.total_qty}件 · ${s.priced ? formatMoney(s.amount || 0) : t('finance.statements.unpriced')}`"
+              :disabled="!s.priced"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('finance.statements.period')">
+          <div class="flex items-center gap-2 w-full">
+            <el-date-picker v-model="createForm.period_start" type="date" value-format="YYYY-MM-DD" style="width: 48%" />
+            <span>~</span>
+            <el-date-picker v-model="createForm.period_end" type="date" value-format="YYYY-MM-DD" style="width: 48%" />
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('finance.statements.dueDate')">
+          <el-date-picker v-model="createForm.due_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item :label="t('finance.statements.remarkLabel')">
+          <el-input v-model="createForm.remark" type="textarea" :rows="2" maxlength="500" />
+        </el-form-item>
+        <div class="flex justify-end font-semibold">
+          {{ t('finance.statements.amount') }}：{{ formatMoney(createTotal) }}
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="createSaving" @click="submitCreate">{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
   </AdminPage>
 </template>
 
@@ -182,7 +241,7 @@
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { financeApi, type CustomerStatementOut, type AgingResp, type StatementPaymentOut } from '@/api/finance'
+import { financeApi, type CustomerStatementOut, type AgingResp, type StatementPaymentOut, type BillableOrder, type BillableShipment } from '@/api/finance'
 import { productionApi, type CustomerOut } from '@/api/production'
 import { partyOptionLabel } from '@/utils/display'
 import { useI18n } from 'vue-i18n'
@@ -198,6 +257,100 @@ const items = ref<CustomerStatementOut[]>([])
 
 const exporting = ref(false)
 const customers = ref<CustomerOut[]>([])
+
+const createVisible = ref(false)
+const createSaving = ref(false)
+const billableLoading = ref(false)
+const billableOrders = ref<BillableOrder[]>([])
+const billableShipments = ref<BillableShipment[]>([])
+const createForm = reactive({
+  customer_id: null as number | null,
+  source_type: 'order' as 'order' | 'shipment',
+  order_ids: [] as number[],
+  shipment_ids: [] as number[],
+  period_start: '',
+  period_end: '',
+  due_date: '',
+  remark: '',
+})
+const createTotal = computed(() => {
+  if (createForm.source_type === 'order') {
+    return createForm.order_ids.reduce((sum, id) => {
+      const row = billableOrders.value.find((x) => x.id === id)
+      return sum + (row?.amount || 0)
+    }, 0)
+  }
+  return createForm.shipment_ids.reduce((sum, id) => {
+    const row = billableShipments.value.find((x) => x.id === id)
+    return sum + (row?.amount || 0)
+  }, 0)
+})
+
+function openCreate() {
+  createForm.customer_id = query.customer_id || null
+  createForm.source_type = 'order'
+  createForm.order_ids = []
+  createForm.shipment_ids = []
+  createForm.period_start = ''
+  createForm.period_end = ''
+  createForm.due_date = ''
+  createForm.remark = ''
+  billableOrders.value = []
+  billableShipments.value = []
+  createVisible.value = true
+  if (createForm.customer_id) loadBillable()
+}
+
+async function loadBillable() {
+  if (!createForm.customer_id) {
+    billableOrders.value = []
+    billableShipments.value = []
+    return
+  }
+  billableLoading.value = true
+  try {
+    const [orders, shipments] = await Promise.all([
+      financeApi.listBillableOrders(createForm.customer_id),
+      financeApi.listBillableShipments(createForm.customer_id),
+    ])
+    billableOrders.value = orders.items || []
+    billableShipments.value = shipments.items || []
+    createForm.order_ids = []
+    createForm.shipment_ids = []
+  } finally {
+    billableLoading.value = false
+  }
+}
+
+async function submitCreate() {
+  if (!createForm.customer_id) {
+    ElMessage.warning(t('finance.statements.needCustomer'))
+    return
+  }
+  const ids = createForm.source_type === 'order' ? createForm.order_ids : createForm.shipment_ids
+  if (!ids.length) {
+    ElMessage.warning(t('finance.statements.needSource'))
+    return
+  }
+  createSaving.value = true
+  try {
+    await financeApi.createCustomerStatement({
+      customer_id: createForm.customer_id,
+      source_type: createForm.source_type,
+      order_ids: createForm.source_type === 'order' ? ids.join(',') : undefined,
+      shipment_ids: createForm.source_type === 'shipment' ? ids.join(',') : undefined,
+      period_start: createForm.period_start || undefined,
+      period_end: createForm.period_end || undefined,
+      due_date: createForm.due_date || undefined,
+      remark: createForm.remark || undefined,
+    })
+    ElMessage.success(t('finance.statements.createSuccess'))
+    createVisible.value = false
+    await reload(true)
+  } finally {
+    createSaving.value = false
+  }
+}
 
 const query = reactive({
   customer_id: null as number | null,

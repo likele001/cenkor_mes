@@ -11,6 +11,7 @@ from app.crud.process_route import get_default_route_for_product
 from app.models.finance import Statement, StatementItem
 from app.models.order import Order, OrderItem
 from app.models.process_price import ProcessPrice
+from app.models.shipment import Shipment
 from app.models.sku import Sku
 from app.models.user import User
 
@@ -51,17 +52,81 @@ def calc_order_statement_amount(db: Session, order: Order) -> Decimal:
     return total
 
 
+def _order_unit_prices(db: Session, order: Order) -> dict[int, Decimal]:
+    """订单内每个型号的加权单价：Σsubtotal / Σqty，无金额时回退 unit_price。"""
+    rows = db.scalars(select(OrderItem).where(OrderItem.order_id == order.id)).all()
+    agg: dict[int, list] = {}
+    for oi in rows:
+        slot = agg.setdefault(oi.sku_id, [0, Decimal("0"), None])
+        slot[0] += int(oi.qty)
+        slot[1] += Decimal(str(oi.subtotal or 0))
+        if slot[2] is None:
+            slot[2] = oi.unit_price
+    out: dict[int, Decimal] = {}
+    for sku_id, (qty, subtotal, unit_price) in agg.items():
+        if qty <= 0:
+            continue
+        out[sku_id] = (
+            (subtotal / Decimal(qty)).quantize(Decimal("0.0001"))
+            if subtotal > 0
+            else Decimal(str(unit_price or 0))
+        )
+    return out
+
+
+def calc_shipment_statement_amount(db: Session, shipment: Shipment) -> Decimal:
+    """按发货对账：发货数量 × 订单明细单价（同型号多行取加权单价）。"""
+    if shipment.status not in ("shipped", "signed"):
+        raise ValueError(f"发货单 {shipment.code} 尚未发货，不能对账")
+    order = shipment.order
+    if not order:
+        raise ValueError(f"发货单 {shipment.code} 未关联订单")
+    items = shipment.items or []
+    if not items:
+        raise ValueError(f"发货单 {shipment.code} 无明细")
+    prices = _order_unit_prices(db, order)
+    total = Decimal("0")
+    for it in items:
+        if int(it.qty) <= 0:
+            raise ValueError(f"发货单 {shipment.code} 存在非正数量")
+        if it.sku_id not in prices:
+            raise ValueError(f"发货单 {shipment.code} 的型号不在订单 {order.code} 明细中")
+        total += Decimal(int(it.qty)) * prices[it.sku_id]
+    return total.quantize(Decimal("0.0001"))
+
+
+def list_billed_shipment_ids(db: Session) -> set[int]:
+    rows = db.scalars(
+        select(StatementItem.shipment_id).where(StatementItem.shipment_id.is_not(None))
+    ).all()
+    return {int(x) for x in rows if x is not None}
+
+
+def list_billed_order_ids(db: Session) -> set[int]:
+    rows = db.scalars(
+        select(StatementItem.order_id).where(StatementItem.order_id.is_not(None))
+    ).all()
+    return {int(x) for x in rows if x is not None}
+
+
 def create_statement(
     db: Session,
     customer_id: int,
     code: str,
-    order_amounts: list[tuple[int, Decimal]],
+    order_amounts: list[tuple[int, Decimal]] | None = None,
     period_start: date | None = None,
     period_end: date | None = None,
     remark: str | None = None,
     due_date: date | None = None,
+    shipment_amounts: list[tuple[int, Decimal]] | None = None,
 ) -> Statement:
-    total = sum(amt for _, amt in order_amounts)
+    order_amounts = order_amounts or []
+    shipment_amounts = shipment_amounts or []
+    if not order_amounts and not shipment_amounts:
+        raise ValueError("对账单至少需要一条明细")
+    total = sum((amt for _, amt in order_amounts), Decimal("0")) + sum(
+        (amt for _, amt in shipment_amounts), Decimal("0")
+    )
     stmt = Statement(
         customer_id=customer_id,
         code=code,
@@ -73,8 +138,11 @@ def create_statement(
         status="draft",
     )
     stmt.items = [
-        StatementItem(order_id=oid, amount=amt)
+        StatementItem(order_id=oid, source_type="order", amount=amt)
         for oid, amt in order_amounts
+    ] + [
+        StatementItem(shipment_id=sid, source_type="shipment", amount=amt)
+        for sid, amt in shipment_amounts
     ]
     db.add(stmt)
     db.flush()
@@ -85,7 +153,11 @@ def get_statement_by_id(db: Session, statement_id: int) -> Statement | None:
     return db.scalar(
         select(Statement)
         .where(Statement.id == statement_id)
-        .options(selectinload(Statement.customer), selectinload(Statement.items).selectinload(StatementItem.order))
+        .options(
+            selectinload(Statement.customer),
+            selectinload(Statement.items).selectinload(StatementItem.order),
+            selectinload(Statement.items).selectinload(StatementItem.shipment),
+        )
     )
 
 

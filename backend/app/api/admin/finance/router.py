@@ -10,7 +10,16 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db, require_permissions
 from app.core.response import ok
 from app.crud.customer import get_customer_by_id
-from app.crud.finance import calc_order_statement_amount, create_statement, get_statement_by_id, list_statements, update_statement_status
+from app.crud.finance import (
+    calc_order_statement_amount,
+    calc_shipment_statement_amount,
+    create_statement,
+    get_statement_by_id,
+    list_billed_order_ids,
+    list_billed_shipment_ids,
+    list_statements,
+    update_statement_status,
+)
 from app.crud.finance_ledger import create_ledger, list_ledgers
 from app.crud import statement_payment as sp_crud
 from app.crud.notification import create_notification
@@ -257,7 +266,9 @@ def create_api(
     period_end: str | None = Query(default=None),
     due_date: str | None = Query(default=None, description="到期日 YYYY-MM-DD，用于账龄"),
     remark: str | None = Query(default=None, max_length=500),
-    order_ids: str = Query(min_length=1, description="逗号分隔的订单ID"),
+    order_ids: str | None = Query(default=None, description="逗号分隔的订单ID（按订单对账）"),
+    shipment_ids: str | None = Query(default=None, description="逗号分隔的发货单ID（按发货对账）"),
+    source_type: str = Query(default="order", pattern="^(order|shipment)$"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -266,19 +277,46 @@ def create_api(
         raise HTTPException(status_code=400, detail="客户不存在")
 
     from app.crud.order import get_order_by_id
-    oid_list = [int(x.strip()) for x in order_ids.split(",") if x.strip()]
-    amounts: list[tuple[int, Decimal]] = []
-    for oid in oid_list:
-        order = get_order_by_id(db, order_id=oid, with_items=True)
-        if not order:
-            raise HTTPException(status_code=400, detail=f"订单 {oid} 不存在")
-        if order.customer_id != customer_id:
-            raise HTTPException(status_code=400, detail=f"订单 {oid} 不属于该客户")
-        try:
-            amt = calc_order_statement_amount(db, order=order)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        amounts.append((oid, amt))
+
+    order_amounts: list[tuple[int, Decimal]] = []
+    shipment_amounts: list[tuple[int, Decimal]] = []
+
+    if source_type == "shipment":
+        if not shipment_ids:
+            raise HTTPException(status_code=400, detail="按发货对账需提供 shipment_ids")
+        from app.models.shipment import Shipment
+
+        billed = list_billed_shipment_ids(db)
+        for sid in [int(x.strip()) for x in shipment_ids.split(",") if x.strip()]:
+            shipment = db.get(Shipment, sid)
+            if not shipment:
+                raise HTTPException(status_code=400, detail=f"发货单 {sid} 不存在")
+            if shipment.id in billed:
+                raise HTTPException(status_code=400, detail=f"发货单 {shipment.code} 已对过账")
+            if not shipment.order or shipment.order.customer_id != customer_id:
+                raise HTTPException(status_code=400, detail=f"发货单 {shipment.code} 不属于该客户")
+            try:
+                amt = calc_shipment_statement_amount(db, shipment)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            shipment_amounts.append((sid, amt))
+    else:
+        if not order_ids:
+            raise HTTPException(status_code=400, detail="按订单对账需提供 order_ids")
+        billed_orders = list_billed_order_ids(db)
+        for oid in [int(x.strip()) for x in order_ids.split(",") if x.strip()]:
+            order = get_order_by_id(db, order_id=oid, with_items=True)
+            if not order:
+                raise HTTPException(status_code=400, detail=f"订单 {oid} 不存在")
+            if order.customer_id != customer_id:
+                raise HTTPException(status_code=400, detail=f"订单 {oid} 不属于该客户")
+            if order.id in billed_orders:
+                raise HTTPException(status_code=400, detail=f"订单 {order.code} 已对过账")
+            try:
+                amt = calc_order_statement_amount(db, order=order)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            order_amounts.append((oid, amt))
 
     import datetime as dt
     ps = dt.date.fromisoformat(period_start) if period_start else None
@@ -298,11 +336,12 @@ def create_api(
         db,
         customer_id=customer_id,
         code=stmt_code,
-        order_amounts=amounts,
+        order_amounts=order_amounts or None,
         period_start=ps,
         period_end=pe,
         remark=remark,
         due_date=dd,
+        shipment_amounts=shipment_amounts or None,
     )
     cust = get_customer_by_id(db, customer_id=customer_id)
     if cust and cust.user_id:
@@ -454,6 +493,94 @@ def reverse_payment_api(
 from app.api.admin.finance.supplier_statements import router as supplier_statements_router
 router.include_router(supplier_statements_router)
 
+@router.get("/billable-orders")
+def billable_orders_api(
+    customer_id: int = Query(ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """未对过账的订单，供新建对账单（按订单）下拉。"""
+    from app.models.order import Order
+
+    billed = list_billed_order_ids(db)
+    rows = db.scalars(
+        select(Order)
+        .where(Order.customer_id == customer_id)
+        .order_by(Order.id.desc())
+        .limit(300)
+    ).all()
+    items = []
+    for o in rows:
+        if o.id in billed:
+            continue
+        try:
+            amt = calc_order_statement_amount(db, o)
+            priced, hint = True, None
+        except ValueError as e:
+            amt, priced, hint = None, False, str(e)
+        items.append(
+            {
+                "id": o.id,
+                "code": o.code,
+                "status": o.status,
+                "amount": float(amt) if amt is not None else None,
+                "priced": priced,
+                "hint": hint,
+            }
+        )
+    return ok({"items": items})
+
+
+@router.get("/billable-shipments")
+def billable_shipments_api(
+    customer_id: int = Query(ge=1),
+    keyword: str | None = Query(default=None, max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """未对过账且已发货的发货单，供新建对账单（按发货）下拉。"""
+    from app.models.order import Order
+    from app.models.shipment import Shipment
+
+    billed = list_billed_shipment_ids(db)
+    stmt = (
+        select(Shipment)
+        .join(Order, Shipment.order_id == Order.id)
+        .where(
+            Order.customer_id == customer_id,
+            Shipment.status.in_(("shipped", "signed")),
+        )
+        .order_by(Shipment.id.desc())
+        .limit(300)
+    )
+    if keyword:
+        stmt = stmt.where(Shipment.code.like(f"%{keyword}%"))
+    items = []
+    for s in db.scalars(stmt).all():
+        if s.id in billed:
+            continue
+        try:
+            amt = calc_shipment_statement_amount(db, s)
+            priced, hint = True, None
+        except ValueError as e:
+            amt, priced, hint = None, False, str(e)
+        items.append(
+            {
+                "id": s.id,
+                "code": s.code,
+                "order_id": s.order_id,
+                "order_code": s.order.code if s.order else None,
+                "status": s.status,
+                "shipped_at": s.shipped_at.isoformat() if s.shipped_at else None,
+                "total_qty": sum(it.qty for it in (s.items or [])),
+                "amount": float(amt) if amt is not None else None,
+                "priced": priced,
+                "hint": hint,
+            }
+        )
+    return ok({"items": items})
+
+
 @router.get("/{statement_id}")
 def get_api(
     statement_id: int,
@@ -467,8 +594,11 @@ def get_api(
     data["customer"] = {"id": item.customer.id, "code": item.customer.code, "name": item.customer.name} if item.customer else None
     data["items"] = [
         {
+            "source_type": si.source_type,
             "order_id": si.order_id,
             "order_code": si.order.code if si.order else None,
+            "shipment_id": si.shipment_id,
+            "shipment_code": si.shipment.code if si.shipment else None,
             "amount": float(si.amount),
         }
         for si in item.items

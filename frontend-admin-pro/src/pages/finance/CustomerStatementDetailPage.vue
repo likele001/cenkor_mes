@@ -32,12 +32,18 @@
         <el-descriptions-item :label="t('finance.statementDetail.createdAt')" :span="3">{{ item.created_at }}</el-descriptions-item>
       </el-descriptions>
 
-      <div class="mt-4 font-medium">{{ t('finance.statementDetail.detailByOrder') }}</div>
+      <div class="mt-4 font-medium">{{ t('finance.statementDetail.detailBySource') }}</div>
       <el-table class="hidden lg:block mt-2 w-full" :data="item?.items || []" border>
-        <el-table-column prop="order_id" :label="t('finance.statementDetail.orderId')" width="120" />
-        <el-table-column :label="t('finance.statementDetail.orderCode')" min-width="220">
+        <el-table-column :label="t('finance.statementDetail.source')" width="110">
           <template #default="{ row }">
-            <span>{{ row.order_code || '-' }}</span>
+            <el-tag :type="row.source_type === 'shipment' ? 'warning' : 'info'" size="small">
+              {{ row.source_type === 'shipment' ? t('finance.statements.sourceShipment') : t('finance.statements.sourceOrder') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('finance.statementDetail.sourceCode')" min-width="220">
+          <template #default="{ row }">
+            <span>{{ row.shipment_code || row.order_code || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('finance.statementDetail.amount')" width="140" align="right">
@@ -48,7 +54,7 @@
       </el-table>
       <div class="lg:hidden space-y-3 mt-2">
         <div v-for="(row, idx) in item?.items || []" :key="idx" class="admin-mobile-row">
-          <div class="font-medium text-sm">{{ row.order_code || `${t('finance.statementDetail.order')} #${row.order_id}` }}</div>
+          <div class="font-medium text-sm">{{ row.shipment_code || row.order_code || '-' }}</div>
           <dl class="admin-mobile-kv mt-2">
             <dt>{{ t('finance.statementDetail.amount') }}</dt>
             <dd>{{ formatMoney(row.amount) }}</dd>
