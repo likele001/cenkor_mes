@@ -1422,7 +1422,10 @@ export default {
       "save": "저장",
       "empty": "창고 없음",
       "createSuccess": "생성 성공",
-      "editSuccess": "편집 성공"
+      "editSuccess": "편집 성공",
+      "isFinished": "완제품 창고",
+      "finishedTag": "완제품",
+      "isFinishedHint": "작업지시 완료 시 완제품이 이 창고로 자동 입고됩니다"
     },
     "stocks": {
       "title": "재고 관리",

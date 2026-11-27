@@ -3525,7 +3525,10 @@ export default {
       "save": "Save",
       "empty": "No warehouses",
       "createSuccess": "Created successfully",
-      "editSuccess": "Edited successfully"
+      "editSuccess": "Edited successfully",
+      "isFinished": "Finished goods",
+      "finishedTag": "Finished",
+      "isFinishedHint": "Finished goods are auto-received here when a work order completes"
     },
     "stocks": {
       "title": "Stock Management",

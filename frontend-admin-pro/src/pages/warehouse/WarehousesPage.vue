@@ -18,6 +18,8 @@ interface Warehouse {
   code: string
   name: string
   address: string
+  /** 成品仓：工单完工时自动生成的入库单落到这里 */
+  is_finished: boolean
 }
 
 const loading = ref(false)
@@ -29,7 +31,7 @@ const dlg = reactive({
   open: false,
   saving: false,
   id: 0 as number | 0,
-  form: { code: '', name: '', address: '' },
+  form: { code: '', name: '', address: '', is_finished: false },
 })
 
 const formRef = ref<FormInstance>()
@@ -78,13 +80,13 @@ async function loadList() {
 
 async function openCreate() {
   dlg.id = 0
-  dlg.form = { code: await previewNextCode('warehouse'), name: '', address: '' }
+  dlg.form = { code: await previewNextCode('warehouse'), name: '', address: '', is_finished: false }
   dlg.open = true
 }
 
 function openEdit(row: Warehouse) {
   dlg.id = row.id
-  dlg.form = { code: row.code, name: row.name, address: row.address }
+  dlg.form = { code: row.code, name: row.name, address: row.address, is_finished: !!row.is_finished }
   dlg.open = true
 }
 
@@ -141,6 +143,12 @@ onMounted(() => loadList())
           <el-table-column prop="code" :label="t('warehouse.warehouses.code')" width="180" />
           <el-table-column prop="name" :label="t('warehouse.warehouses.name')" width="200" />
           <el-table-column prop="address" :label="t('warehouse.warehouses.address')" min-width="260" />
+          <el-table-column :label="t('warehouse.warehouses.isFinished')" width="120">
+            <template #default="{ row }">
+              <el-tag v-if="row.is_finished" type="success" size="small">{{ t('warehouse.warehouses.finishedTag') }}</el-tag>
+              <span v-else class="text-el-placeholder">—</span>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('warehouse.warehouses.actions')" width="120" fixed="right">
             <template #default="{ row }">
               <el-button size="small" @click="openEdit(row)">{{ t('warehouse.warehouses.edit') }}</el-button>
@@ -159,6 +167,11 @@ onMounted(() => loadList())
             <dl class="admin-mobile-kv">
               <dt>{{ t('warehouse.warehouses.address') }}</dt>
               <dd class="text-left">{{ row.address || '—' }}</dd>
+              <dt>{{ t('warehouse.warehouses.isFinished') }}</dt>
+              <dd class="text-left">
+                <el-tag v-if="row.is_finished" type="success" size="small">{{ t('warehouse.warehouses.finishedTag') }}</el-tag>
+                <span v-else class="text-el-placeholder">—</span>
+              </dd>
             </dl>
             <div class="admin-mobile-actions">
               <el-button size="small" @click="openEdit(row)">{{ t('warehouse.warehouses.edit') }}</el-button>
@@ -184,6 +197,12 @@ onMounted(() => loadList())
         </el-form-item>
         <el-form-item :label="t('warehouse.warehouses.address')" prop="address">
           <el-input v-model="dlg.form.address" :placeholder="t('warehouse.warehouses.addressPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('warehouse.warehouses.isFinished')" prop="is_finished">
+          <div class="flex items-center gap-2">
+            <el-switch v-model="dlg.form.is_finished" />
+            <span class="text-xs text-el-placeholder">{{ t('warehouse.warehouses.isFinishedHint') }}</span>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>

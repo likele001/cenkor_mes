@@ -3,7 +3,7 @@
 import { http } from '@/utils/http'
 import type { ListResp } from '@/types/api'
 
-export type WarehouseOut = { id: number; code: string; name: string; address: string | null }
+export type WarehouseOut = { id: number; code: string; name: string; address: string | null; is_finished?: boolean }
 
 export type WarehouseOption = { id: number; code: string; name: string }
 
@@ -107,6 +107,8 @@ export type WarehouseEntryOut = {
   purchase_order_code: string | null
   material_return_id: number | null
   material_return_code: string | null
+  work_order_id: number | null
+  work_order_code: string | null
   total_qty: number
   total_cost: string
   confirmed_at: string | null
@@ -117,7 +119,25 @@ export type WarehouseEntryOut = {
   items: EntryItemOut[]
 }
 
-export type EntryItemIn = { material_id: number; sku_id: number; qty: number }
+// 成品入库可以只给 SKU（完工品通常没有物料主档）
+export type EntryItemIn = { material_id?: number | null; sku_id: number; qty: number }
+
+/** 已完工但未足额入库的工单 */
+export type WorkOrderEntryPending = {
+  work_order_id: number
+  order_id: number
+  order_code: string | null
+  draft_entry_id: number | null
+  draft_entry_code: string | null
+  sku_id: number
+  sku_code: string | null
+  sku_name: string | null
+  plan_qty: number
+  finished_qty: number
+  entered_qty: number
+  remain_qty: number
+  finished_at: string | null
+}
 
 export type StocktakeStatus = 'draft' | 'counting' | 'confirmed' | 'cancelled'
 
@@ -242,7 +262,21 @@ export const warehouseApi = {
   getEntry(id: number) {
     return http.request<WarehouseEntryOut>({ url: `/admin/warehouse/entries/${id}`, method: 'GET' })
   },
-  createEntry(payload: { code?: string; source_type: string; warehouse_id: number; purchase_order_id?: number; material_return_id?: number; remark?: string; items: EntryItemIn[] }) {
+  listWorkOrderPending(params?: { offset?: number; limit?: number }) {
+    return http.request<{ items: WorkOrderEntryPending[]; total: number }>({
+      url: '/admin/warehouse/entries/work-order-pending',
+      method: 'GET',
+      params,
+    })
+  },
+  createEntryFromWorkOrder(payload: { work_order_id: number; warehouse_id?: number; qty?: number }) {
+    return http.request<WarehouseEntryOut>({
+      url: '/admin/warehouse/entries/from-work-order',
+      method: 'POST',
+      data: payload,
+    })
+  },
+  createEntry(payload: { code?: string; source_type: string; warehouse_id: number; purchase_order_id?: number; material_return_id?: number; work_order_id?: number; remark?: string; items: EntryItemIn[] }) {
     return http.request<WarehouseEntryOut>({ url: '/admin/warehouse/entries', method: 'POST', data: payload })
   },
   confirmEntry(id: number) {

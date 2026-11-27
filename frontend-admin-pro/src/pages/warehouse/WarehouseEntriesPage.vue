@@ -7,7 +7,7 @@ import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { warehouseApi, type WarehouseEntryOut, type EntryItemIn, type WarehouseOut } from '@/api/warehouse'
+import { warehouseApi, type WarehouseEntryOut, type EntryItemIn, type WarehouseOut, type WorkOrderEntryPending } from '@/api/warehouse'
 
 const { t } = useI18n()
 
@@ -31,6 +31,7 @@ const statusMap: Record<string, string> = {
 const sourceTypeMap: Record<string, string> = {
   purchase: '采购入库',
   material_return: '退料入库',
+  work_order: '工单完工入库',
   other: '其他入库',
 }
 // 退料回补由退料单确认时入账，这里再建一张单会把同一批料入两遍
@@ -141,6 +142,48 @@ async function save() {
   }
 }
 
+// ---------- 待入库工单 ----------
+const pendingVisible = ref(false)
+const pendingLoading = ref(false)
+const pendingRows = ref<WorkOrderEntryPending[]>([])
+
+async function loadPending() {
+  pendingLoading.value = true
+  try {
+    const res = await warehouseApi.listWorkOrderPending({ limit: 200 })
+    pendingRows.value = res.items ?? []
+  } finally {
+    pendingLoading.value = false
+  }
+}
+
+function openPending() {
+  pendingVisible.value = true
+  loadPending()
+}
+
+async function createFromWorkOrder(row: WorkOrderEntryPending) {
+  try {
+    await warehouseApi.createEntryFromWorkOrder({ work_order_id: row.work_order_id })
+  } catch {
+    return // http 层已提示（例如已有草稿单）
+  }
+  ElMessage.success('已生成完工入库草稿单')
+  await Promise.all([loadPending(), load()])
+}
+
+async function confirmDraft(row: WorkOrderEntryPending) {
+  if (!row.draft_entry_id) return
+  try {
+    await ElMessageBox.confirm(`确认草稿入库单 ${row.draft_entry_code} 入库？`, '确认入库', { type: 'warning' })
+  } catch {
+    return
+  }
+  await warehouseApi.confirmEntry(row.draft_entry_id)
+  ElMessage.success('已确认入库')
+  await Promise.all([loadPending(), load()])
+}
+
 async function confirmEntry(row: WarehouseEntryOut) {
   try {
     await ElMessageBox.confirm(`确认入库单 ${row.code} 入库？将增加库存并记账。`, '确认入库', { type: 'warning' })
@@ -172,6 +215,7 @@ onMounted(() => {
 <template>
   <AdminPage :title="t('menu.warehouseEntries')">
     <template #actions>
+      <el-button @click="openPending">待入库工单</el-button>
       <el-button type="primary" @click="openCreate">新建入库单</el-button>
     </template>
 
@@ -217,6 +261,7 @@ onMounted(() => {
           <template #default="{ row }">
             <el-tag v-if="row.purchase_order_code" size="small" type="primary">{{ row.purchase_order_code }}</el-tag>
             <el-tag v-if="row.material_return_code" size="small" type="success">{{ row.material_return_code }}</el-tag>
+            <el-tag v-if="row.work_order_code" size="small" type="warning">工单#{{ row.work_order_id }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="total_qty" label="数量" width="90" />
@@ -241,6 +286,45 @@ onMounted(() => {
         @current-change="(p: number) => { query.offset = (p - 1) * query.limit; load() }"
       />
     </el-card>
+
+    <el-dialog v-model="pendingVisible" title="已完工待入库工单" width="880px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb-3"
+        title="工单报工终审后自动生成草稿入库单；这里列出完工数与已入库数的差额，避免成品没进账就发货。"
+      />
+      <el-table :data="pendingRows" v-loading="pendingLoading" stripe size="small">
+        <el-table-column label="工单" width="90">
+          <template #default="{ row }">#{{ row.work_order_id }}</template>
+        </el-table-column>
+        <el-table-column prop="order_code" label="订单" width="140" />
+        <el-table-column label="成品" min-width="180">
+          <template #default="{ row }">{{ row.sku_name || row.sku_code || row.sku_id }}</template>
+        </el-table-column>
+        <el-table-column prop="plan_qty" label="计划" width="80" />
+        <el-table-column prop="finished_qty" label="完工" width="80" />
+        <el-table-column prop="entered_qty" label="已入库" width="90" />
+        <el-table-column label="待入库" width="90">
+          <template #default="{ row }">
+            <span class="text-red-500 font-medium">{{ row.remain_qty }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.draft_entry_code" type="primary" link @click="confirmDraft(row)">
+              确认 {{ row.draft_entry_code }}
+            </el-button>
+            <el-button v-else type="primary" link @click="createFromWorkOrder(row)">生成入库单</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!pendingLoading && !pendingRows.length" description="没有待入库的工单" />
+      <template #footer>
+        <el-button @click="pendingVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="dialogVisible" title="新建入库单" width="640px">
       <el-form label-width="90px">
