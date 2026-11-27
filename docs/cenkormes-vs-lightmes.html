@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>lightmes(SaaS) × cenkormes(独立版) 功能对比清单</title>
+<title>lightmes v2.15.1 × cenkormes v2.3.1 功能对比报告（2026-11-26）</title>
 <style>
   :root{
     --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
@@ -34,206 +34,217 @@
   .count{font-weight:700;color:var(--brand)}
   ul{margin:6px 0 0;padding-left:20px}
   li{margin:3px 0}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-  @media(max-width:720px){.grid2{grid-template-columns:1fr}.table-scroll{overflow-x:auto}}
   code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-size:12px;color:#334155}
   footer{margin-top:34px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
   .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;margin:8px 0 4px}
+  .note{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--muted);margin-top:10px}
+  .table-scroll{overflow-x:auto}
+  @media(max-width:720px){.table-scroll{overflow-x:auto}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header>
-  <h1>lightmes（SaaS） × cenkormes（独立版）功能对比清单</h1>
+  <h1>lightmes v2.15.1 × cenkormes v2.3.1 功能对比报告</h1>
   <div>
-    <span class="tag">版本定位核查</span>
-    <span class="tag">交付边界参考</span>
+    <span class="tag">全量重算</span>
+    <span class="tag">2026-11-26</span>
+    <span class="tag">按代码实测</span>
     <span class="tag">初版 2026-08-21</span>
-    <span class="tag">复核 2026-10-08</span>
-    <span class="tag">复核 2026-10-22</span>
-    <span class="tag">复核 2026-10-26</span>
+    <span class="tag">历次复核 10-08 / 10-22 / 10-26</span>
   </div>
-  <p>用于区分「lightmes 全集」与「cenkormes 独立版 + 扩展」两条产品线的能力边界。<b>2026-10-26 复核按实际代码重写：纠正旧的 community/pro 分包说法，把独立版能力拆成「核心内置 / 需装扩展 / 真缺口」三态，并补入 2026-10 新增的 8 项能力落点。</b></p>
+  <p>本次不是在上版结论上修补，而是按两边最新代码重新统计规模、重新逐域比对，并专门复核上一版列出的 5 项「独立版真缺口」是否已经补齐。<b>结论有变化：RFQ 已由扩展补齐；多级 BOM、送货单打印、按发货对账、报工即时预估工资仍是核心缺口。</b></p>
 </header>
 
 <div class="meta">
-  <div><b>核查对象</b>：<code>lightmes</code>（SaaS + 单厂同栈）　×　<code>cenkormes</code>（独立版）</div>
-  <div><b>核查方式</b>：实际 Model / API 路由 / 页面 / 迁移 / 扩展 <code>manifest.json</code> 比对，非关键词表象</div>
-  <div><b>代码规模</b>：管理端页面 <span class="count">178</span> vs <span class="count">90</span>　·　H5 页面 <span class="count">34</span> vs <span class="count">22</span>　·　<code>@router</code> 计数约 <span class="count">996</span> vs <span class="count">576</span></div>
-  <div><b>AI 能力</b>：lightmes <code>services/ai</code> <span class="count">37</span> 个模块　vs　cenkormes 核心仅 <code>client.py</code> 网关 + <span class="count">7</span> 个 AI 扩展（已装）</div>
-  <div><b>扩展目录</b>：<code>mes-extensions</code> <span class="count">44</span> 个 key / <span class="count">87</span> 个版本包，当前实例已装约 <span class="count">29</span> 个</div>
+  <div><b>核查对象</b>：<code>lightmes v2.15.1</code>（2026-11-23，SaaS + 单厂同栈，私有闭源）　×　<code>cenkormes v2.3.1</code>（2026-11-18，单租户独立版，AGPL-3.0）</div>
+  <div><b>核查方式</b>：实际 Model / API 路由 / 页面 / 迁移 / 扩展 <code>manifest.json</code> / <code>.state/entitlements.json</code> 比对，非关键词表象</div>
+  <div><b>管理端页面</b>：<span class="count">233</span> vs <span class="count">99</span>　·　<b>H5 页面</b>：<span class="count">40</span> vs <span class="count">29</span>　·　<b>唯一端点</b>：<span class="count">878</span> vs <span class="count">436</span>（另已装扩展 <span class="count">513</span>）</div>
+  <div><b>后端规模</b>：API 文件 <span class="count">229</span> vs <span class="count">129</span>　·　Model 文件 <span class="count">109</span> vs <span class="count">77</span>　·　迁移 <span class="count">154</span> vs <span class="count">24</span>　·　核心代码 <span class="count">13.6万</span> 行 vs <span class="count">6.8万</span> 行</div>
+  <div><b>AI 能力</b>：<code>services/ai</code> <span class="count">48</span> 个 py 文件 vs 核心仅 <span class="count">2</span> 个（<code>client.py</code> / <code>metering.py</code>）+ 已装 <span class="count">10</span> 个 AI 扩展</div>
+  <div><b>扩展体系</b>：cenkormes 已授权 <span class="count">83</span> 个、已装 <span class="count">71</span> 个（授权状态全部 active，另 <span class="count">12</span> 个已授权未安装）；源码仓 <span class="count">71</span> 个 key / <span class="count">136</span> 个版本包；已无「有包无源码」；lightmes 无扩展体系</div>
 </div>
 
 <div class="legend">
-  <span><span class="pill ok">双方内置</span> 核心代码直接具备</span>
-  <span><span class="pill both">仅 lightmes</span> 独立版无对应实现</span>
-  <span><span class="pill half">需装扩展</span> 独立版靠扩展补齐，未装即不可见</span>
-  <span><span class="pill no">独立版缺口</span> 核心与扩展均无</span>
+  <span><span class="pill ok">双方内置</span> 两边核心代码直接具备</span>
+  <span><span class="pill both">仅 lightmes</span> 独立版核心无对应实现</span>
+  <span><span class="pill half">需装扩展</span> 独立版靠扩展补齐，未装/未授权即不可见</span>
+  <span><span class="pill no">独立版缺口</span> 核心与已装扩展均无</span>
 </div>
 
-<h2>一、版本定位（2026-10 已变更，旧说法作废）</h2>
+<h2>一、产品形态（与上版一致，数字更新）</h2>
 <div class="card">
   <table>
     <tr><th width="120">版本</th><th>定位</th><th>许可 / 分发</th><th>结构</th></tr>
     <tr>
-      <td><b>lightmes</b></td>
-      <td>全集：多租户 SaaS 平台 + 完整业务模块；<b>同一套代码也支持单厂独立部署</b></td>
-      <td>2026-10-16 起转私有闭源商业分发</td>
-      <td>单仓单线，<b>不再有 <code>community/</code> + <code>pro/</code> 分包</b>；旧文档的「AGPL 公开 + 私有 overlay」已过时</td>
+      <td><b>lightmes v2.15.1</b></td>
+      <td>全集：多租户 SaaS 平台 + 完整业务模块，同一套代码也可单厂独立部署</td>
+      <td>私有闭源商业分发</td>
+      <td>单仓单线（无 community/pro 分包）；SaaS 平台层、订阅计费、AI 钱包都在核心内</td>
     </tr>
     <tr>
-      <td><b>cenkormes</b></td>
-      <td>独立版：单租户私有部署，薄核心 + 运行时扩展宿主 + 应用中心</td>
+      <td><b>cenkormes v2.3.1</b></td>
+      <td>独立版：单租户私有部署，薄核心 + 运行时扩展宿主 + 应用市场</td>
       <td>AGPL-3.0 开源</td>
-      <td>独立仓库，不含 SaaS 平台层（租户/套餐/订阅/计费）</td>
+      <td>独立仓库，不含租户/套餐/订阅/计费；能力按「核心 / 扩展」分层交付</td>
     </tr>
   </table>
-  <p class="sub" style="margin-bottom:0">结论：两者不是「开源版 vs 商业版」的简单二分，而是<b>「全集闭源」与「薄核心开源 + 商业扩展」</b>两种商品形态。对比时必须以「装了什么扩展」为口径，否则会把扩展能力误判成核心能力或缺项。</p>
+  <div class="note">对比口径必须先固定：cenkormes 当前实例已装 71 个扩展且授权全部 active，所以「装了扩展 = 有这个功能」；「没装 = 页面上看不到」，不等于产品没有。反过来，lightmes 的 SaaS 平台层与计费是 cenkormes 结构上没有的。</div>
 </div>
 
-<h2>二、核心制造闭环（双方核心内置）</h2>
+<h2>二、核心制造闭环（逐域实测）</h2>
 <div class="card">
-  <p class="sub" style="margin-top:0">以下为 MES 地基，两边都有模型与 API：</p>
+  <div class="table-scroll">
   <table>
-    <thead><tr><th>功能域</th><th>状态</th><th>说明</th></tr></thead>
+    <thead><tr><th width="150">功能域</th><th width="110">状态</th><th>lightmes v2.15.1</th><th>cenkormes v2.3.1</th></tr></thead>
     <tbody>
-      <tr><td>生产计划 / 排产</td><td><span class="pill ok">双方内置</span></td><td>AP 计划 + 计算</td></tr>
-      <tr><td>工单 / 任务 / 派工</td><td><span class="pill ok">双方内置</span></td><td>核心执行闭环</td></tr>
-      <tr><td>报工 / 工序 / 工艺路线</td><td><span class="pill ok">双方内置</span></td><td>process · skill · route</td></tr>
-      <tr><td>质量检验</td><td><span class="pill ok">双方内置</span></td><td>检验模板 / 缺陷码在独立版核心</td></tr>
-      <tr><td>库存 / 物料 / 仓库单据</td><td><span class="pill ok">双方内置</span></td><td>出入库、领退料、发货</td></tr>
-      <tr><td>采购 / 供应商 / 采购对账</td><td><span class="pill ok">双方内置</span></td><td>purchase · supplier · statement</td></tr>
-      <tr><td>追溯</td><td><span class="pill ok">双方内置</span></td><td>独立版另有 <code>trace/tree/{product_code}</code> 追溯树</td></tr>
-      <tr><td>外协</td><td><span class="pill ok">双方内置</span></td><td>—</td></tr>
-      <tr><td>MRP 物料需求</td><td><span class="pill ok">双方内置</span></td><td>独立版为单层展开，多级见第六节</td></tr>
-      <tr><td>设备 / 班次 / 生产日历</td><td><span class="pill ok">双方内置</span></td><td>设备点检需装扩展</td></tr>
-      <tr><td>考勤 / 工资 / 工资条</td><td><span class="pill ok">双方内置</span></td><td>计时工资需装扩展</td></tr>
-      <tr><td>财务 / 台账 / 应收应付</td><td><span class="pill ok">双方内置</span></td><td>会计凭证/报表需装 <code>erp_finance</code></td></tr>
-      <tr><td>CRM 模型与 API</td><td><span class="pill ok">双方内置</span></td><td>独立版核心 62 条 CRM API；<b>管理端 UI 需装 <code>crm_suite</code></b></td></tr>
-      <tr><td>执行看板 / 报表</td><td><span class="pill ok">双方内置</span></td><td>独立版报表页较少，复杂报表靠 <code>temp_report</code></td></tr>
-      <tr><td>打印模板引擎</td><td><span class="pill ok">双方内置</span></td><td>内置模板集合不同，见第六节</td></tr>
-      <tr><td>第三方消息通道</td><td><span class="pill ok">双方内置</span></td><td>飞书核心内置；企微/钉钉在独立版走 <code>notify_wecom_dingtalk</code>（已装）</td></tr>
-      <tr><td>AI 简报 / 告警</td><td><span class="pill half">需装扩展</span></td><td>独立版核心仅网关；实际 AI 由 7 个扩展提供（已装）</td></tr>
+      <tr><td>生产计划 / 排产</td><td><span class="pill ok">双方内置</span></td><td>计划 + APS 高级排产原生</td><td>计划核心内置；APS 由 <code>aps</code> 扩展提供（已装）</td></tr>
+      <tr><td>工单 / 任务 / 派工</td><td><span class="pill ok">双方内置</span></td><td>核心执行闭环</td><td>核心执行闭环；逐件报工有独立 <code>work_order_piece</code> 池</td></tr>
+      <tr><td>报工（批次 + 逐件）</td><td><span class="pill ok">双方内置</span></td><td>批次报工为主</td><td>批次 / 逐件双模式互斥，逐件需照片，多级审批</td></tr>
+      <tr><td>工序 / 工价 / 工艺路线</td><td><span class="pill ok">双方内置</span></td><td>process · price · route</td><td>process · price · route · skill 全在核心</td></tr>
+      <tr><td>质量检验 / 缺陷 / SPC</td><td><span class="pill ok">双方内置</span></td><td>检验模板、缺陷码、SPC 原生</td><td>检验 / 缺陷 / 检验单在核心；SPC 核心有模型，控制图由 <code>spc_control</code> 扩展（已装）</td></tr>
+      <tr><td>库存 / 出入库 / 调拨</td><td><span class="pill ok">双方内置</span></td><td>v2.13 起小程序补齐库区/库位/批次效期</td><td>v2.3.0（11-15）补齐库位化仓储、批次/效期/调拨</td></tr>
+      <tr><td>盘点 / 安全库存 / 周转分析</td><td><span class="pill half">需装扩展</span></td><td>原生</td><td><code>stock_check</code> · <code>stock_safety</code> · <code>stock_transfer</code> · <code>warehouse_insight</code>（均已装）</td></tr>
+      <tr><td>采购 / 供应商 / 对账</td><td><span class="pill ok">双方内置</span></td><td>purchase · supplier · statement 原生</td><td>核心内置；采购增强走 <code>purchase_plus</code>（已装）</td></tr>
+      <tr><td>销售 / 客户 / 报价</td><td><span class="pill ok">双方内置</span></td><td>客户、订单、报价、回款</td><td>客户、订单、<code>quotation</code>、客户价目（SKU 价）在核心</td></tr>
+      <tr><td>财务 / 台账 / 应收应付</td><td><span class="pill ok">双方内置</span></td><td>核心财务 + 发票</td><td>核心财务台账 + 客户/供应商对账；凭证与科目走 <code>erp_finance</code>（已装）</td></tr>
+      <tr><td>追溯</td><td><span class="pill ok">双方内置</span></td><td>追溯链 + 图谱模型原生</td><td>核心追溯 + <code>trace/tree</code>；码级图谱与召回走 <code>trace_graph</code>（已装）</td></tr>
+      <tr><td>外协</td><td><span class="pill ok">双方内置</span></td><td>外协发料 / 回货</td><td>核心外协；核销结算 <code>subcontract_plus</code>、打印 <code>subcontract_print</code>（均已装）</td></tr>
+      <tr><td>MRP 物料需求</td><td><span class="pill ok">双方内置</span></td><td>多级展开</td><td>核心为单层展开；多级 BOM 能力见第六节（仍缺）</td></tr>
+      <tr><td>设备 / 班次 / 生产日历</td><td><span class="pill ok">双方内置</span></td><td>设备、点检、健康、OEE 原生</td><td>设备/班次/日历核心；点检 <code>equipment_inspection</code>、健康 <code>equipment_health</code>、OEE <code>oee</code>、产能 <code>equipment_productivity</code>（均已装）</td></tr>
+      <tr><td>模具 / 工装 / 备件</td><td><span class="pill ok">双方内置</span></td><td>模具原生</td><td>模具模型在核心 + <code>mold_management</code>；工装 <code>tooling</code>、备件 <code>spare_part</code>（均装）</td></tr>
+      <tr><td>考勤 / 工资 / 工资条</td><td><span class="pill ok">双方内置</span></td><td>计时/计件与工资条</td><td>核心计件工资与工资条；计时 <code>hourly_salary</code>（已装）</td></tr>
+      <tr><td>审批 / 工作流</td><td><span class="pill ok">双方内置</span></td><td>审批核心 + workflow 原生</td><td>审批核心（2 级默认，可配）；流程编排 <code>workflow</code>、审批中心 <code>approval_center</code>（均装）</td></tr>
+      <tr><td>报表 / 看板</td><td><span class="pill ok">双方内置</span></td><td>报表与执行看板原生、数量多</td><td>核心执行看板 + 报表；临时报表 <code>temp_report</code>、BI 增强 <code>exec_bi_enhance</code>（均装）</td></tr>
+      <tr><td>打印模板</td><td><span class="pill ok">双方内置</span></td><td>模板集合含送货单等</td><td>引擎在核心，但内置模板目前只有任务标签（<code>task_label</code>），见第六节</td></tr>
+      <tr><td>消息通道</td><td><span class="pill ok">双方内置</span></td><td>飞书 / 企微 / 钉钉原生</td><td>飞书核心内置；企微钉钉 <code>notify_wecom_dingtalk</code>、公众号 <code>wechat_mp_push</code>（均装）</td></tr>
+      <tr><td>多语言</td><td><span class="pill ok">双方内置</span></td><td>中 / 英 / 韩 + 平台侧文案</td><td>中 / 英 / 韩，<code>check:i18n</code> 为构建门禁</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<h2>三、仅 lightmes 具备（结构上没有，或需要另做产品）</h2>
+<div class="card">
+  <table>
+    <thead><tr><th width="190">能力</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><b>多级 BOM</b></td><td><code>material_bom_items</code> 有 <code>parent_item_id</code> + <code>level</code>，MRP/齐套/就绪按多级展开；cenkormes 的同表没有父子列，只能单层</td></tr>
+      <tr><td><b>送货单打印</b></td><td>lightmes 有 <code>services/delivery_note.py</code> 与配套测试；cenkormes 打印引擎可用但无送货单模板与发货打印端点</td></tr>
+      <tr><td><b>按发货生成对账</b></td><td>lightmes 对账项支持 <code>source_type=shipment</code>；cenkormes 的 <code>create_statement</code> 只接受订单金额（<code>order_amounts</code>）</td></tr>
+      <tr><td><b>报工后即时预估工资</b></td><td>lightmes 提交即返回本笔预估、首页区分已确认/待审核；cenkormes 的 <code>POST /h5/reports</code> 只回 qty/status，工资要等算薪任务</td></tr>
+      <tr><td><b>项目经营（原生）</b></td><td>lightmes v2.13–v2.15 做到合同/里程碑/任务树/甘特/风险/回款/文档/发票/结项/工时/预警 + 客户侧进度可见；cenkormes 由 <code>project</code> 扩展提供（已装 2.0.1），深度与版本节奏不同</td></tr>
+      <tr><td><b>SaaS 平台层</b></td><td>多租户、套餐门禁、订阅下单/续费/升级折算、支付、开票、营收看板、试用引导</td></tr>
+      <tr><td><b>平台级登录</b></td><td>v2.13 平台微信登录、小程序主体未认证时降级为反向扫码、<code>user_sso_binding</code></td></tr>
+      <tr><td><b>AI 钱包与计费</b></td><td>按用量扣费、余额、充值（含虎皮椒）、用量报表；cenkormes v2.3.1 只有「用量计量 + 按月配额」，不产生账单</td></tr>
+      <tr><td><b>一体化 AI 套件</b></td><td><code>services/ai</code> 48 个 py：对话/流式、RAG、排产、数字员工、异常检测、因果推断、视觉质检、风险评分、主动预警、语音下单等；cenkormes 由 10 个扩展拼装</td></tr>
+      <tr><td><b>原生 Andon / EMS / IoT / OEE / 供应商门户</b></td><td>lightmes 均为核心模块；cenkormes 对应 <code>andon</code> / <code>energy_monitor</code> / <code>iot</code> / <code>oee</code> / <code>supplier_portal</code> 扩展（均已装）</td></tr>
     </tbody>
   </table>
 </div>
 
-<h2>三、仅 lightmes 内置（独立版核心无对应实现）</h2>
+<h2>四、cenkormes 靠扩展补齐（当前 71 个已装，授权全 active）</h2>
 <div class="card">
+  <p class="sub" style="margin-top:0">下表是「同名能力在独立版的真实落点」。与上版最大差别：<b>上一版列的大批「未安装」现在全部已装</b>，交付时风险从「装不装」转成「授权续不续」。另有 12 个已授权但未安装（<code>barcode_serialization</code>、<code>batch_trace</code>、<code>coa_quality</code>、<code>compliance_export</code>、<code>dashboard_report</code>、<code>equipment_iot</code>、<code>op_efficiency</code>、<code>order_planning</code>、<code>process_ai_insight</code>、<code>shelf_life_watch</code>、<code>shopfloor_exec</code>、<code>yield_analysis</code>），对客户仍是「不可见」状态。</p>
+  <div class="table-scroll">
   <table>
-    <thead><tr><th>能力</th><th>说明</th></tr></thead>
+    <thead><tr><th width="210">能力</th><th>扩展 key</th><th width="90">状态</th></tr></thead>
     <tbody>
-      <tr><td><b>多级 BOM</b></td><td>BOM 支持半成品子件，MRP / 齐套 / 就绪检查按多级展开（2026-10 新增）</td></tr>
-      <tr><td><b>客户询价 RFQ</b></td><td>客户 H5 发起询价 → 销售报价 → 接受 → 转订单并保留单价（2026-10 新增）</td></tr>
-      <tr><td><b>送货单打印</b></td><td>发货单单打/批量打印，内置 <code>delivery_note</code> 模板（2026-10 新增）</td></tr>
-      <tr><td><b>按发货生成对账单</b></td><td>一单多批发货可分开对账，金额默认按发货售价（2026-10 新增）</td></tr>
-      <tr><td><b>报工后即时预估工资</b></td><td>提交即见本笔预估，首页区分「已确认 / 待审核预估」（2026-10 新增）</td></tr>
-      <tr><td><b>SaaS 平台层</b></td><td>多租户、套餐门禁 <code>PACKAGE_MODULES</code>、订阅与支付、应用中心</td></tr>
-      <tr><td><b>AI 计量与预付钱包</b></td><td>按用量计费、余额/扣费/用量报表（独立版 AI 扩展无计费）</td></tr>
-      <tr><td><b>一体化 AI 套件</b></td><td>37 个 <code>services/ai</code> 模块：对话/流式、RAG 知识库、智能排产、数字员工、可执行助手、异常检测、根因分析、视觉质检、风险评分、主动预警</td></tr>
+      <tr><td>CRM 管理端全套（线索/商机/公海/合同/回款/画像/售后/活动/目标）</td><td><code>crm_suite</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>ERP 财务（凭证 / 科目 / 试算 / 报表 / 折旧）</td><td><code>erp_finance</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>往来核对（期初/期末勾稽）</td><td><code>finance_reconciliation</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>安全库存 / 盘点 / 调拨 / 库存分析</td><td><code>stock_safety</code> · <code>stock_check</code> · <code>stock_transfer</code> · <code>warehouse_insight</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>设备点检 / 健康 / 产能 / OEE</td><td><code>equipment_inspection</code> · <code>equipment_health</code> · <code>equipment_productivity</code> · <code>oee</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>计时工资 / 人工成本 / 技能矩阵 / 出勤</td><td><code>hourly_salary</code> · <code>labor_cost_analysis</code> · <code>skill_matrix</code> · <code>workforce_attendance</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>临时报表 / BI 增强 / 全局搜索</td><td><code>temp_report</code> · <code>exec_bi_enhance</code> · <code>global_search</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>审批中心 / 工作流 / ABAC 数据权限</td><td><code>approval_center</code> · <code>workflow</code> · <code>abac</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>采购增强 / 采购分析 / 供应商门户</td><td><code>purchase_plus</code> · <code>purchase_supplier_analysis</code> · <code>supplier_portal</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>客户门户 / 投诉 / EHS / 培训 / ESOP</td><td><code>customer_portal</code> · <code>complaint</code> · <code>ehs</code> · <code>training</code> · <code>esop</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>一物一码 / 模具 / SPC / 工装 / 备件</td><td><code>qcode</code> · <code>mold_management</code> · <code>spc_control</code> · <code>tooling</code> · <code>spare_part</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>公众号推送 / 企微钉钉通知</td><td><code>wechat_mp_push</code> · <code>notify_wecom_dingtalk</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>AI 助手 / 知识库 / 洞察 / 数字员工 / 异常 / 场景文书 / 排产 / 工艺草稿 / 视觉 / 定价</td><td><code>ai_assistant</code> · <code>ai_knowledge</code> · <code>ai_insight</code> · <code>ai_employee</code> · <code>ai_anomaly</code> · <code>ai_scene_reports</code> · <code>ai_scheduling</code> · <code>ai_process_draft</code> · <code>mes_ai_vision</code> · <code>pricing_ai</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>智能分析（生产诊断 / 质量成本 / 库存）</td><td><code>production_diagnosis</code> · <code>quality_cost_analysis</code> · <code>inventory_analysis</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>交付准时 / 能耗 / 数字孪生 / 看板</td><td><code>delivery_ontime</code> · <code>energy_monitor</code> · <code>digital_twin</code> · <code>andon</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>行业模板 / 行业套件（服装、汽配、电子）</td><td><code>industry_templates</code> · <code>apparel_suite</code> · <code>auto_parts_suite</code> · <code>electronics_suite</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>项目经营 / 询价报价 / OEE / 委外核销 / 委外打印 / 追溯图谱 / ERP 桥</td><td><code>project</code> · <code>rfq</code> · <code>oee</code> · <code>subcontract_plus</code> · <code>subcontract_print</code> · <code>trace_graph</code> · <code>erp_bridge</code></td><td><span class="pill ok">已装</span></td></tr>
+      <tr><td>IoT / OpenAPI / 价格质控 / 质量防错</td><td><code>iot</code> · <code>iot_connect</code> · <code>openapi</code> · <code>quality_poka</code></td><td><span class="pill ok">已装</span></td></tr>
     </tbody>
   </table>
-  <p class="sub" style="margin-bottom:0">注：前三行是 2026-10 一轮新增能力，<b>本次只落在 lightmes</b>；独立版要等价，需要迁核心或补扩展。</p>
+  </div>
+  <div class="note"><b>7 个「曾已装但源码仓没有」的扩展已回收（2026-11-26）</b>：<code>erp_bridge</code>、<code>oee</code>、<code>project</code>、<code>rfq</code>、<code>subcontract_plus</code>、<code>subcontract_print</code>、<code>trace_graph</code> 的源码已从实例目录回收进 <code>mes-extensions</code>，补齐 10 节 README 后全部通过 <code>pack.py --check</code>，并重新产出 7 个 zip。已与 hub 上传目录逐个比对：<b>运行时文件（manifest / py / js / sql）逐字节一致，仅 README 有差异</b>；源码已提交（<code>1548d67</code>）。</div>
 </div>
 
-<h2>四、独立版靠扩展补齐（未装即不可见）</h2>
-<div class="card">
-  <p class="sub" style="margin-top:0">下表是同名能力在独立版的真实落点。<b>「需装扩展」不等于「没有」，但对外承诺时必须把安装与授权一起交付。</b></p>
-  <table>
-    <thead><tr><th>能力</th><th>独立版落点</th><th>当前实例</th></tr></thead>
-    <tbody>
-      <tr><td>CRM 管理端 UI（线索/商机/公海/报价/合同/回款/画像/售后/活动/目标/输赢单）</td><td><code>crm_suite</code>（复用核心 62 条 API，只读聚合）</td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>ERP 财务（凭证 / 科目 / 试算 / 资产负债表 / 折旧）</td><td><code>erp_finance</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>往来核对（期初/期末勾稽）</td><td><code>finance_reconciliation</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>安全库存预警</td><td><code>stock_safety</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>设备点检</td><td><code>equipment_inspection</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>库存盘点</td><td><code>stock_check</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>计时工资</td><td><code>hourly_salary</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>临时报表</td><td><code>temp_report</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>审批中心</td><td><code>approval_center</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>ABAC 数据权限</td><td><code>abac</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>采购增强 / 打印</td><td><code>purchase_plus</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>微信公众号推送</td><td><code>wechat_mp_push</code></td><td><span class="pill half">未安装</span></td></tr>
-      <tr><td>一物一码</td><td><code>qcode</code></td><td><span class="pill ok">已装 2.0.0</span></td></tr>
-      <tr><td>模具管理</td><td><code>mold_management</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>SPC 控制图</td><td><code>spc_control</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>AI 扩展（<code>ai_anomaly</code> · <code>ai_assistant</code> · <code>ai_employee</code> · <code>ai_insight</code> · <code>ai_knowledge</code> · <code>ai_scene_reports</code> · <code>ai_scheduling</code>）</td><td>7 个，分别对应异常/助手/数字员工/洞察/知识库/场景报表/排产</td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>视觉质检 / 设备健康</td><td><code>mes_ai_vision</code> · <code>equipment_health</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>智能分析（生产诊断 / 质量成本 / 采购分析 / 人工成本 / 库存分析）</td><td><code>production_diagnosis</code> · <code>quality_cost_analysis</code> · <code>purchase_supplier_analysis</code> · <code>labor_cost_analysis</code> · <code>inventory_analysis</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>企微 / 钉钉通知</td><td><code>notify_wecom_dingtalk</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>技能矩阵 / 出勤 / 交付准时 / 产能效率 / 能耗</td><td><code>skill_matrix</code> · <code>workforce_attendance</code> · <code>delivery_ontime</code> · <code>equipment_productivity</code> · <code>energy_monitor</code></td><td><span class="pill ok">已装</span></td></tr>
-      <tr><td>行业模板包</td><td><code>industry</code> 系列</td><td><span class="pill ok">已装</span></td></tr>
-    </tbody>
-  </table>
-  <p class="sub" style="margin-bottom:0">提醒：扩展目录共 44 个 key、87 个版本包，当前实例只装了约 29 个。<b>说「独立版有某功能」前，先确认对应扩展是否在授权清单里。</b></p>
-</div>
-
-<h2>五、独立版独有（lightmes 没有或形态不同）</h2>
+<h2>五、cenkormes 独有（lightmes 没有或形态不同）</h2>
 <div class="card">
   <table>
-    <thead><tr><th>能力</th><th>说明</th></tr></thead>
+    <thead><tr><th width="190">能力</th><th>说明</th></tr></thead>
     <tbody>
-      <tr><td><b>可插拔扩展生态</b></td><td>运行时扩展宿主：热装/热卸/回滚/停用/修复、事件总线、迁移编排、应用中心与市场页</td></tr>
-      <tr><td><b>外部 CRM 适配器</b></td><td><code>crm-adapter</code>，对接自有 <code>ck_crm</code> 系统，lightmes 只做 SaaS 内建 CRM</td></tr>
-      <tr><td><b>追溯树</b></td><td><code>trace/tree/{product_code}</code> 多级正向/反向追溯视图</td></tr>
-      <tr><td><b>单租户一键部署</b></td><td>Docker Compose 拉起单厂实例，无套餐/订阅概念，运维面更小</td></tr>
+      <tr><td><b>可插拔扩展生态</b></td><td>运行时热装/热卸/回滚/停用/修复、事件总线（通知型 + 拦截型）、迁移编排、SHA256 闸门、市场下载与授权门控</td></tr>
+      <tr><td><b>扩展分发闭环</b></td><td>源码 → pack.py 闸门 → hub 审核上架 → 实例下载 → staging/备份/迁移/换入/健康检查/回滚</td></tr>
+      <tr><td><b>外部 CRM 适配</b></td><td>对接自有 <code>ck_crm</code>，lightmes 只有 SaaS 内建 CRM</td></tr>
+      <tr><td><b>追溯树 / 码级图谱</b></td><td>核心 <code>trace/tree/{product_code}</code>，加 <code>trace_graph</code> 的召回视图</td></tr>
+      <tr><td><b>单租户一键部署</b></td><td>Docker Compose 拉起单厂实例，无套餐/订阅/支付概念，运维面更小</td></tr>
+      <tr><td><b>AI 用量按扩展归因</b></td><td>v2.3.1 新增：token 成本按扩展记账、按月配额，不落到客户账单</td></tr>
       <tr><td><b>AGPL-3.0 开源</b></td><td>可审计、可二次开发、可私有化交付</td></tr>
     </tbody>
   </table>
 </div>
 
-<h2>六、2026-10 新增 8 项能力落点核对</h2>
+<h2>六、上一版 5 项「真缺口」复核（2026-11-26）</h2>
+<div class="note"><b>2026-11-27 补记（v2.3.2）</b>：下表 4 项「仍是缺口」已迁入核心——多级 BOM（<code>is_sub_assembly</code> 递归展开）、送货单打印（发货单打印/PDF 端点 + <code>delivery_note</code> 模板）、按发货对账（<code>source_type=shipment</code>）、报工即时预估工资（<code>estimate</code>）。表内结论保留为 2026-11-26 的 v2.3.1 实测快照。</div>
 <div class="card">
   <table>
-    <thead><tr><th>能力</th><th>lightmes</th><th>cenkormes 独立版</th><th>补齐方式</th></tr></thead>
+    <thead><tr><th width="180">能力</th><th width="110">上版结论</th><th width="110">本次结论</th><th>依据</th></tr></thead>
     <tbody>
-      <tr><td>报工后即时预估工资</td><td><span class="pill ok">已上线</span></td><td><span class="pill no">缺口</span></td><td>迁核心（改动小，建议做）</td></tr>
-      <tr><td>送货单打印 + 对账单模板</td><td><span class="pill ok">已上线</span></td><td><span class="pill no">缺口</span></td><td>迁核心打印模板 + 发货打印端点</td></tr>
-      <tr><td>安全库存预警</td><td><span class="pill ok">已上线</span></td><td><span class="pill half">装 <code>stock_safety</code></span></td><td>交付时随授权安装</td></tr>
-      <tr><td>按发货生成对账单</td><td><span class="pill ok">已上线</span></td><td><span class="pill no">缺口</span></td><td>迁核心（依赖送货单）</td></tr>
-      <tr><td>往来核对报表</td><td><span class="pill ok">已上线</span></td><td><span class="pill half">装 <code>finance_reconciliation</code></span></td><td>交付时随授权安装</td></tr>
-      <tr><td>设备点检</td><td><span class="pill ok">已上线</span></td><td><span class="pill half">装 <code>equipment_inspection</code></span></td><td>交付时随授权安装</td></tr>
-      <tr><td>客户询价 RFQ</td><td><span class="pill ok">已上线</span></td><td><span class="pill no">缺口</span></td><td>迁核心，或做 <code>rfq</code> 扩展</td></tr>
-      <tr><td>多级 BOM</td><td><span class="pill ok">已上线</span></td><td><span class="pill no">缺口</span></td><td>迁核心（影响 MRP/齐套/就绪三处）</td></tr>
+      <tr><td>客户询价 RFQ</td><td><span class="pill no">缺口</span></td><td><span class="pill ok">已补齐</span></td><td><code>rfq</code> 扩展 1.2.0 已装：询价单、报价版本、比价、定标、关闭；客户与销售双端</td></tr>
+      <tr><td>多级 BOM</td><td><span class="pill no">缺口</span></td><td><span class="pill no">仍是缺口</span></td><td>cenkormes <code>material_bom_items</code> 无 <code>parent_item_id</code>/<code>level</code>，MRP 单层；lightmes 有</td></tr>
+      <tr><td>送货单打印</td><td><span class="pill no">缺口</span></td><td><span class="pill no">仍是缺口</span></td><td>内置模板仅 <code>task_label</code>；发货单无打印端点，lightmes 有 <code>delivery_note</code> 服务与模板</td></tr>
+      <tr><td>按发货生成对账</td><td><span class="pill no">缺口</span></td><td><span class="pill no">仍是缺口</span></td><td><code>create_statement(order_amounts)</code> 只按订单；lightmes 对账项支持 <code>source_type=shipment</code></td></tr>
+      <tr><td>报工后即时预估工资</td><td><span class="pill no">缺口</span></td><td><span class="pill no">仍是缺口</span></td><td><code>POST /h5/reports</code> 不回预估金额；H5 指南已写「提交即显示预估」，属文档超前于实现</td></tr>
     </tbody>
   </table>
+  <div class="note">补充：上版把「项目经营」归为 lightmes 新增能力，本次改为「cenkormes 由 <code>project</code> 扩展覆盖」。这不是纸面补齐——扩展已装 2.0.1，但 lightmes v2.15.1 的项目模块含客户侧进度、里程碑交付文档、发票与结项预警，深度仍高于扩展版。</div>
 </div>
 
-<h2>七、扩展插拔闭环（2026-10-22 全量交付）</h2>
+<h2>七、2026-10-26 → 11-26 两侧变化</h2>
 <div class="card">
-  <p class="sub" style="margin-top:0"><b>判据</b>：安装失败是否影响存量、更新是否可回滚、卸载是否留残渣。三项全绿才算「闭环」，只做到「装上能用」是半开环。</p>
   <table>
-    <thead><tr><th>能力</th><th>v1（2026-10-17 前）</th><th>v2（现行）</th></tr></thead>
+    <thead><tr><th width="110">侧</th><th>版本</th><th>本轮主要变化</th></tr></thead>
     <tbody>
-      <tr><td>安装/更新</td><td><span class="pill no">先删旧目录再解压</span></td><td><span class="pill ok">staging → 备份 → 迁移 → 换入 → 健康检查</span></td></tr>
-      <tr><td>失败处理</td><td><span class="pill no">旧版消失</span></td><td><span class="pill ok">自动回滚上一版并重新挂载</span></td></tr>
-      <tr><td>迁移</td><td><span class="pill half">单文件 migrations.sql + mtime:size</span></td><td><span class="pill ok">migrations/NNNN_*.py + ctx 幂等 DDL + SHA256 + 按 key 记录</span></td></tr>
-      <tr><td>卸载</td><td><span class="pill no">删目录 + 卸路由，权限点/模块/任务残留</span></td><td><span class="pill ok">停门禁排空 → 卸路由/事件/任务/权限/模块 → .trash</span></td></tr>
-      <tr><td>数据策略</td><td><span class="pill half">一律保留，无清除入口</span></td><td><span class="pill ok">默认 keep；purge 需 confirm_key + 输入 key + JSONL 备份 + own 表白名单</span></td></tr>
-      <tr><td>启停/回滚/修复</td><td><span class="pill no">无</span></td><td><span class="pill ok">enable / disable / rollback / repair 四个独立端点</span></td></tr>
-      <tr><td>权限与鉴权</td><td><span class="pill no">任意登录用户可装卸</span></td><td><span class="pill ok">全部要求 setting.manage + 操作人审计</span></td></tr>
-      <tr><td>前端</td><td><span class="pill no">只 reload 扩展，权限缓存不刷新</span></td><td><span class="pill ok">fetchMe + reloadExtensions + 路由回退</span></td></tr>
-      <tr><td>多 worker / Celery</td><td><span class="pill no">假装热生效</span></td><td><span class="pill ok">返回 worker_restart_required，UI 明示需人工重启</span></td></tr>
+      <tr>
+        <td><b>lightmes</b></td>
+        <td>v2.11 → v2.15.1</td>
+        <td>项目管理全链路（计划/任务树/甘特/风险/回款/文档/合同发票/结项/工时/预警 + 客户侧进度）；平台微信登录与小程序反向扫码降级；订阅下单/续费折算/开票/营收看板；AI 钱包自助充值；小程序 WMS 库区/库位/批次效期/调拨；订单健康度与风险预警；在线升级原子切换</td>
+      </tr>
+      <tr>
+        <td><b>cenkormes</b></td>
+        <td>v2.2.22 → v2.3.1</td>
+        <td>库位化仓储（库位/批次/效期/调拨，11-15）；AI 用量计量与按月配额、按扩展归因（11-18）；H5 智能中心十余批迭代（今日概览、会话导出、预警批量处置、资料排序/向量化筛选、助手查数据模式）；扩展核心表识别精确化；依赖升级（vite 6 / vue-i18n 11）</td>
+      </tr>
+      <tr>
+        <td><b>扩展仓</b></td>
+        <td>71 key / 136 zip</td>
+        <td>上版 44 key / 87 zip / 实例约 29 装 → 本次 71 key / 136 zip / 实例 71 装；新增 RFQ、项目、OEE、委外核销/打印、追溯图谱、ERP 桥、ESOP、工作流等；11-26 已回收全部「有包无源码」并提交源码仓</td>
+      </tr>
     </tbody>
   </table>
-  <p class="sub" style="margin-bottom:0"><b>文档</b>：<code>docs/EXTENSION_LIFECYCLE.md</code>（唯一权威）· <code>docs/EXTENSIONS.md</code> · <code>mes-extensions/pack.py</code> v2 闸门。</p>
 </div>
 
 <h2>八、结论与建议</h2>
 <div class="card">
   <ul>
-    <li><b>核心制造闭环</b>（计划/工单/报工/质量/库存/采购/外协/追溯/考勤）两边都内置，是共同地基，不存在「开源版被砍」。</li>
-    <li><b>「独立版没有」多数是「没装扩展」</b>：CRM UI、ERP 财务、往来核对、安全库存、设备点检、盘点、计时工资、临时报表、审批、ABAC 都在扩展目录里。对外交付必须把扩展授权与安装流程一起给，否则客户看到的是空壳。</li>
-    <li><b>真正的独立版缺口只有 5 项</b>：客户询价 RFQ、多级 BOM、送货单打印、按发货对账、报工即时预估工资。前两项影响销售与计划链，优先迁核心。</li>
-    <li><b>lightmes 的护城河已不是「AI 存在与否」，而是 AI 计量/钱包/一体化套件 + SaaS 平台层</b>。独立版已有 7 个 AI 扩展补齐大部分场景，差异在计费与深度整合。</li>
-    <li><b>独立版独有价值要主动讲</b>：可插拔扩展、外部 CRM 适配、追溯树、单租户一键部署、AGPL。这些是 lightmes 没有的卖点，不要只拿 lightmes 的能力表反向要求独立版。</li>
-    <li><b>本页更新节奏</b>：每批扩展或核心能力上线后同步一次；旧结论（community/pro 分包、748/539 API、32/3 AI 模块、10 个扩展 zip）已作废。</li>
+    <li><b>规模差距在缩小，但仍约 2 倍</b>：管理端页面 99 vs 233、H5 29 vs 40、核心端点 436 vs 878、核心代码 6.8 万 vs 13.6 万行。计入已装扩展的 513 个端点后，独立版业务面覆盖已接近全集，差在 SaaS 平台层与深度。</li>
+    <li><b>「独立版没有」现在基本等价于「扩展没装/没授权」</b>：上一版的 CRM、ERP 财务、往来核对、库存三件套、点检、计时工资、审批、ABAC 等已全部装上（授权 active）。但当前仍有 <b>12 个已授权未安装</b>，客户看到的就是没有；交付 SOP 应把「扩展授权 + 安装 + 健康检查」写进验收单，而不是只交主程序。</li>
+    <li><b>真正的核心缺口只剩 4 项</b>：多级 BOM、送货单打印、按发货对账、报工即时预估工资。前两项影响计划与发货交付，建议优先迁核心；RFQ 已用扩展补齐，可作为「缺口 → 扩展」的样板。</li>
+    <li><b>7 个扩展的源码缺口已补</b>（<code>erp_bridge</code>/<code>oee</code>/<code>project</code>/<code>rfq</code>/<code>subcontract_plus</code>/<code>subcontract_print</code>/<code>trace_graph</code>）：已从实例目录回收进 <code>mes-extensions</code>，补齐 README 十节后 <code>pack.py --check</code> 全绿并重新打包，源码已提交。与 hub 的 <code>uploads/apps</code> 逐个比对确认运行时文件逐字节一致（zip 整体 SHA 不同只因 README 与时间戳），<b>无需重发同名版本</b>。</li>
+    <li><b>lightmes 的护城河已转向「SaaS 平台层 + 计费 + 项目经营」</b>，而不是单个 AI 功能。cenkormes 的 AI 能力数量已够，差在钱包计费与一体化深度；这条差距不应靠继续加 AI 扩展来追。</li>
+    <li><b>独立版的卖点要主动讲</b>：可插拔扩展、扩展分发闭环、外部 CRM 适配、单租户一键部署、AGPL。这些是 lightmes 结构上没有的，不要只用 lightmes 的能力表反向要求独立版。</li>
   </ul>
 </div>
 
 <footer>
-  数据来源：lightmes 与 cenkormes 实际 Model、API 路由、前端页面、迁移与扩展 <code>manifest.json</code> 比对 · 初版 2026-08-21 · 复核 2026-10-08 · 2026-10-22（扩展插拔闭环 v2）· <b>2026-10-26 重写</b>（纠正分包与许可说法，按核心/扩展/缺口三态重分类，补入 2026-10 新增 8 项能力落点）。<code>@router</code> 与页面数为近似规模，非精确 endpoint；扩展安装状态取当前实例 <code>extensions/.state</code>。
+  数据来源：2026-11-26 对 <code>lightmes v2.15.1</code> 与 <code>cenkormes v2.3.1</code> 的 Model、API 路由、前端页面、迁移、扩展 <code>manifest.json</code> 与实例 <code>extensions/.state/entitlements.json</code> 实测比对 · 初版 2026-08-21 · 复核 10-08 / 10-22 / 10-26 / <b>2026-11-26 全量重算</b>。页面数、<code>@router</code> 与唯一端点数为静态近似规模（已装扩展的 513 个端点单独计），不含扩展前端插件页与历史 <code>.bak</code> 文件。
 </footer>
 
 </div>
