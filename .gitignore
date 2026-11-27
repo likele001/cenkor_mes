@@ -168,3 +168,6 @@ refcopy
 docs/pending/process-manufacturing-product-plan.md
 # 发版清单（release-all.sh 生成的文件列表快照，属临时产物）
 .release-manifest.txt
+
+# 本地 AI 编码工具的工作目录（开发计划、会话草稿等，不入库）
+.trae/
