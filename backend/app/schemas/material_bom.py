@@ -13,6 +13,7 @@ class MaterialBomItemIn(BaseModel):
     material_id: int = Field(ge=1)
     qty_per: int = Field(ge=0)
     remark: str | None = None
+    is_sub_assembly: bool = False
 
 
 class MaterialBomCreateIn(BaseModel):
@@ -54,6 +55,10 @@ class MaterialBomItemOut(BaseModel):
     material_name: str
     qty_per: int
     remark: str | None
+    is_sub_assembly: bool = False
+    child_bom_id: int | None = None
+    child_bom_name: str | None = None
+    level: int = 1
 
 
 class MaterialBomOut(BaseModel):

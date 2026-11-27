@@ -39,6 +39,27 @@ export type BomItemOut = {
   material_name: string | null
   qty_per: number
   remark: string | null
+  is_sub_assembly?: boolean
+  child_bom_id?: number | null
+  child_bom_name?: string | null
+  level?: number
+}
+
+export type BomTreeRow = {
+  material_id: number
+  material_code: string
+  material_name: string
+  unit: string | null
+  spec: string | null
+  supplier_id: number | null
+  sku_id: number
+  level: number
+  path: string
+  is_sub_assembly: boolean
+  child_bom_id: number | null
+  missing_child_bom: boolean
+  qty: number
+  unit_qty: number
 }
 
 export type BomScope = 'sku' | 'product' | 'global'
@@ -94,6 +115,7 @@ export type BomItemIn = {
   material_id: number
   qty_per: number
   remark?: string | null
+  is_sub_assembly?: boolean
 }
 
 export type BomCreateIn = {
@@ -154,6 +176,13 @@ export const materialsApi = {
   },
   getBom(id: number) {
     return http.request<BomOut>({ url: `/admin/master/boms/${id}`, method: 'GET' })
+  },
+  getBomTree(bomId: number, skuId?: number) {
+    return http.request<{ sku_id: number; items: BomTreeRow[]; missing_child_boms: any[] }>({
+      url: `/admin/master/boms/${bomId}/tree`,
+      method: 'GET',
+      params: skuId ? { sku_id: skuId } : undefined,
+    })
   },
   updateBom(id: number, data: BomUpdateIn) {
     return http.request<BomOut>({ url: `/admin/master/boms/${id}`, method: 'PUT', data })

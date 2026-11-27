@@ -17,6 +17,7 @@ from app.crud.material_bom import (
     get_bom_by_id,
     get_effective_bom_for_sku,
     get_sku_bom,
+    get_strict_bom_for_sku,
     list_boms,
     update_bom,
 )
@@ -26,6 +27,7 @@ from app.models.product import Product
 from app.models.user import User
 from app.schemas.material_bom import MaterialBomCopyToSkuIn, MaterialBomCreateIn, MaterialBomUpdateIn
 from app.services.display_label import product_display_name, sku_option_extra_fields
+from app.services.bom_explosion import explode_bom, row_meta
 from app.services.sku_scope import is_material_product
 from app.tasks._sync_excel import make_excel_response
 
@@ -66,9 +68,28 @@ def _list_out(bom) -> dict:
     }
 
 
-def _out(bom) -> dict:
+def _out(bom, db=None) -> dict:
     sku = getattr(bom, "sku", None)
     product = getattr(bom, "product", None)
+    items_out = []
+    for it in (bom.items or []):
+        child_bom = None
+        if it.is_sub_assembly and db is not None and it.material:
+            child_bom = get_strict_bom_for_sku(db, it.material.sku_id)
+        items_out.append(
+            {
+                "id": it.id,
+                "material_id": it.material_id,
+                "material_code": it.material.code if it.material else None,
+                "material_name": it.material.name if it.material else None,
+                "qty_per": it.qty_per,
+                "remark": it.remark,
+                "is_sub_assembly": bool(it.is_sub_assembly),
+                "child_bom_id": child_bom.id if child_bom else None,
+                "child_bom_name": (child_bom.name or f"BOM#{child_bom.id}") if child_bom else None,
+                "level": 1,
+            }
+        )
     return {
         "id": bom.id,
         "scope": getattr(bom, "scope", BOM_SCOPE_SKU),
@@ -87,17 +108,7 @@ def _out(bom) -> dict:
         "created_by": bom.created_by,
         "created_at": bom.created_at,
         "updated_at": bom.updated_at,
-        "items": [
-            {
-                "id": it.id,
-                "material_id": it.material_id,
-                "material_code": it.material.code if it.material else None,
-                "material_name": it.material.name if it.material else None,
-                "qty_per": it.qty_per,
-                "remark": it.remark,
-            }
-            for it in (bom.items or [])
-        ],
+        "items": items_out,
     }
 
 
@@ -226,7 +237,7 @@ def resolve_for_sku_api(sku_id: int, db: Session = Depends(get_db), user: User =
     if not bom:
         return ok({"sku_id": sku_id, "source": "none", "bom": None})
     bom2 = get_bom_by_id(db, bom_id=bom.id)
-    return ok({"sku_id": sku_id, "source": source, "bom": _out(bom2) if bom2 else None})
+    return ok({"sku_id": sku_id, "source": source, "bom": _out(bom2, db) if bom2 else None})
 
 
 @router.post("")
@@ -244,7 +255,7 @@ def create_api(payload: MaterialBomCreateIn, db: Session = Depends(get_db), user
         m = get_material_by_id(db, material_id=it.material_id)
         if not m or not m.is_active:
             raise HTTPException(status_code=400, detail="物料不存在")
-        items_in.append((it.material_id, it.qty_per, it.remark))
+        items_in.append((it.material_id, it.qty_per, it.remark, it.is_sub_assembly))
     try:
         bom = create_bom(
             db,
@@ -264,7 +275,7 @@ def create_api(payload: MaterialBomCreateIn, db: Session = Depends(get_db), user
     bom2 = get_bom_by_id(db, bom_id=bom.id)
     if not bom2:
         raise HTTPException(status_code=500, detail="创建失败")
-    return ok(_out(bom2))
+    return ok(_out(bom2, db))
 
 
 @router.get("/{bom_id}")
@@ -272,7 +283,37 @@ def get_api(bom_id: int, db: Session = Depends(get_db), user: User = Depends(get
     item = get_bom_by_id(db, bom_id=bom_id)
     if not item:
         raise HTTPException(status_code=404, detail="BOM 不存在")
-    return ok(_out(item))
+    return ok(_out(item, db))
+
+
+@router.get("/{bom_id}/tree")
+def tree_api(
+    bom_id: int,
+    sku_id: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按单件展开 BOM 层级，供页面预览半成品嵌套。"""
+    bom = get_bom_by_id(db, bom_id=bom_id)
+    if not bom:
+        raise HTTPException(status_code=404, detail="BOM 不存在")
+    target_sku_id = sku_id or bom.sku_id
+    if not target_sku_id:
+        raise HTTPException(status_code=400, detail="产品/全厂 BOM 预览需指定 sku_id")
+    try:
+        result = explode_bom(db, target_sku_id, 1)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ok(
+        {
+            "sku_id": target_sku_id,
+            "items": [
+                {**row_meta(row), "qty": row.qty, "unit_qty": row.unit_qty}
+                for row in result.rows
+            ],
+            "missing_child_boms": result.missing_child_boms,
+        }
+    )
 
 
 @router.put("/{bom_id}")
@@ -287,7 +328,7 @@ def update_api(bom_id: int, payload: MaterialBomUpdateIn, db: Session = Depends(
             m = get_material_by_id(db, material_id=it.material_id)
             if not m or not m.is_active:
                 raise HTTPException(status_code=400, detail="物料不存在")
-            items_in.append((it.material_id, it.qty_per, it.remark))
+            items_in.append((it.material_id, it.qty_per, it.remark, it.is_sub_assembly))
     update_bom(
         db,
         item,
@@ -302,7 +343,7 @@ def update_api(bom_id: int, payload: MaterialBomUpdateIn, db: Session = Depends(
     item2 = get_bom_by_id(db, bom_id=bom_id)
     if not item2:
         raise HTTPException(status_code=500, detail="更新失败")
-    return ok(_out(item2))
+    return ok(_out(item2, db))
 
 
 @router.post("/{bom_id}/copy-to-sku")
@@ -324,7 +365,7 @@ def copy_to_sku_api(
         raise HTTPException(status_code=400, detail=str(e))
     db.commit()
     bom2 = get_bom_by_id(db, bom_id=bom.id)
-    return ok(_out(bom2))
+    return ok(_out(bom2, db))
 
 
 @router.delete("/{bom_id}")

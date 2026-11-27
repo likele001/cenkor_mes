@@ -25,6 +25,7 @@ from app.models.mrp import MrpItem, MrpPlan
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem
 from app.models.warehouse import Stock, Warehouse
 from app.models.work_order import WorkOrder
+from app.services.bom_explosion import explode_bom, explode_net, leaf_rows
 
 # 在途采购量只看已确认、还没收完的采购单；草稿单还没下单，不占用需求
 _OPEN_PO_STATUSES = ("confirmed", "partial_received")
@@ -115,11 +116,16 @@ def compute_mrp(
             continue
         bom_scope_by_wo[wo.id] = scope
         seen_sku_ids.add(wo.sku_id)
-        for bi in bom.items:
-            material = bi.material
+        # 多阶展开：半成品先扣库存，再把剩余量展开到叶子物料
+        pre = explode_bom(db, wo.sku_id, wo.qty)
+        sub_sku_ids = {r.material.sku_id for r in pre.rows if r.is_sub_assembly}
+        sub_stock = _stock_map(db, list(sub_sku_ids), warehouse_ids) if sub_sku_ids else {}
+        result = explode_net(db, wo.sku_id, wo.qty, dict(sub_stock))
+        for row in leaf_rows(result):
+            material = row.material
             if material is None:
                 continue
-            demand.append((wo, bom.id, material, bi.qty_per, bi.qty_per * wo.qty))
+            demand.append((wo, bom.id, material, max(1, row.unit_qty), row.qty))
             seen_material_ids.add(material.id)
 
     if not demand:

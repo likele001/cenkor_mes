@@ -42,9 +42,10 @@
           </el-table-column>
           <el-table-column prop="version" :label="t('master.boms.version')" width="80" />
           <el-table-column prop="remark" :label="t('master.boms.remark')" min-width="180" show-overflow-tooltip />
-          <el-table-column :label="t('master.boms.operation')" width="280" fixed="right">
+          <el-table-column :label="t('master.boms.operation')" width="360" fixed="right">
             <template #default="{ row }">
               <el-button size="small" @click="openEdit(row)">{{ t('master.boms.edit') }}</el-button>
+              <el-button v-if="row.scope === 'sku'" size="small" @click="openTree(row)">{{ t('master.boms.treePreview') }}</el-button>
               <el-button v-if="row.scope !== 'sku'" size="small" @click="openCopy(row)">{{ t('master.boms.copyToSku') }}</el-button>
               <el-popconfirm :title="t('master.boms.confirmDisable')" @confirm="onDisable(row)">
                 <template #reference>
@@ -124,6 +125,11 @@
                     <el-input-number v-model="row.qty_per" :min="0" :controls="false" style="width: 100%" />
                   </template>
                 </el-table-column>
+                <el-table-column :label="t('master.boms.subAssembly')" width="110">
+                  <template #default="{ row }">
+                    <el-switch v-model="row.is_sub_assembly" />
+                  </template>
+                </el-table-column>
                 <el-table-column :label="t('master.boms.detailRemark')" min-width="180">
                   <template #default="{ row }">
                     <el-input v-model="row.remark" />
@@ -142,6 +148,33 @@
               <el-button type="primary" :loading="dlg.saving" @click="onSave">{{ t('master.common.save') }}</el-button>
             </template>
           </el-dialog>
+
+      <el-dialog v-model="treeDlg.open" :title="t('master.boms.treeTitle')" width="820px">
+        <el-table :data="treeDlg.items" border max-height="460">
+          <el-table-column :label="t('master.boms.level')" width="70">
+            <template #default="{ row }">{{ row.level }}</template>
+          </el-table-column>
+          <el-table-column :label="t('master.boms.detailMaterial')" min-width="240">
+            <template #default="{ row }">
+              <span :style="{ paddingLeft: (row.level - 1) * 14 + 'px' }">
+                {{ row.material_code }} · {{ row.material_name }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('master.boms.subAssembly')" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.is_sub_assembly" type="warning" size="small">{{ t('master.boms.yes') }}</el-tag>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('master.boms.unitQty')" width="110">
+            <template #default="{ row }">{{ row.unit_qty }}</template>
+          </el-table-column>
+        </el-table>
+        <div v-if="treeDlg.missing.length" class="mt-2 text-sm text-amber-600">
+          {{ t('master.boms.missingChild', { count: treeDlg.missing.length }) }}
+        </div>
+      </el-dialog>
 
       <el-dialog v-model="copyDlg.open" :title="t('master.boms.copyTitle')" width="560px">
             <p class="text-sm text-zinc-600 mb-3">{{ t('master.boms.copyDesc', { source: copyDlg.sourceLabel }) }}</p>
@@ -192,12 +225,12 @@ import { useI18n } from 'vue-i18n'
 import AdminPage from '@/components/admin/AdminPage.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { materialsApi, type BomOut, type BomProductOption, type BomScope, type BomSkuOption, type MaterialOut } from '@/api/materials'
+import { materialsApi, type BomOut, type BomProductOption, type BomScope, type BomSkuOption, type BomTreeRow, type MaterialOut } from '@/api/materials'
 import { masterSkuOptionLabel, masterSkuOptionSubline, materialOptionLabel, materialOptionSubline } from '@/utils/display'
 
 const { t } = useI18n()
 
-type BomItemForm = { material_id: number | null; qty_per: number; remark: string }
+type BomItemForm = { material_id: number | null; qty_per: number; remark: string; is_sub_assembly: boolean }
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -237,6 +270,13 @@ const copyDlg = reactive({
   filterProductId: null as number | null,
   sku_id: null as number | null,
   saving: false,
+})
+
+const treeDlg = reactive({
+  open: false,
+  loading: false,
+  items: [] as BomTreeRow[],
+  missing: [] as any[],
 })
 
 const copyFilterProductId = computed(() => copyDlg.productId || copyDlg.filterProductId)
@@ -292,7 +332,7 @@ async function reload(reset = false) {
 }
 
 function addRow() {
-  dlg.form.items.push({ material_id: null, qty_per: 0, remark: '' })
+  dlg.form.items.push({ material_id: null, qty_per: 0, remark: '', is_sub_assembly: false })
 }
 
 function removeRow(i: number) {
@@ -309,7 +349,7 @@ function openCreate() {
     version: 1,
     remark: '',
     is_active: true,
-    items: [{ material_id: null, qty_per: 0, remark: '' }],
+    items: [{ material_id: null, qty_per: 0, remark: '', is_sub_assembly: false }],
   }
   dlg.open = true
 }
@@ -325,10 +365,23 @@ async function openEdit(row: BomOut) {
     version: data.version,
     remark: data.remark || '',
     is_active: data.is_active,
-    items: (data.items || []).map((x) => ({ material_id: x.material_id, qty_per: x.qty_per, remark: x.remark || '' })),
+    items: (data.items || []).map((x) => ({ material_id: x.material_id, qty_per: x.qty_per, remark: x.remark || '', is_sub_assembly: !!x.is_sub_assembly })),
   }
   if (dlg.form.items.length === 0) addRow()
   dlg.open = true
+}
+
+async function openTree(row: BomOut) {
+  if (!row.sku_id) return
+  treeDlg.open = true
+  treeDlg.loading = true
+  try {
+    const res = await materialsApi.getBomTree(row.id)
+    treeDlg.items = res.items || []
+    treeDlg.missing = res.missing_child_boms || []
+  } finally {
+    treeDlg.loading = false
+  }
 }
 
 function openCopy(row: BomOut) {
@@ -372,6 +425,7 @@ async function onSave() {
       material_id: x.material_id as number,
       qty_per: Math.max(0, Number(x.qty_per || 0)),
       remark: x.remark ? x.remark : null,
+      is_sub_assembly: !!x.is_sub_assembly,
     }))
   if (rows.length === 0) {
     ElMessage.error(t('master.boms.atLeastOneMaterial'))

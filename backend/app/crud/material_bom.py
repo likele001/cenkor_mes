@@ -7,6 +7,7 @@ from app.models.material import (
     BOM_SCOPE_GLOBAL,
     BOM_SCOPE_PRODUCT,
     BOM_SCOPE_SKU,
+    Material,
     MaterialBom,
     MaterialBomItem,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "get_bom_by_id",
     "get_bom_by_sku_id",
     "get_effective_bom_for_sku",
+    "get_strict_bom_for_sku",
     "get_effective_bom_map_by_sku_ids",
     "get_boms_by_sku_ids",
     "get_global_default_bom",
@@ -103,6 +105,21 @@ def get_effective_bom_for_sku(db: Session, sku_id: int) -> tuple[MaterialBom | N
         return global_bom, BOM_SCOPE_GLOBAL
 
     return None, "none"
+
+
+def get_strict_bom_for_sku(db: Session, sku_id: int) -> MaterialBom | None:
+    """只查 SKU 级、产品级 BOM，不回落全厂默认。
+
+    全厂默认是兜底模板，递归展开时若沿用它，任意物料都会命中，
+    会被误判为半成品并可能造成无限递归。
+    """
+    sku_bom = get_sku_bom(db, sku_id)
+    if sku_bom:
+        return sku_bom
+    sku = db.get(Sku, sku_id)
+    if sku and sku.product_id:
+        return get_product_bom(db, sku.product_id)
+    return None
 
 
 def get_effective_bom_map_by_sku_ids(db: Session, sku_ids: list[int]) -> dict[int, MaterialBom]:
@@ -199,13 +216,73 @@ def _assert_unique_scope(db: Session, scope: str, product_id: int | None, sku_id
         raise ValueError("全厂默认 BOM 已存在，请先停用旧的")
 
 
+def _build_items(items: list[tuple]) -> list[MaterialBomItem]:
+    """items 兼容三元组与四元组，第四位是 is_sub_assembly。"""
+    out: list[MaterialBomItem] = []
+    for row in items:
+        material_id, qty_per, item_remark = row[0], row[1], row[2]
+        is_sub = bool(row[3]) if len(row) > 3 else False
+        out.append(
+            MaterialBomItem(
+                material_id=material_id,
+                qty_per=qty_per,
+                remark=item_remark,
+                is_sub_assembly=is_sub,
+            )
+        )
+    return out
+
+
+def validate_sub_assembly(
+    db: Session,
+    items: list[tuple],
+    *,
+    root_sku_id: int | None = None,
+) -> None:
+    """半成品行必须有 SKU/产品级子 BOM，并禁止 A → B → A 循环。"""
+    child_sku_ids: list[int] = []
+    for row in items:
+        if len(row) <= 3 or not row[3]:
+            continue
+        material = db.get(Material, row[0])
+        if not material:
+            raise ValueError("BOM 明细物料不存在")
+        if not get_strict_bom_for_sku(db, material.sku_id):
+            raise ValueError(
+                f"物料 {material.code} 标记为半成品，但其型号没有专属或产品级 BOM"
+            )
+        child_sku_ids.append(material.sku_id)
+
+    if root_sku_id is None:
+        return
+
+    def walk(sku_id: int, stack: set[int]) -> None:
+        if sku_id in stack:
+            raise ValueError("BOM 存在循环引用，请检查半成品层级")
+        bom = get_strict_bom_for_sku(db, sku_id)
+        if not bom:
+            return
+        for bi in bom.items:
+            if not bi.is_sub_assembly:
+                continue
+            child = bi.material.sku_id
+            if child == root_sku_id:
+                raise ValueError("BOM 存在循环引用：半成品又引用了当前型号")
+            walk(child, stack | {sku_id})
+
+    for child_sku_id in child_sku_ids:
+        if child_sku_id == root_sku_id:
+            raise ValueError("BOM 存在循环引用：半成品又引用了当前型号")
+        walk(child_sku_id, set())
+
+
 def create_bom(
     db: Session,
     scope: str,
     version: int,
     remark: str | None,
     created_by: int | None,
-    items: list[tuple[int, int, str | None]],
+    items: list[tuple],
     *,
     sku_id: int | None = None,
     product_id: int | None = None,
@@ -214,6 +291,7 @@ def create_bom(
 ) -> MaterialBom:
     _validate_scope_fields(scope, product_id, sku_id, is_default)
     _assert_unique_scope(db, scope, product_id, sku_id)
+    validate_sub_assembly(db, items, root_sku_id=sku_id)
 
     if scope == BOM_SCOPE_SKU and sku_id:
         sku = db.get(Sku, sku_id)
@@ -242,10 +320,7 @@ def create_bom(
         is_active=True,
         created_by=created_by,
     )
-    bom.items = [
-        MaterialBomItem(material_id=material_id, qty_per=qty_per, remark=item_remark)
-        for material_id, qty_per, item_remark in items
-    ]
+    bom.items = _build_items(items)
     db.add(bom)
     db.flush()
     return bom
@@ -257,7 +332,10 @@ def copy_bom_to_sku(db: Session, source_bom: MaterialBom, target_sku_id: int, cr
     sku = db.get(Sku, target_sku_id)
     if not sku:
         raise ValueError("产品型号不存在")
-    items = [(bi.material_id, bi.qty_per, bi.remark) for bi in (source_bom.items or [])]
+    items = [
+        (bi.material_id, bi.qty_per, bi.remark, bool(bi.is_sub_assembly))
+        for bi in (source_bom.items or [])
+    ]
     return create_bom(
         db,
         scope=BOM_SCOPE_SKU,
@@ -280,7 +358,7 @@ def update_bom(
     name: str | None = None,
     is_active: bool | None = None,
     is_default: bool | None = None,
-    items: list[tuple[int, int, str | None]] | None = None,
+    items: list[tuple] | None = None,
 ) -> MaterialBom:
     if version is not None:
         bom.version = version
@@ -303,9 +381,11 @@ def update_bom(
                 old.is_default = False
         bom.is_default = is_default
     if items is not None:
-        bom.items = [
-            MaterialBomItem(material_id=material_id, qty_per=qty_per, remark=item_remark)
-            for material_id, qty_per, item_remark in items
-        ]
+        validate_sub_assembly(
+            db,
+            items,
+            root_sku_id=bom.sku_id if bom.scope == BOM_SCOPE_SKU else None,
+        )
+        bom.items = _build_items(items)
     db.flush()
     return bom

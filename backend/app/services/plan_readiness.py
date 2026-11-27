@@ -14,6 +14,7 @@ from app.crud.production_plan import get_plan_by_id
 from app.crud.warehouse import sum_stock_qty_by_sku_ids
 from app.models.process_route import ProcessRoute, ProcessRouteStep
 from app.services.display_label import process_display_name, product_display_name, sku_display_name
+from app.services.bom_explosion import explode_bom, explode_net, row_meta
 from app.services.entity_refs import missing_bom_dict
 
 
@@ -32,25 +33,31 @@ def _kitting_section(db: Session, order) -> dict:
             missing_boms.append(row)
 
     demand_by_material: dict[int, int] = {}
+    sub_shortage: dict[int, int] = {}
     material_meta: dict[int, dict] = {}
+    missing_child = []
     for sku_id, qty in sku_qty.items():
         bom = bom_by_sku.get(sku_id)
         if not bom:
             continue
-        for bi in bom.items:
-            m = bi.material
+        # 先探出半成品 SKU，按它们现有库存扣减后再展开剩余需求
+        pre = explode_bom(db, sku_id, qty)
+        sub_sku_ids = {r.material.sku_id for r in pre.rows if r.is_sub_assembly}
+        sub_stock = (
+            sum_stock_qty_by_sku_ids(db, sku_ids=list(sub_sku_ids)) if sub_sku_ids else {}
+        )
+        result = explode_net(db, sku_id, qty, dict(sub_stock))
+        missing_child.extend(result.missing_child_boms)
+        for row in result.rows:
+            m = row.material
             if not m or not m.is_active:
                 continue
-            demand_by_material[m.id] = demand_by_material.get(m.id, 0) + bi.qty_per * qty
-            material_meta[m.id] = {
-                "material_id": m.id,
-                "material_code": m.code,
-                "material_name": m.name,
-                "unit": m.unit,
-                "spec": m.spec,
-                "supplier_id": m.supplier_id,
-                "sku_id": m.sku_id,
-            }
+            demand_by_material[m.id] = demand_by_material.get(m.id, 0) + row.qty
+            if row.is_sub_assembly:
+                sub_shortage[m.id] = sub_shortage.get(m.id, 0) + max(0, row.net_qty or 0)
+            prev = material_meta.get(m.id)
+            if prev is None or row.level < prev["level"]:
+                material_meta[m.id] = row_meta(row)
 
     stock_map = sum_stock_qty_by_sku_ids(
         db, sku_ids=[v["sku_id"] for v in material_meta.values() if v.get("sku_id")]
@@ -60,11 +67,20 @@ def _kitting_section(db: Session, order) -> dict:
     for mid, demand_qty in demand_by_material.items():
         meta = material_meta[mid]
         stock_qty = stock_map.get(meta["sku_id"], 0) if meta.get("sku_id") else 0
-        shortage_qty = max(0, demand_qty - stock_qty)
+        if meta["is_sub_assembly"]:
+            shortage_qty = sub_shortage.get(mid, 0)
+        else:
+            shortage_qty = max(0, demand_qty - stock_qty)
         if shortage_qty > 0:
             shortage_count += 1
         items.append({**meta, "demand_qty": demand_qty, "stock_qty": stock_qty, "shortage_qty": shortage_qty})
     items.sort(key=lambda x: (x["shortage_qty"] == 0, x["material_id"]))
+
+    dedup: dict[int, dict] = {}
+    for row in missing_child:
+        row["hint"] = "半成品未配置 BOM"
+        dedup[row["material_id"]] = row
+    missing_boms.extend(dedup.values())
 
     return {
         "items": items,

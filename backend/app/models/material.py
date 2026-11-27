@@ -100,6 +100,8 @@ class MaterialBomItem(Base):
     material_id: Mapped[int] = mapped_column(Integer, ForeignKey("materials.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     qty_per: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 半成品：为 True 时该物料对应的 SKU 自身 BOM 会被递归展开
+    is_sub_assembly: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
