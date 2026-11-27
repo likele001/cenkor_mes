@@ -263,6 +263,10 @@ def submit_report_unit_api(
     db.commit()
     piece = _piece_for_unit(db, unit)
     out = _unit_out(unit, piece)
+    if payload.result_type == "good":
+        from app.services.wage_estimate import estimate_wage
+
+        out["estimate"] = estimate_wage(db, unit.task, 1)
     return ok(out)
 
 @router.get("/report-units")

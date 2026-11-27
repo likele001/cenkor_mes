@@ -290,12 +290,15 @@ def submit_report_api(
     event_bus.emit_after_commit(db, "report.submitted", hook_payload, actor_id=user.id)
     db.commit()
 
+    from app.services.wage_estimate import estimate_wage
+
     return ok({
         "id": report.id,
         "status": report.status,
         "good_qty": report.good_qty,
         "bad_qty": report.bad_qty,
         "created_at": report.created_at,
+        "estimate": estimate_wage(db, task, report.good_qty),
     })
 
 @router.get("/reports")

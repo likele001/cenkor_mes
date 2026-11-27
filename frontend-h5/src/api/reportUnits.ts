@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 import { apiGet, apiPost } from '@/utils/http'
 
+import type { WageEstimate } from './tasks'
+
 export interface ReportUnitItem {
   id: number
   task_id: number
@@ -20,6 +22,7 @@ export interface ReportUnitItem {
   created_at: string
   updated_at: string
   task_code?: string | null
+  estimate?: WageEstimate
 }
 
 export interface TaskFlowContext {

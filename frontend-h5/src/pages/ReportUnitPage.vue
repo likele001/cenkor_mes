@@ -307,6 +307,12 @@ function showRiskTip(r: Record<string, unknown>) {
   }
 }
 
+function successTip(r: Record<string, unknown>) {
+  const est = r?.estimate as { amount?: number; priced?: boolean } | undefined
+  if (est?.priced) return `提交成功，本件预估 ¥${Number(est.amount || 0).toFixed(2)}`
+  return '提交成功，请继续下一件'
+}
+
 async function handleSubmit() {
   if (!form.value.task_code.trim()) {
     showToast('请输入任务码')
@@ -358,7 +364,7 @@ async function handleSubmit() {
         if (remainingQty.value <= 0) {
           await showDialog({ title: '完成', message: '本任务件次已全部报完' })
         } else {
-          showToast('提交成功，请继续下一件')
+          showToast(successTip(res2 as unknown as Record<string, unknown>))
         }
       } catch {
         // 用户点了"取消" → 不做任何操作
@@ -374,7 +380,7 @@ async function handleSubmit() {
     if (remainingQty.value <= 0) {
       await showDialog({ title: '完成', message: '本任务件次已全部报完' })
     } else {
-      showToast('提交成功，请继续下一件')
+      showToast(successTip(res as unknown as Record<string, unknown>))
     }
   } finally {
     submitting.value = false

@@ -320,9 +320,14 @@ async function handleSubmit() {
       attachment_ids: form.attachment_ids || undefined,
     })
     closeToast()
+    const wageText = result.estimate
+      ? result.estimate.priced
+        ? `\n预估工资：¥${result.estimate.amount.toFixed(2)}（单价 ¥${result.estimate.unit_price.toFixed(2)}）`
+        : '\n该工序未配置工价，暂无法预估工资'
+      : ''
     await showDialog({
       title: '报工成功',
-      message: `合格 ${result.good_qty} 件，不良 ${result.bad_qty} 件\n状态：${result.status}`,
+      message: `合格 ${result.good_qty} 件，不良 ${result.bad_qty} 件\n状态：${result.status}${wageText}`,
       confirmButtonText: '继续报工',
     })
     // 重置表单，保留任务码

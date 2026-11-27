@@ -56,12 +56,19 @@ export function getTaskQr(taskCode: string) {
   return apiGet<TaskQrOut>(`/h5/tasks/${encodeURIComponent(taskCode)}/qr`)
 }
 
+export interface WageEstimate {
+  unit_price: number
+  amount: number
+  priced: boolean
+}
+
 export interface SubmitReportResult {
   id: number
   status: string
   good_qty: number
   bad_qty: number
   created_at: string
+  estimate?: WageEstimate
 }
 
 export function submitReport(params: {
