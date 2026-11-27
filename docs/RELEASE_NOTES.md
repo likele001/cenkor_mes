@@ -4,6 +4,17 @@
 > 便于在 GitHub Actions 因账单锁定无法自动建 Release 时，手动到
 > https://github.com/likele001/cenkor_mes/releases/new 复制粘贴对应描述。
 
+## v2.3.5 — 2026-11-27
+
+SPC 规格限列分离（为 SPC 1.1.0 / APS 1.1.0 两个扩展铺路）：
+
+1. `spc_charts` 新增 `usl` / `lsl` 存规格上下限；`ucl` / `lcl` 降级为废弃列，不再写入。
+   控制限（UCL/LCL）仍由样本实时计算、不落库。
+2. 迁移 `0028_spc_spec_limits` 幂等加列并回填 `usl=ucl` / `lsl=lcl`（只填空值）。
+
+无破坏性变更，需执行 `alembic upgrade head`；前端无需重建。扩展侧同步发布
+APS 1.1.0（设备级独立产能）与 SPC 1.1.0（规格限改独立列）。
+
 ## v2.3.4 — 2026-11-27
 
 完工入库闭环：
