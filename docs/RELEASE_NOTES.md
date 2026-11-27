@@ -4,6 +4,18 @@
 > 便于在 GitHub Actions 因账单锁定无法自动建 Release 时，手动到
 > https://github.com/likele001/cenkor_mes/releases/new 复制粘贴对应描述。
 
+## v2.3.2 — 2026-11-27
+
+四项核心能力补齐：
+
+1. 多级 BOM：`material_bom_items.is_sub_assembly`，半成品按 SKU/产品级 BOM 递归展开（最多 10 层），贯通齐套、MRP、采购建议；保存时校验子 BOM 存在并拦截循环引用；BOM 页新增「层级预览」。
+2. 送货单打印：`GET /admin/warehouse/shipments/{id}/print` 与 `/print-pdf`，内置 `delivery_note` 模板，发货列表新增打印与 PDF 导出。
+3. 按发货对账：`statement_items` 新增 `source_type/shipment_id`，`POST /admin/finance` 支持 `source_type=shipment`，金额按订单明细单价 × 发货数量；新增未对账订单/发货单接口，客户对账单页补「新建对账单」入口。
+4. H5 报工预估工资：批量与逐件报工响应返回 `estimate`，与终审工资条同口径（型号+工序工价 × 合格数），H5 两页即时展示。
+
+迁移：`0025_bom_subassembly`、`0026_statement_shipment`。
+文档：新增 `docs/FEATURE_GUIDE_2026-11.md`。
+
 ## v2.2.0 — 2026-10-30
 2026-10-07：新增扩展宿主与功能市场
 2026-10-08：新增平台 AI 配置层三表与路由；扩展市场增强、日期选择器优化；移除报价单演示扩展
